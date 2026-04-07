@@ -1,0 +1,1203 @@
+/* ============================================================
+   Ozni AI brand theme — light stone palette
+   Derived from ozniai.com design system
+   ============================================================ */
+
+:root {
+    --bg: #fafaf9;
+    --bg-card: #ffffff;
+    --text-primary: #0c0a09;
+    --text-secondary: #57534e;
+    --text-muted: #a8a29e;
+    --border: #e7e5e4;
+    --gridline: #f5f5f4;
+    --accent: #ef3c4a;
+    --accent-hover: #dc2f3c;
+    --surface: #ffffff;
+    --elevated: #f5f5f4;
+    --input: #f5f5f4;
+    --foreground: #0c0a09;
+    --muted: #57534e;
+    --subtle: #a8a29e;
+    --border-light: #d6d3d1;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #0c0a09;
+        --bg-card: #1c1917;
+        --text-primary: #fafaf9;
+        --text-secondary: #a8a29e;
+        --text-muted: #78716c;
+        --border: #292524;
+        --gridline: #292524;
+        --surface: #1c1917;
+        --elevated: #292524;
+        --input: #292524;
+        --foreground: #fafaf9;
+        --muted: #a8a29e;
+        --subtle: #78716c;
+        --border-light: #292524;
+    }
+}
+
+body {
+    background-color: var(--bg) !important;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Navbar (matches ozniai.com fixed nav — light) ---- */
+.navbar, .navbar-dark, .navbar-light { display: none !important; }
+
+.ozni-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background-color: rgba(250, 250, 249, 0.80);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+}
+
+.brand-link {
+    text-decoration: none !important;
+}
+
+.brand-text {
+    color: var(--foreground);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.ozni-nav-link {
+    color: var(--muted) !important;
+    font-size: 13px;
+    font-weight: 400;
+    text-decoration: none !important;
+    transition: color 0.12s ease-out;
+    white-space: nowrap;
+}
+
+.ozni-nav-link:hover {
+    color: var(--foreground) !important;
+}
+
+main {
+    padding-top: 56px;
+}
+
+/* ============================================================
+   Hero Section
+   ============================================================ */
+
+.hero-section {
+    padding: 96px 0 48px;
+    width: 100%;
+}
+
+.hero-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.hero-label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: block;
+    font-family: var(--font-mono);
+}
+
+.hero-headline {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    color: var(--foreground);
+    margin: 0 0 16px;
+}
+
+.hero-subtext {
+    font-size: 1.1rem;
+    color: var(--muted);
+    max-width: 640px;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.hero-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 32px;
+}
+
+.btn-accent {
+    background-color: var(--accent);
+    color: white !important;
+    padding: 12px 28px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    transition: background-color 0.12s ease-out;
+    text-decoration: none !important;
+    display: inline-block;
+    font-family: var(--font-sans);
+}
+
+.btn-accent:hover {
+    background-color: var(--accent-hover);
+    color: white !important;
+}
+
+.btn-ghost {
+    background-color: transparent;
+    color: var(--foreground) !important;
+    padding: 12px 28px;
+    font-weight: 600;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    transition: all 0.12s ease-out;
+    text-decoration: none !important;
+    display: inline-block;
+    font-family: var(--font-sans);
+}
+
+.btn-ghost:hover {
+    border-color: var(--foreground);
+    color: var(--foreground) !important;
+}
+
+/* ============================================================
+   Page Sections
+   ============================================================ */
+
+.page-section {
+    padding: 64px 0;
+    width: 100%;
+}
+
+.page-section--alt {
+    background-color: var(--surface);
+}
+
+.page-section--border {
+    border-top: 1px solid var(--border);
+}
+
+.section-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.section-label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    display: block;
+    font-family: var(--font-mono);
+}
+
+/* ============================================================
+   Statement Section
+   ============================================================ */
+
+.statement-section {
+    padding: 80px 0;
+    border-top: 1px solid var(--border);
+}
+
+.statement-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.statement-label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    display: block;
+    font-family: var(--font-mono);
+}
+
+.statement-text {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    max-width: 800px;
+    color: var(--foreground);
+    margin: 0;
+}
+
+/* ============================================================
+   Feature Grid
+   ============================================================ */
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+}
+
+.feature-grid--4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.feature-grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 1024px) {
+    .feature-grid { grid-template-columns: repeat(2, 1fr); }
+    .feature-grid--4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .feature-grid--4 { grid-template-columns: 1fr; }
+    .feature-grid--2 { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   Numbered Cards (ozniai.com capability card pattern)
+   ============================================================ */
+
+.numbered-card {
+    padding: 32px;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    transition: background-color 0.12s ease-out;
+}
+
+.numbered-card:hover {
+    background-color: var(--elevated);
+}
+
+.numbered-card__number {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.numbered-card__title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+    color: var(--foreground);
+}
+
+.numbered-card__desc {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 0;
+}
+
+.numbered-card__value {
+    font-family: var(--font-mono);
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 12px 0 4px;
+    line-height: 1.1;
+}
+
+.numbered-card__subtitle {
+    color: var(--subtle);
+    font-size: 12px;
+    margin: 0;
+}
+
+.numbered-card__link {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 16px;
+    transition: gap 0.12s ease-out;
+}
+
+.numbered-card__link:hover {
+    gap: 8px;
+    color: var(--accent-hover);
+}
+
+/* ============================================================
+   Product Cards
+   ============================================================ */
+
+.product-card {
+    padding: 32px;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--accent);
+}
+
+.product-card__name {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.2px;
+}
+
+.product-card__detail {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.product-card__value {
+    font-family: var(--font-mono);
+    color: var(--foreground);
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin: 8px 0;
+    letter-spacing: -0.5px;
+}
+
+/* ============================================================
+   CTA Section
+   ============================================================ */
+
+.cta-section {
+    padding: 80px 0;
+    text-align: center;
+    border-top: 1px solid var(--border);
+}
+
+.cta-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.cta-headline {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 12px;
+    color: var(--foreground);
+}
+
+.cta-subtext {
+    color: var(--muted);
+    font-size: 1rem;
+    max-width: 500px;
+    margin: 0 auto 32px;
+    line-height: 1.5;
+}
+
+/* ============================================================
+   Footer (ozniai.com 3-column pattern)
+   ============================================================ */
+
+.site-footer {
+    border-top: 1px solid var(--border);
+    padding: 64px 0 32px;
+    background-color: var(--bg);
+}
+
+.footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.footer-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 48px;
+}
+
+.footer-brand {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--foreground);
+    margin-bottom: 8px;
+}
+
+.footer-tagline {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.footer-heading {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--subtle);
+    margin-bottom: 16px;
+}
+
+.footer-link {
+    color: var(--muted) !important;
+    font-size: 13px;
+    text-decoration: none !important;
+    display: block;
+    margin-bottom: 8px;
+    transition: color 0.12s ease-out;
+}
+
+.footer-link:hover {
+    color: var(--foreground) !important;
+}
+
+.footer-copyright {
+    color: var(--subtle);
+    font-size: 12px;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+
+@media (max-width: 640px) {
+    .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+}
+
+/* ============================================================
+   Existing Components — updated for light theme
+   ============================================================ */
+
+/* ---- Stat Cards ---- */
+.stat-card {
+    background-color: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    transition: all 0.12s ease-out;
+}
+
+.stat-card:hover {
+    background-color: var(--elevated) !important;
+}
+
+.stat-card .card-body {
+    padding: 20px 24px !important;
+}
+
+.stat-label {
+    color: var(--subtle);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 10px !important;
+}
+
+.stat-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 1.5rem;
+    margin-bottom: 6px !important;
+    line-height: 1.1;
+}
+
+.stat-subtitle {
+    color: var(--subtle);
+    font-size: 12px;
+    margin-bottom: 0 !important;
+    line-height: 1.4;
+}
+
+/* ---- Container Cards ---- */
+.container-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.container-label {
+    color: var(--subtle);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-bottom: 20px;
+}
+
+/* ---- Metric Grid ---- */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1px;
+    background-color: var(--border);
+}
+
+.metric-cell {
+    padding: 16px;
+    background-color: var(--surface);
+}
+
+.metric-label {
+    color: var(--subtle);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+}
+
+.metric-value {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: var(--foreground);
+    line-height: 1.2;
+}
+
+.metric-delta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+/* ---- Section Headers ---- */
+.section-header {
+    color: var(--subtle);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    margin-top: 32px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* ---- DataTable ---- */
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td {
+    background-color: var(--surface) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--foreground) !important;
+    font-size: 13px;
+    padding: 10px 16px !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background-color: var(--surface) !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border-light) !important;
+    color: var(--subtle) !important;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    padding: 12px 16px !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
+    background-color: var(--elevated) !important;
+}
+
+.dash-table-container .previous-next-container button {
+    background-color: var(--elevated) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--muted) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    padding: 6px 14px !important;
+    transition: all 0.12s ease-out;
+}
+
+.dash-table-container .previous-next-container button:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+}
+
+.dash-table-container .current-page-container .current-page {
+    color: var(--subtle) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12px !important;
+}
+
+/* ---- Dropdowns ---- */
+.Select-control, .dash-dropdown .Select-control {
+    background-color: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    min-height: 36px !important;
+}
+
+.Select-value-label, .Select-placeholder, .Select-input > input {
+    color: var(--foreground) !important;
+    font-size: 13px !important;
+}
+
+.Select-menu-outer {
+    background-color: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    margin-top: 1px !important;
+}
+
+.Select-option {
+    background-color: var(--surface) !important;
+    color: var(--foreground) !important;
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+    transition: all 0.15s;
+}
+
+.Select-option:hover, .Select-option.is-focused {
+    background-color: rgba(239, 60, 74, 0.06) !important;
+    color: var(--accent) !important;
+}
+
+.Select-option.is-selected {
+    background-color: rgba(239, 60, 74, 0.10) !important;
+    color: var(--accent) !important;
+}
+
+.Select-multi-value-wrapper .Select-value {
+    background-color: rgba(239, 60, 74, 0.08) !important;
+    border-color: rgba(239, 60, 74, 0.15) !important;
+    color: var(--accent) !important;
+    border-radius: 0 !important;
+    font-size: 12px !important;
+}
+
+.Select-arrow-zone .Select-arrow { border-top-color: var(--subtle) !important; }
+.Select-clear-zone { color: var(--subtle) !important; }
+
+/* ---- Date Picker ---- */
+.DateInput_input {
+    background-color: var(--surface) !important;
+    color: var(--foreground) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    font-size: 13px !important;
+    padding: 6px 10px !important;
+}
+
+.DateRangePickerInput {
+    background-color: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+}
+
+.DateRangePickerInput_arrow_svg { fill: var(--subtle) !important; }
+
+.DayPicker, .CalendarMonth, .CalendarDay__default {
+    background: var(--surface) !important;
+    color: var(--foreground) !important;
+    border-color: var(--border) !important;
+}
+
+.CalendarDay__selected, .CalendarDay__selected:hover {
+    background: var(--accent) !important;
+    border-color: var(--accent) !important;
+    color: white !important;
+}
+
+.CalendarDay__hovered_span, .CalendarDay__selected_span {
+    background: rgba(239, 60, 74, 0.08) !important;
+    border-color: rgba(239, 60, 74, 0.12) !important;
+}
+
+.DayPickerNavigation_button__default {
+    background: var(--elevated) !important;
+    border-color: var(--border) !important;
+}
+
+.DayPickerNavigation_svg__horizontal { fill: var(--muted) !important; }
+.CalendarMonth_caption { color: var(--foreground) !important; }
+
+/* ---- HTML Tables ---- */
+.table th {
+    background-color: var(--surface) !important;
+    color: var(--subtle) !important;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    padding: 12px 16px !important;
+    border-bottom: 1px solid var(--border-light) !important;
+}
+
+.table td {
+    padding: 10px 16px !important;
+    border-bottom: 1px solid var(--border) !important;
+    font-size: 13px;
+    color: var(--foreground);
+}
+
+.table tr:hover td { background-color: var(--elevated) !important; }
+
+/* ---- Workout Cards ---- */
+.workout-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    margin-bottom: 4px;
+    border-left: none;
+    border-top: none;
+}
+
+.workout-card .workout-title {
+    font-weight: 500;
+    color: var(--foreground);
+    font-size: 13px;
+}
+
+.workout-card .workout-detail {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+/* ---- Details / Summary ---- */
+details {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    margin-bottom: 4px;
+}
+
+details summary {
+    cursor: pointer;
+    padding: 4px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--foreground);
+}
+
+details[open] summary {
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+}
+
+/* ---- Plotly modebar — show on hover, light theme ---- */
+.js-plotly-plot .plotly .modebar-container {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.js-plotly-plot:hover .plotly .modebar-container {
+    opacity: 1;
+}
+.js-plotly-plot .plotly .modebar-btn path {
+    fill: var(--subtle) !important;
+}
+.js-plotly-plot .plotly .modebar-btn:hover path {
+    fill: var(--foreground) !important;
+}
+.dash-debug-menu { display: none !important; }
+
+/* ---- Page Container (neutralized — sections own their width) ---- */
+.container-fluid {
+    max-width: none;
+    padding: 0;
+}
+
+.page-container {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--subtle); }
+
+/* ---- Scramble animation ---- */
+.scramble-label {
+    display: inline-block;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+    .stat-value { font-size: 1.2rem !important; }
+    .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    .hero-section { padding: 64px 0 32px; }
+    .page-section { padding: 48px 0; }
+    .hero-buttons { flex-direction: column; }
+}
+
+/* ============================================================
+   Mobile Nav Collapse
+   ============================================================ */
+
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: var(--foreground);
+}
+
+.nav-toggle svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    stroke-width: 2;
+    fill: none;
+}
+
+@media (max-width: 768px) {
+    .nav-links {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 56px;
+        left: 0;
+        right: 0;
+        background-color: rgba(250, 250, 249, 0.97);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        gap: 16px;
+    }
+
+    .nav-links.nav-open {
+        display: flex;
+    }
+
+    .nav-toggle {
+        display: block;
+    }
+}
+
+/* ============================================================
+   Focus indicators for accessibility
+   ============================================================ */
+
+*:focus-visible {
+    outline: 2px solid var(--accent, #ef3c4a);
+    outline-offset: 2px;
+}
+
+/* Remove default outline for mouse users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* ============================================================
+   Chart backgrounds (template uses transparent, CSS controls)
+   Only the FIRST .main-svg gets a bg — Plotly stacks 3 SVGs
+   and the upper ones must stay transparent.
+   ============================================================ */
+.js-plotly-plot .plotly .main-svg:first-child {
+    background: var(--bg-card) !important;
+}
+
+/* ============================================================
+   Dark Mode Overrides
+   ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+    /* ---- Global ---- */
+    body {
+        background-color: #0c0a09 !important;
+        color: #fafaf9 !important;
+    }
+
+    /* ---- Navbar ---- */
+    .ozni-navbar {
+        background: rgba(12, 10, 9, 0.90) !important;
+        border-bottom-color: #292524 !important;
+    }
+    .brand-text {
+        color: #fafaf9 !important;
+    }
+    .ozni-nav-link {
+        color: #a8a29e !important;
+    }
+    .ozni-nav-link:hover {
+        color: #fafaf9 !important;
+    }
+    .nav-toggle {
+        color: #fafaf9 !important;
+    }
+
+    /* ---- All inline-styled containers (cards, sections, divs) ---- */
+    /* React renders hex as rgb() in style attributes */
+    div[style*="background-color: rgb(255, 255, 255)"],
+    div[style*="background-color: rgb(245, 245, 244)"],
+    details[style*="background-color: rgb(255, 255, 255)"] {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+    }
+    div[style*="background-color: rgb(250, 250, 249)"] {
+        background-color: #0c0a09 !important;
+    }
+
+    /* ---- All inline-styled text ---- */
+    /* React renders color as rgb() — override dark text for dark bg */
+    div[style*="color: rgb(12, 10, 9)"],
+    span[style*="color: rgb(12, 10, 9)"],
+    p[style*="color: rgb(12, 10, 9)"] {
+        color: #fafaf9 !important;
+    }
+    div[style*="color: rgb(87, 83, 78)"],
+    span[style*="color: rgb(87, 83, 78)"],
+    p[style*="color: rgb(87, 83, 78)"] {
+        color: #a8a29e !important;
+    }
+
+    /* ---- Plotly charts ---- */
+    /* Only first SVG gets bg — upper SVGs are overlays that must stay transparent */
+    .js-plotly-plot .plotly .main-svg:first-child {
+        background: #1c1917 !important;
+    }
+    /* Axis text, tick labels, titles — NOT data point text */
+    .js-plotly-plot .plotly .main-svg .gtitle,
+    .js-plotly-plot .plotly .main-svg .xtitle,
+    .js-plotly-plot .plotly .main-svg .ytitle {
+        fill: #a8a29e !important;
+    }
+    .js-plotly-plot .plotly .main-svg .xtick text,
+    .js-plotly-plot .plotly .main-svg .ytick text {
+        fill: #a8a29e !important;
+    }
+    /* Grid lines */
+    .js-plotly-plot .plotly .main-svg .gridlayer line {
+        stroke: #292524 !important;
+    }
+    .js-plotly-plot .plotly .main-svg .zerolinelayer line {
+        stroke: #292524 !important;
+    }
+    /* Legend */
+    .js-plotly-plot .plotly .main-svg .legend {
+        fill: transparent !important;
+    }
+    .js-plotly-plot .plotly .main-svg .legend text {
+        fill: #a8a29e !important;
+    }
+    /* Hover label */
+    .js-plotly-plot .plotly .hoverlayer .hovertext rect {
+        fill: #1c1917 !important;
+        stroke: #292524 !important;
+    }
+    .js-plotly-plot .plotly .hoverlayer .hovertext text {
+        fill: #fafaf9 !important;
+    }
+
+    /* ---- Details / run cards / lift cards ---- */
+    details {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+    }
+    details summary {
+        color: #fafaf9 !important;
+    }
+
+    /* ---- Dash Dropdown (modern dash-dropdown) ---- */
+    .dash-dropdown {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+        color: #fafaf9 !important;
+    }
+    .dash-dropdown-value,
+    .dash-dropdown-placeholder {
+        color: #a8a29e !important;
+    }
+    .dash-dropdown-trigger-icon svg {
+        fill: #a8a29e !important;
+    }
+    .dash-dropdown-menu {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+    }
+    .dash-dropdown-option {
+        background-color: #1c1917 !important;
+        color: #fafaf9 !important;
+    }
+    .dash-dropdown-option:hover,
+    .dash-dropdown-option--focused {
+        background-color: #292524 !important;
+    }
+    .dash-dropdown-option--selected {
+        background-color: #292524 !important;
+    }
+    .dash-dropdown-tag {
+        background-color: #292524 !important;
+        color: #fafaf9 !important;
+    }
+    /* Legacy React-Select (if still used by some Dash components) */
+    .Select-control, .Select-menu-outer {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+        color: #fafaf9 !important;
+    }
+    .Select-value-label, .Select-placeholder {
+        color: #a8a29e !important;
+    }
+    .Select-option {
+        background-color: #1c1917 !important;
+        color: #fafaf9 !important;
+    }
+    .Select-option.is-focused,
+    .Select-option.is-selected {
+        background-color: #292524 !important;
+    }
+
+    /* ---- Date picker (Dash DatePickerRange) ---- */
+    .DateInput_input,
+    .DateInput,
+    .DateRangePickerInput,
+    .DateRangePicker,
+    .dash-date-range,
+    input[type="text"][id*="date"],
+    div[class*="DateRange"],
+    div[class*="DateInput"] {
+        background-color: #1c1917 !important;
+        color: #fafaf9 !important;
+        border-color: #292524 !important;
+    }
+    .DateRangePickerInput_arrow svg {
+        fill: #a8a29e !important;
+    }
+    /* Catch-all for any white input inside the filter section */
+    input[style*="background-color: rgb(255, 255, 255)"],
+    input {
+        background-color: #1c1917 !important;
+        color: #fafaf9 !important;
+        border-color: #292524 !important;
+    }
+    .CalendarDay__default {
+        background: #1c1917 !important;
+        color: #fafaf9 !important;
+        border-color: #292524 !important;
+    }
+    .CalendarDay__selected {
+        background: #ef3c4a !important;
+        color: #fff !important;
+    }
+    .CalendarMonth_caption {
+        color: #fafaf9 !important;
+    }
+    .DayPickerNavigation_button {
+        background: #1c1917 !important;
+        border-color: #292524 !important;
+    }
+    .DayPicker__withBorder {
+        background: #1c1917 !important;
+        border-color: #292524 !important;
+    }
+
+    /* ---- DataTable ---- */
+    .dash-spreadsheet-container .dash-spreadsheet-inner td,
+    .dash-spreadsheet-container .dash-spreadsheet-inner th {
+        background-color: #1c1917 !important;
+        color: #fafaf9 !important;
+        border-color: #292524 !important;
+    }
+
+    /* ---- Custom hover card ---- */
+    #run-hover-card {
+        background-color: #1c1917 !important;
+        border-color: #292524 !important;
+        color: #fafaf9 !important;
+    }
+
+    /* ---- Section alt backgrounds ---- */
+    div[style*="background-color: rgb(245, 245, 244)"] {
+        background-color: #1c1917 !important;
+    }
+
+    /* ---- Buttons ---- */
+    button {
+        color: #fafaf9 !important;
+    }
+
+    /* ---- Border overrides ---- */
+    /* React renders borders with rgb() colors */
+    div[style*="border-color: rgb(231, 229, 228)"],
+    div[style*="rgb(231, 229, 228)"],
+    details[style*="rgb(231, 229, 228)"] {
+        border-color: #292524 !important;
+    }
+
+    /* ---- Mobile nav overlay ---- */
+    .nav-links.nav-open {
+        background-color: rgba(12, 10, 9, 0.97) !important;
+    }
+}
+
+/* ============================================================
+   Print CSS — training plan
+   ============================================================ */
+
+@media print {
+    .ozni-navbar,
+    .page-footer,
+    button,
+    .dcc-loading {
+        display: none !important;
+    }
+
+    body {
+        background: white !important;
+        color: black !important;
+        font-size: 11pt;
+    }
+
+    details {
+        break-inside: avoid;
+        border: 1px solid #ccc !important;
+        background: white !important;
+    }
+
+    details[open] > summary {
+        break-after: avoid;
+    }
+
+    .page-section {
+        break-inside: avoid;
+        padding: 12px 0 !important;
+    }
+
+    .js-plotly-plot {
+        break-inside: avoid;
+    }
+}
