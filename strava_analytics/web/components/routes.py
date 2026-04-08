@@ -19,6 +19,28 @@ from strava_analytics.metrics import format_pace
 _ZONE_COLORS = {1: SLATE_60, 2: ACCENT_SLATE, 3: ACCENT_AMBER, 4: ACCENT, 5: ACCENT_RED}
 _ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
 
+# Effort color gradient: blue (low) → gold (mid) → red (high)
+_EFFORT_STOPS = [
+    (0.0, (91, 155, 213)),    # ACCENT_SLATE  — low effort
+    (0.5, (212, 168, 75)),    # ACCENT_AMBER  — mid effort
+    (1.0, (239, 60, 74)),     # ACCENT        — high effort
+]
+
+
+def _effort_color(t: float) -> str:
+    """Return an rgba color for normalized effort *t* (0–1)."""
+    t = max(0.0, min(1.0, t))
+    for i in range(len(_EFFORT_STOPS) - 1):
+        t0, c0 = _EFFORT_STOPS[i]
+        t1, c1 = _EFFORT_STOPS[i + 1]
+        if t <= t1:
+            f = (t - t0) / (t1 - t0) if t1 != t0 else 0
+            r = int(c0[0] + (c1[0] - c0[0]) * f)
+            g = int(c0[1] + (c1[1] - c0[1]) * f)
+            b = int(c0[2] + (c1[2] - c0[2]) * f)
+            return f"rgb({r},{g},{b})"
+    return f"rgb{_EFFORT_STOPS[-1][1]}"
+
 
 _route_cache: dict = {}
 _ROUTE_CACHE_MAX = 32
@@ -238,38 +260,6 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                                 "title": {"display": True, "text": "hr bpm"},
                                 "position": "right", "grid": {"display": False}}
 
-            # Ghost overlays — previous runs on the same route
-            if df is not None:
-                try:
-                    from strava_analytics.route_matching import get_route_matches
-                    match_fns = get_route_matches(filename, df, export_dir)
-                    # Sort by date (most recent first) and get dates for labels
-                    match_rows = df[df["filename"].isin(match_fns)].sort_values("date", ascending=False)
-                    ghost_colors = ["rgba(168,162,158,0.35)", "rgba(168,162,158,0.25)",
-                                    "rgba(168,162,158,0.18)", "rgba(168,162,158,0.12)"]
-                    for gi, (_, grow) in enumerate(match_rows.iterrows()):
-                        try:
-                            g_stream = parse_activity(export_dir / grow["filename"], max_points=150)
-                        except Exception:
-                            continue
-                        if not g_stream.speed_ms or len(g_stream.speed_ms) < 5:
-                            continue
-                        g_dist = [d / 1609.344 for d in g_stream.distance_m] if g_stream.distance_m else []
-                        g_pace = [26.8224 / s if s > 0.5 else None for s in g_stream.speed_ms]
-                        g_pace_smooth = _smooth([p if p and p < 20 else None for p in g_pace], window=15)
-                        g_x = [round(x, 2) for x in g_dist[:len(g_pace_smooth)]]
-                        g_date = grow["date"].strftime("%b %d") if hasattr(grow["date"], "strftime") else str(grow["date"])[:6]
-                        gc = ghost_colors[min(gi, len(ghost_colors) - 1)]
-                        datasets.append({
-                            "label": f"_{g_date}",
-                            "data": [{"x": x, "y": round(p, 2)} for x, p in zip(g_x, g_pace_smooth) if p],
-                            "borderColor": gc, "borderWidth": 1.5, "borderDash": [3, 3],
-                            "fill": False, "pointRadius": 0, "yAxisID": "y",
-                            "tension": 0.3, "spanGaps": True, "order": 10 + gi,
-                        })
-                except Exception:
-                    pass  # route matching is best-effort
-
             stream_cfg = json.dumps({
                 "type": "line",
                 "data": {"labels": x_labels, "datasets": datasets},
@@ -357,6 +347,156 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
             ], id=f"{zone_id}-wrap", className="cjs-chart-wrap",
                style={"marginTop": "8px"},
                **{"data-chartcfg": zone_cfg}))
+
+    # Route history — compare all runs on the same GPS route
+    if df is not None:
+        try:
+            from strava_analytics.route_matching import get_route_matches
+            match_fns = get_route_matches(filename, df, export_dir)
+            if match_fns:
+                # Include current run + matches, sorted by date
+                all_fns = [filename] + match_fns
+                all_rows = df[df["filename"].isin(all_fns)].sort_values("date", ascending=False)
+
+                # Normalize relative effort for color gradient
+                efforts = all_rows["relative_effort"].fillna(0).tolist()
+                e_min, e_max = min(efforts), max(efforts)
+                e_range = e_max - e_min if e_max > e_min else 1.0
+
+                # Build datasets and run list rows
+                _route_map_counter += 1
+                hist_id = f"route-hist-{_route_map_counter}"
+                hist_datasets = []
+                run_list_rows = []
+                all_paces = []
+
+                for ri, (_, rrow) in enumerate(all_rows.iterrows()):
+                    is_current = rrow["filename"] == filename
+                    effort = rrow.get("relative_effort", 0) or 0
+                    t = (effort - e_min) / e_range
+                    color = _effort_color(t)
+
+                    # Parse stream for pace profile
+                    try:
+                        r_stream = parse_activity(export_dir / rrow["filename"], max_points=150)
+                    except Exception:
+                        continue
+                    if not r_stream.speed_ms or len(r_stream.speed_ms) < 5:
+                        continue
+                    r_dist = [d / 1609.344 for d in r_stream.distance_m] if r_stream.distance_m else []
+                    r_pace_raw = [26.8224 / s if s > 0.5 else None for s in r_stream.speed_ms]
+                    r_pace = _smooth([p if p and p < 20 else None for p in r_pace_raw], window=15)
+                    r_x = [round(x, 2) for x in r_dist[:len(r_pace)]]
+                    valid_pace = [p for p in r_pace if p and p < 20]
+                    if not valid_pace:
+                        continue
+                    all_paces.extend(valid_pace)
+
+                    r_date = rrow["date"].strftime("%b %d, %Y") if hasattr(rrow["date"], "strftime") else str(rrow["date"])
+                    avg_pace = rrow.get("pace_min_per_mi", 0) or 0
+                    dist = rrow.get("distance_mi", 0) or 0
+
+                    hist_datasets.append({
+                        "label": f"_{r_date}",
+                        "data": [round(p, 2) if p else None for p in r_pace[:len(r_x)]],
+                        "borderColor": color,
+                        "borderWidth": 3 if is_current else 1.5,
+                        "pointRadius": 0,
+                        "fill": False,
+                        "tension": 0.3,
+                        "spanGaps": True,
+                        "order": 0 if is_current else ri + 1,
+                    })
+
+                    # Run list row
+                    _mono = "'IBM Plex Mono', monospace"
+                    run_list_rows.append(html.Div([
+                        html.Span(style={
+                            "width": "10px", "height": "10px", "borderRadius": "50%",
+                            "background": color, "display": "inline-block",
+                            "flexShrink": "0",
+                        }),
+                        html.Span(r_date, style={
+                            "fontWeight": "700" if is_current else "500",
+                            "fontSize": "12px", "color": "var(--text-primary)",
+                            "minWidth": "90px",
+                        }),
+                        html.Span(format_pace(avg_pace) + "/mi" if avg_pace else "",
+                                  style={"fontFamily": _mono, "fontSize": "12px",
+                                         "color": "var(--text-primary)", "minWidth": "55px"}),
+                        html.Span(f"{dist:.1f} mi" if dist else "",
+                                  style={"fontFamily": _mono, "fontSize": "11px",
+                                         "color": "var(--text-muted)", "minWidth": "45px"}),
+                        html.Span(f"{int(effort)}" if effort else "",
+                                  style={"fontFamily": _mono, "fontSize": "10px",
+                                         "color": color, "fontWeight": "600",
+                                         "minWidth": "30px", "textAlign": "right"}),
+                    ], style={
+                        "display": "flex", "gap": "8px", "alignItems": "center",
+                        "padding": "5px 8px", "borderRadius": "4px",
+                        "background": "var(--elevated)" if is_current else "transparent",
+                    }))
+
+                if hist_datasets and len(hist_datasets) >= 2:
+                    # Use the longest run's x-labels
+                    longest_ds = max(hist_datasets, key=lambda d: len(d["data"]))
+                    x_count = len(longest_ds["data"])
+                    # Approximate x labels from 0 to max distance
+                    max_dist = max((r.get("distance_mi", 0) or 0) for _, r in all_rows.iterrows())
+                    hist_x = [round(i * max_dist / max(x_count - 1, 1), 2) for i in range(x_count)]
+
+                    p_min = min(all_paces) - 0.5
+                    p_max = max(all_paces) + 0.5
+
+                    hist_cfg = json.dumps({
+                        "type": "line",
+                        "data": {"labels": hist_x, "datasets": hist_datasets},
+                        "options": {
+                            "responsive": True, "maintainAspectRatio": False,
+                            "interaction": {"mode": "index", "intersect": False},
+                            "plugins": {"legend": {"display": False}},
+                            "scales": {
+                                "x": {
+                                    "title": {"display": True, "text": "mi"},
+                                    "ticks": {"stepSize": 0.25},
+                                    "grid": {"display": True},
+                                },
+                                "y": {
+                                    "reverse": True, "min": p_min, "max": p_max,
+                                    "title": {"display": True, "text": "pace /mi"},
+                                    "grid": {"display": False},
+                                },
+                            },
+                        },
+                    })
+
+                    children.append(html.Div([
+                        html.Div("ROUTE HISTORY", style={
+                            "fontSize": "10px", "fontWeight": "700",
+                            "letterSpacing": "0.1em", "color": "var(--text-muted)",
+                            "marginBottom": "8px",
+                        }),
+                        html.Div([
+                            # Scrollable run list
+                            html.Div(run_list_rows, style={
+                                "maxHeight": "220px", "overflowY": "auto",
+                                "paddingRight": "4px",
+                                "flex": "0 0 auto", "minWidth": "280px",
+                            }),
+                            # Comparison chart
+                            html.Div([
+                                html.Div(className="cjs-canvas-box", style={"height": "200px"}),
+                            ], id=f"{hist_id}-wrap", className="cjs-chart-wrap",
+                               style={"flex": "1", "minWidth": "0"},
+                               **{"data-chartcfg": hist_cfg}),
+                        ], style={
+                            "display": "flex", "gap": "12px",
+                            "alignItems": "flex-start",
+                        }),
+                    ], style={"marginTop": "16px", "borderTop": "1px solid var(--border)",
+                              "paddingTop": "12px"}))
+        except Exception:
+            pass  # route matching is best-effort
 
     result = children if children else [html.P("No GPS data.", style={"color": TEXT_MUTED})]
     if len(_route_cache) >= _ROUTE_CACHE_MAX:
