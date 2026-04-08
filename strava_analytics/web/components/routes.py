@@ -12,9 +12,12 @@ from dash import html, dcc
 from strava_analytics.web import data
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
-    TEXT_PRIMARY, TEXT_MUTED, BORDER,
+    TEXT_PRIMARY, TEXT_MUTED, BORDER, SLATE_60,
 )
 from strava_analytics.metrics import format_pace
+
+_ZONE_COLORS = {1: SLATE_60, 2: ACCENT_SLATE, 3: ACCENT_AMBER, 4: ACCENT, 5: ACCENT_RED}
+_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
 
 
 _route_cache: dict = {}
@@ -57,8 +60,12 @@ def _compute_gap(speed_ms, altitude_m, distance_m):
     return gap
 
 
-def build_route_charts(filename: str) -> list:
-    """Build route map + stream charts for a run. Returns list of Dash components."""
+def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
+    """Build route map + stream charts for a run. Returns list of Dash components.
+
+    If *df* is provided, ghost overlays for previous runs on the same route
+    are included automatically.
+    """
     global _route_map_counter
 
     if filename in _route_cache:
@@ -181,7 +188,7 @@ def build_route_charts(filename: str) -> list:
             if elev_ft and dist_mi:
                 elev_smooth = _smooth(elev_ft, window=7)
                 datasets.append({
-                    "label": "Elevation", "data": [round(e, 0) for e in elev_smooth[:len(x_labels)]],
+                    "label": "_Elevation", "data": [round(e, 0) for e in elev_smooth[:len(x_labels)]],
                     "borderColor": "transparent", "backgroundColor": "rgba(150,150,150,0.08)",
                     "fill": True, "pointRadius": 0, "yAxisID": "y1", "tension": 0.3, "order": 3,
                 })
@@ -213,7 +220,11 @@ def build_route_charts(filename: str) -> list:
             hr_vals = [h for h in (stream.heart_rate or []) if h and h > 0]
 
             scales = {
-                "x": {"title": {"display": True, "text": "mi"}, "grid": {"display": False}},
+                "x": {
+                    "title": {"display": True, "text": "mi"},
+                    "ticks": {"stepSize": 0.25},
+                    "grid": {"display": True},
+                },
                 "y": {"reverse": True, "min": pace_min_val, "max": pace_max_val,
                        "title": {"display": True, "text": "pace /mi"}, "position": "left",
                        "grid": {"display": False}},
@@ -227,13 +238,50 @@ def build_route_charts(filename: str) -> list:
                                 "title": {"display": True, "text": "hr bpm"},
                                 "position": "right", "grid": {"display": False}}
 
+            # Ghost overlays — previous runs on the same route
+            if df is not None:
+                try:
+                    from strava_analytics.route_matching import get_route_matches
+                    match_fns = get_route_matches(filename, df, export_dir)
+                    # Sort by date (most recent first) and get dates for labels
+                    match_rows = df[df["filename"].isin(match_fns)].sort_values("date", ascending=False)
+                    ghost_colors = ["rgba(168,162,158,0.35)", "rgba(168,162,158,0.25)",
+                                    "rgba(168,162,158,0.18)", "rgba(168,162,158,0.12)"]
+                    for gi, (_, grow) in enumerate(match_rows.iterrows()):
+                        try:
+                            g_stream = parse_activity(export_dir / grow["filename"], max_points=150)
+                        except Exception:
+                            continue
+                        if not g_stream.speed_ms or len(g_stream.speed_ms) < 5:
+                            continue
+                        g_dist = [d / 1609.344 for d in g_stream.distance_m] if g_stream.distance_m else []
+                        g_pace = [26.8224 / s if s > 0.5 else None for s in g_stream.speed_ms]
+                        g_pace_smooth = _smooth([p if p and p < 20 else None for p in g_pace], window=15)
+                        g_x = [round(x, 2) for x in g_dist[:len(g_pace_smooth)]]
+                        g_date = grow["date"].strftime("%b %d") if hasattr(grow["date"], "strftime") else str(grow["date"])[:6]
+                        gc = ghost_colors[min(gi, len(ghost_colors) - 1)]
+                        datasets.append({
+                            "label": f"_{g_date}",
+                            "data": [{"x": x, "y": round(p, 2)} for x, p in zip(g_x, g_pace_smooth) if p],
+                            "borderColor": gc, "borderWidth": 1.5, "borderDash": [3, 3],
+                            "fill": False, "pointRadius": 0, "yAxisID": "y",
+                            "tension": 0.3, "spanGaps": True, "order": 10 + gi,
+                        })
+                except Exception:
+                    pass  # route matching is best-effort
+
             stream_cfg = json.dumps({
                 "type": "line",
                 "data": {"labels": x_labels, "datasets": datasets},
                 "options": {
                     "responsive": True, "maintainAspectRatio": False,
                     "interaction": {"mode": "index", "intersect": False},
-                    "plugins": {"legend": {"display": False}},
+                    "plugins": {
+                        "legend": {
+                            "display": True, "position": "bottom",
+                            "labels": {"boxWidth": 12, "padding": 8, "usePointStyle": True},
+                        },
+                    },
                     "scales": scales,
                 },
             })
@@ -245,6 +293,70 @@ def build_route_charts(filename: str) -> list:
             ], id=f"{stream_id}-wrap", className="cjs-chart-wrap",
                style={"marginTop": "8px"},
                **{"data-chartcfg": stream_cfg}))
+
+    # Per-run HR zone time bar chart
+    if stream.heart_rate and stream.timestamps and len(stream.heart_rate) > 10:
+        cfg = data.get_athlete_config()
+        max_hr = cfg.get("max_hr", 200)
+        zone_pct = cfg.get("zones_pct", [60, 70, 80, 90])
+        boundaries = [int(max_hr * p / 100) for p in zone_pct]
+
+        zone_secs = [0.0] * 5
+        for i in range(1, len(stream.heart_rate)):
+            hr = stream.heart_rate[i]
+            if not hr or hr <= 0:
+                continue
+            # Time delta
+            t0, t1 = stream.timestamps[i - 1], stream.timestamps[i]
+            if hasattr(t0, "timestamp"):
+                dt = (t1 - t0).total_seconds()
+            elif isinstance(t0, (int, float)):
+                dt = t1 - t0
+            else:
+                dt = 1.0
+            if dt <= 0 or dt > 300:
+                continue
+            # Classify into zone
+            if hr < boundaries[0]:
+                z = 0
+            elif hr < boundaries[1]:
+                z = 1
+            elif hr < boundaries[2]:
+                z = 2
+            elif hr < boundaries[3]:
+                z = 3
+            else:
+                z = 4
+            zone_secs[z] += dt
+
+        zone_mins = [round(s / 60, 1) for s in zone_secs]
+        if max(zone_mins) > 0:
+            _route_map_counter += 1
+            zone_id = f"run-zones-{_route_map_counter}"
+            colors = [_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
+            zone_cfg = json.dumps({
+                "type": "bar",
+                "data": {
+                    "labels": _ZONE_LABELS,
+                    "datasets": [{"label": "Minutes", "data": zone_mins,
+                                  "backgroundColor": colors, "borderRadius": 2}],
+                },
+                "options": {
+                    "indexAxis": "y",
+                    "plugins": {"legend": {"display": False}},
+                    "scales": {
+                        "x": {"beginAtZero": True, "min": 0,
+                               "title": {"display": True, "text": "Minutes"},
+                               "max": round(max(zone_mins) * 1.15, 1)},
+                        "y": {},
+                    },
+                },
+            })
+            children.append(html.Div([
+                html.Div(className="cjs-canvas-box", style={"height": "160px"}),
+            ], id=f"{zone_id}-wrap", className="cjs-chart-wrap",
+               style={"marginTop": "8px"},
+               **{"data-chartcfg": zone_cfg}))
 
     result = children if children else [html.P("No GPS data.", style={"color": TEXT_MUTED})]
     if len(_route_cache) >= _ROUTE_CACHE_MAX:

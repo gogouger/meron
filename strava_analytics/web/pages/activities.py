@@ -323,4 +323,4 @@ def load_activity_route(n_clicks, btn_id, filenames):
     filename = filenames.get(key, "")
     if not filename:
         return html.P("No GPS data for this activity.", style={"color": TEXT_MUTED})
-    return build_route_charts(filename)
+    return build_route_charts(filename, df=data.get_df())

@@ -53,6 +53,10 @@ def init(export_dir: str | Path) -> None:
     _df = enrich(raw, athlete_config=_athlete_config, export_dir=_export_dir)
     _profile = load_profile(_export_dir)
 
+    # Build route fingerprint index (incremental, fast after first run)
+    from strava_analytics.route_matching import build_route_index
+    build_route_index(_df, _export_dir)
+
 
 def get_df() -> pd.DataFrame:
     """Return the full enriched DataFrame."""

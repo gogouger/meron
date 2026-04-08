@@ -630,7 +630,7 @@ def _compute_gap(speed_ms, altitude_m, distance_m):
 def _build_route_charts(filename):
     """Delegate to shared route builder."""
     from strava_analytics.web.components.routes import build_route_charts
-    return build_route_charts(filename)
+    return build_route_charts(filename, df=data.get_df())
 
 
 @callback(

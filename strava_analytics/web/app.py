@@ -248,7 +248,7 @@ def render_activity_modal(modal_data):
     filename = row.get("filename", "")
     if filename and act_type in ("Run", "Walk", "Hike", "Ride"):
         route_el = html.Div(
-            build_route_charts(filename),
+            build_route_charts(filename, df=data.get_df()),
             style={"marginTop": "16px", "borderTop": f"1px solid {BORDER}",
                    "paddingTop": "12px"},
         )
