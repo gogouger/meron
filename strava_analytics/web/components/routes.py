@@ -366,9 +366,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                 # Build datasets and run list rows
                 _route_map_counter += 1
                 hist_id = f"route-hist-{_route_map_counter}"
-                hist_datasets = []
                 run_list_rows = []
-                all_paces = []
 
                 for ri, (_, rrow) in enumerate(all_rows.iterrows()):
                     is_current = rrow["filename"] == filename
@@ -376,37 +374,9 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                     t = (effort - e_min) / e_range
                     color = _effort_color(t)
 
-                    # Parse stream for pace profile
-                    try:
-                        r_stream = parse_activity(export_dir / rrow["filename"], max_points=150)
-                    except Exception:
-                        continue
-                    if not r_stream.speed_ms or len(r_stream.speed_ms) < 5:
-                        continue
-                    r_dist = [d / 1609.344 for d in r_stream.distance_m] if r_stream.distance_m else []
-                    r_pace_raw = [26.8224 / s if s > 0.5 else None for s in r_stream.speed_ms]
-                    r_pace = _smooth([p if p and p < 20 else None for p in r_pace_raw], window=15)
-                    r_x = [round(x, 2) for x in r_dist[:len(r_pace)]]
-                    valid_pace = [p for p in r_pace if p and p < 20]
-                    if not valid_pace:
-                        continue
-                    all_paces.extend(valid_pace)
-
                     r_date = rrow["date"].strftime("%b %d, %Y") if hasattr(rrow["date"], "strftime") else str(rrow["date"])
                     avg_pace = rrow.get("pace_min_per_mi", 0) or 0
                     dist = rrow.get("distance_mi", 0) or 0
-
-                    hist_datasets.append({
-                        "label": f"_{r_date}",
-                        "data": [round(p, 2) if p else None for p in r_pace[:len(r_x)]],
-                        "borderColor": color,
-                        "borderWidth": 3 if is_current else 1.5,
-                        "pointRadius": 0,
-                        "fill": False,
-                        "tension": 0.3,
-                        "spanGaps": True,
-                        "order": 0 if is_current else ri + 1,
-                    })
 
                     # Run list row
                     _mono = "'IBM Plex Mono', monospace"
@@ -437,64 +407,99 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                         "background": "var(--elevated)" if is_current else "transparent",
                     }))
 
-                if hist_datasets and len(hist_datasets) >= 2:
-                    # Use the longest run's x-labels
-                    longest_ds = max(hist_datasets, key=lambda d: len(d["data"]))
-                    x_count = len(longest_ds["data"])
-                    # Approximate x labels from 0 to max distance
-                    max_dist = max((r.get("distance_mi", 0) or 0) for _, r in all_rows.iterrows())
-                    hist_x = [round(i * max_dist / max(x_count - 1, 1), 2) for i in range(x_count)]
+                if run_list_rows and len(run_list_rows) >= 2:
+                    # Pace-over-time scatter: x=date, y=avg pace, dot colored by effort
+                    # Sort chronologically for the chart
+                    chart_rows = all_rows.sort_values("date")
+                    chart_points = []
+                    chart_colors = []
+                    chart_sizes = []
+                    avg_paces = []
+                    for _, cr in chart_rows.iterrows():
+                        ap = cr.get("pace_min_per_mi", 0) or 0
+                        if not ap or ap <= 0:
+                            continue
+                        eff = cr.get("relative_effort", 0) or 0
+                        t = (eff - e_min) / e_range
+                        chart_points.append({
+                            "x": cr["date"].isoformat() if hasattr(cr["date"], "isoformat") else str(cr["date"]),
+                            "y": round(ap, 2),
+                        })
+                        chart_colors.append(_effort_color(t))
+                        chart_sizes.append(6 if cr["filename"] != filename else 9)
+                        avg_paces.append(ap)
 
-                    p_min = min(all_paces) - 0.5
-                    p_max = max(all_paces) + 0.5
+                    if len(chart_points) >= 2:
+                        p_min = min(avg_paces) - 0.3
+                        p_max = max(avg_paces) + 0.3
 
-                    hist_cfg = json.dumps({
-                        "type": "line",
-                        "data": {"labels": hist_x, "datasets": hist_datasets},
-                        "options": {
-                            "responsive": True, "maintainAspectRatio": False,
-                            "interaction": {"mode": "index", "intersect": False},
-                            "plugins": {"legend": {"display": False}},
-                            "scales": {
-                                "x": {
-                                    "title": {"display": True, "text": "mi"},
-                                    "ticks": {"stepSize": 0.25},
-                                    "grid": {"display": True},
-                                },
-                                "y": {
-                                    "reverse": True, "min": p_min, "max": p_max,
-                                    "title": {"display": True, "text": "pace /mi"},
-                                    "grid": {"display": False},
+                        hist_cfg_obj = {
+                            "type": "scatter",
+                            "data": {"datasets": [{
+                                "label": "_runs",
+                                "data": chart_points,
+                                "backgroundColor": chart_colors,
+                                "borderColor": chart_colors,
+                                "pointRadius": chart_sizes,
+                                "pointHoverRadius": [s + 2 for s in chart_sizes],
+                                "showLine": True,
+                                "borderColor": "rgba(168,162,158,0.25)",
+                                "borderWidth": 1,
+                                "fill": False,
+                                "tension": 0.3,
+                            }]},
+                            "options": {
+                                "responsive": True, "maintainAspectRatio": False,
+                                "interaction": {"mode": "nearest", "intersect": True},
+                                "plugins": {"legend": {"display": False}},
+                                "scales": {
+                                    "x": {
+                                        "type": "time", "time": {"unit": "week"},
+                                        "grid": {"display": True},
+                                    },
+                                    "y": {
+                                        "reverse": True, "min": p_min, "max": p_max,
+                                        "title": {"display": True, "text": "avg pace /mi"},
+                                        "grid": {"display": False},
+                                    },
                                 },
                             },
-                        },
-                    })
+                            "_meta": {
+                                "routeHistoryHover": True,
+                                "scrollListId": f"{hist_id}-list",
+                            },
+                        }
+                        hist_cfg = json.dumps(hist_cfg_obj)
 
-                    children.append(html.Div([
-                        html.Div("ROUTE HISTORY", style={
-                            "fontSize": "10px", "fontWeight": "700",
-                            "letterSpacing": "0.1em", "color": "var(--text-muted)",
-                            "marginBottom": "8px",
-                        }),
-                        html.Div([
-                            # Scrollable run list
-                            html.Div(run_list_rows, style={
-                                "maxHeight": "220px", "overflowY": "auto",
-                                "paddingRight": "4px",
-                                "flex": "0 0 auto", "minWidth": "280px",
+                        # Tag each run list row with a data-index for scroll targeting
+                        for i, row_div in enumerate(run_list_rows):
+                            row_div.id = f"{hist_id}-row-{i}"
+
+                        children.append(html.Div([
+                            html.Div("ROUTE HISTORY", style={
+                                "fontSize": "10px", "fontWeight": "700",
+                                "letterSpacing": "0.1em", "color": "var(--text-muted)",
+                                "marginBottom": "8px",
                             }),
-                            # Comparison chart
                             html.Div([
-                                html.Div(className="cjs-canvas-box", style={"height": "200px"}),
-                            ], id=f"{hist_id}-wrap", className="cjs-chart-wrap",
-                               style={"flex": "1", "minWidth": "0"},
-                               **{"data-chartcfg": hist_cfg}),
-                        ], style={
-                            "display": "flex", "gap": "12px",
-                            "alignItems": "flex-start",
-                        }),
-                    ], style={"marginTop": "16px", "borderTop": "1px solid var(--border)",
-                              "paddingTop": "12px"}))
+                                # Scrollable run list
+                                html.Div(run_list_rows, id=f"{hist_id}-list", style={
+                                    "maxHeight": "220px", "overflowY": "auto",
+                                    "paddingRight": "4px",
+                                    "flex": "0 0 auto", "minWidth": "280px",
+                                }),
+                                # Pace over time chart
+                                html.Div([
+                                    html.Div(className="cjs-canvas-box", style={"height": "200px"}),
+                                ], id=f"{hist_id}-wrap", className="cjs-chart-wrap",
+                                   style={"flex": "1", "minWidth": "0"},
+                                   **{"data-chartcfg": hist_cfg}),
+                            ], style={
+                                "display": "flex", "gap": "12px",
+                                "alignItems": "flex-start",
+                            }),
+                        ], style={"marginTop": "16px", "borderTop": "1px solid var(--border)",
+                                  "paddingTop": "12px"}))
         except Exception:
             pass  # route matching is best-effort
 

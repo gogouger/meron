@@ -337,6 +337,43 @@
             });
         }
 
+        // Route history hover → scroll run list
+        if (meta.routeHistoryHover && meta.scrollListId) {
+            (function (listId) {
+                var lastIdx = -1;
+                canvas.addEventListener("mousemove", function (evt) {
+                    var pts = chart.getElementsAtEventForMode(evt, "nearest", { intersect: false }, false);
+                    if (!pts.length) return;
+                    var idx = pts[0].index;
+                    if (idx === lastIdx) return;
+                    lastIdx = idx;
+                    // The chart is sorted chronologically but the list is newest-first
+                    var list = document.getElementById(listId);
+                    if (!list) return;
+                    var totalRows = list.children.length;
+                    // Chart index 0 = oldest, list index 0 = newest → reverse
+                    var listIdx = totalRows - 1 - idx;
+                    var row = list.children[listIdx];
+                    if (row) {
+                        // Highlight row
+                        for (var r = 0; r < list.children.length; r++) {
+                            list.children[r].style.outline = "";
+                        }
+                        row.style.outline = "1.5px solid var(--accent)";
+                        row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                    }
+                });
+                canvas.addEventListener("mouseleave", function () {
+                    lastIdx = -1;
+                    var list = document.getElementById(listId);
+                    if (!list) return;
+                    for (var r = 0; r < list.children.length; r++) {
+                        list.children[r].style.outline = "";
+                    }
+                });
+            })(meta.scrollListId);
+        }
+
         // Hover card for run charts
         if (meta.runHoverCard) {
             canvas.addEventListener("mousemove", function (evt) {
