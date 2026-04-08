@@ -386,6 +386,30 @@ def estimate_1rm_all_methods(weight: float, reps: int,
 
 
 # ---------------------------------------------------------------------------
+# RIR heuristic
+# ---------------------------------------------------------------------------
+
+
+def infer_rir(reps: int, sets: int = 1) -> int:
+    """Estimate reps-in-reserve from programmed sets and reps.
+
+    More sets at a given weight means more pacing (higher RIR per set).
+    Heavy low-rep singles/doubles with few sets are near-maximal.
+    """
+    if sets <= 1 and reps <= 2:
+        return 0
+    if sets <= 3 and reps <= 2:
+        return 1
+    if sets <= 3 and reps <= 4:
+        return 1
+    if sets >= 5 and reps >= 4:
+        return 3
+    if sets >= 4:
+        return 2
+    return 2
+
+
+# ---------------------------------------------------------------------------
 # 1RM progression from lifting program data
 # ---------------------------------------------------------------------------
 
@@ -420,20 +444,23 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
             estimates["ensemble"] = w
             reps_per_set = 1
         else:
-            # Working set — use actual reps if available, fall back to heuristic
+            # Working set — use actual sets and reps
             actual_reps = row.get(reps_col)
+            actual_sets = row.get(sets_col)
+            n_sets = int(actual_sets) if pd.notna(actual_sets) and actual_sets > 0 else 3
+
             if pd.notna(actual_reps) and actual_reps > 0:
                 reps_per_set = int(actual_reps)
             elif w > 0 and vol > 0:
                 total_reps = vol / w
-                reps_per_set = min(int(round(total_reps / 3)), 10)
+                reps_per_set = min(int(round(total_reps / n_sets)), 10)
                 if reps_per_set < 1:
                     reps_per_set = 1
             else:
                 reps_per_set = 1
 
-            # rir=2: programmed strength work typically leaves reps in reserve
-            estimates = estimate_1rm_all_methods(w, reps_per_set, rir=2)
+            estimates = estimate_1rm_all_methods(w, reps_per_set,
+                                                rir=infer_rir(reps_per_set, n_sets))
 
         rows.append({
             "date": row["date"],
@@ -445,6 +472,45 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
             "estimated_1rm": estimates["ensemble"],
             **{f"1rm_{k}": v for k, v in estimates.items() if k != "ensemble"},
         })
+
+    # ------------------------------------------------------------------
+    # Calibration pass: if formulas overestimate relative to the tested
+    # max, scale working-set estimates down.  The factor is capped at 1.0
+    # so it never inflates estimates (strength progression already
+    # accounts for earlier sets being lower).
+    # ------------------------------------------------------------------
+    test_indices = [i for i, r in enumerate(rows) if r["is_test"]]
+
+    if test_indices:
+        factors: dict[int, float] = {}
+        for ti in test_indices:
+            tested = rows[ti]["weight"]
+            preceding = [
+                rows[j]["estimated_1rm"]
+                for j in range(max(0, ti - 3), ti)
+                if not rows[j]["is_test"]
+            ]
+            if preceding:
+                factors[ti] = min(1.0, tested / max(preceding))
+            else:
+                factors[ti] = 1.0
+
+        first_factor = factors[test_indices[0]]
+        current_factor = first_factor
+        for i in range(len(rows)):
+            if i < test_indices[0]:
+                f = first_factor
+            else:
+                if i in factors:
+                    current_factor = factors[i]
+                f = current_factor
+
+            if not rows[i]["is_test"]:
+                rows[i]["estimated_1rm"] *= f
+                for k in list(rows[i]):
+                    if k.startswith("1rm_"):
+                        rows[i][k] *= f
+            rows[i]["correction_factor"] = f
 
     return pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
 

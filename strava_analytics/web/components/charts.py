@@ -854,9 +854,9 @@ def onerm_progression_chart(
     labels = [_ts(d) for d in kdf["date"]]
 
     datasets = [
-        # Raw estimates as light dots
+        # Per-session estimated 1RM as dots
         {
-            "label": "Estimates",
+            "label": "Session estimate",
             "data": [round(float(v), 1) for v in kdf["estimated_1rm"]],
             "borderColor": _hex_to_rgba(color, 0.4),
             "backgroundColor": _hex_to_rgba(color, 0.4),
@@ -864,9 +864,9 @@ def onerm_progression_chart(
             "pointRadius": _PT,
             "pointHoverRadius": _PT_HOVER,
         },
-        # Kalman smoothed line
+        # Estimated 1RM line
         {
-            "label": "Kalman",
+            "label": "Estimated 1RM",
             "data": [round(float(v), 1) for v in kdf["kalman_1rm"]],
             "borderColor": color,
             "backgroundColor": color,
@@ -925,8 +925,16 @@ def onerm_progression_chart(
         "data": {"labels": labels, "datasets": datasets},
         "options": {
             "plugins": {
-                "title": _title_cfg(f"{lift_name} — Estimated 1RM (Kalman)"),
-                "legend": {"display": False},
+                "title": _title_cfg(f"{lift_name} — Estimated 1RM"),
+                "legend": {
+                    "display": True,
+                    "labels": {
+                        "filter": "item => !item.text.startsWith('_') && item.text !== 'Upper'",
+                        "usePointStyle": True,
+                        "color": "#aaa",
+                        "font": {"size": 11},
+                    },
+                },
             },
             "scales": {
                 "x": {

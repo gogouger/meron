@@ -259,12 +259,12 @@ def kalman_1rm(progression_df: pd.DataFrame) -> pd.DataFrame:
         if r.get("is_test", False):
             noise.append(_GROUND_TRUTH_R)  # Ground truth — snap to value
         else:
-            noise.append(80.0)  # Formula estimate — high noise
+            noise.append(25.0)  # Formula estimate
 
     states, uppers, lowers = _kalman_1d(
         dates, observations, noise,
-        q_per_day=0.3,  # ~2 lbs drift per week
-        initial_covariance=400.0,  # ±40 lbs initial uncertainty
+        q_per_day=1.5,  # ~10 lbs drift per week — tracks progressive overload
+        initial_covariance=200.0,
     )
 
     df["kalman_1rm"] = states
