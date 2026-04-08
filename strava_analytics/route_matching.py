@@ -116,7 +116,7 @@ def match_routes(
     fp_b: list[str],
     dist_a: float = 0,
     dist_b: float = 0,
-    threshold: float = 0.65,
+    threshold: float = 0.80,
 ) -> bool:
     """True if routes match by ordered subsequence overlap and similar distance."""
     if not fp_a or not fp_b:
