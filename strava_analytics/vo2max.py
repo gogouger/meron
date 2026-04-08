@@ -60,6 +60,53 @@ def daniels_vdot(distance_m: float, time_min: float) -> float:
     return vo2 / fraction
 
 
+# ---------------------------------------------------------------------------
+# Intensity-corrected VDOT for training runs
+# ---------------------------------------------------------------------------
+
+# Approximate %VO2max sustained in each HR zone (Daniels / ACSM guidelines)
+_ZONE_VO2_FRACTION = {1: 0.60, 2: 0.70, 3: 0.80, 4: 0.88, 5: 0.95}
+
+
+def intensity_from_zones(zone_seconds: dict[int, float]) -> float:
+    """Compute weighted-average %VO2max from per-zone time distribution.
+
+    Args:
+        zone_seconds: {1: seconds_in_z1, 2: seconds_in_z2, ...}
+
+    Returns:
+        Weighted intensity fraction (0.0–1.0).
+    """
+    total = sum(zone_seconds.values())
+    if total <= 0:
+        return 0.0
+    weighted = sum(_ZONE_VO2_FRACTION.get(z, 0.70) * s
+                   for z, s in zone_seconds.items())
+    return weighted / total
+
+
+def daniels_vdot_adjusted(distance_m: float, time_min: float,
+                           intensity_fraction: float) -> float:
+    """Compute VDOT corrected for sub-maximal effort using HR-derived intensity.
+
+    Instead of assuming race effort (the standard Daniels fraction), uses
+    the actual intensity fraction from HR zone data.
+
+    Args:
+        distance_m: Run distance in meters.
+        time_min: Moving time in minutes.
+        intensity_fraction: Fraction of VO2max sustained (from HR zones).
+
+    Returns:
+        Corrected VDOT in ml/kg/min.
+    """
+    if time_min <= 0 or distance_m <= 0 or intensity_fraction <= 0:
+        return 0.0
+    velocity = distance_m / time_min
+    vo2 = _vo2_cost(velocity)
+    return vo2 / intensity_fraction
+
+
 def vdot_to_velocity(vdot: float, time_min: float) -> float:
     """Given a VDOT and race duration, find the sustainable velocity (m/min).
 

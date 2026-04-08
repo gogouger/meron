@@ -11,7 +11,6 @@ from strava_analytics.web.components.layout import (
 )
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, BG_CARD, BORDER,
 )
 from strava_analytics.predictions import (
     predict_race, compute_personal_exponent, RacePrediction,
@@ -307,30 +306,30 @@ def _model_comparison(pred: RacePrediction):
     items = []
     for name, time_s in models:
         items.append(html.Div([
-            html.Span(f"{name}: ", style={"color": TEXT_SECONDARY, "width": "180px",
+            html.Span(f"{name}: ", style={"color": "var(--text-secondary)", "width": "180px",
                                            "display": "inline-block"}),
             html.Span(_fmt(time_s), style={"fontWeight": "600"}),
         ], style={"marginBottom": "4px", "fontSize": "0.9rem"}))
 
-    items.append(html.Hr(style={"borderColor": BORDER, "margin": "8px 0"}))
+    items.append(html.Hr(style={"borderColor": "var(--border)", "margin": "8px 0"}))
     items.append(html.Div([
-        html.Span("Altitude adjustment: ", style={"color": TEXT_SECONDARY}),
+        html.Span("Altitude adjustment: ", style={"color": "var(--text-secondary)"}),
         html.Span(f"{pred.altitude_adjustment_s:+.0f}s", style={"fontWeight": "600"}),
     ], style={"fontSize": "0.9rem"}))
     items.append(html.Div([
-        html.Span("Elevation penalty: ", style={"color": TEXT_SECONDARY}),
+        html.Span("Elevation penalty: ", style={"color": "var(--text-secondary)"}),
         html.Span(f"+{pred.elevation_penalty_s:.0f}s", style={"fontWeight": "600"}),
     ], style={"fontSize": "0.9rem"}))
 
     return html.Div(items, style={
-        "backgroundColor": BG_CARD, "padding": "16px",
-        "border": f"1px solid {BORDER}", "marginBottom": "24px",
+        "backgroundColor": "var(--bg-card)", "padding": "16px",
+        "border": "1px solid var(--border)", "marginBottom": "24px",
     })
 
 
 def _efforts_table(efforts: list):
     if not efforts:
-        return html.P("No race efforts found.", style={"color": TEXT_MUTED})
+        return html.P("No race efforts found.", style={"color": "var(--text-muted)"})
 
     rows = []
     for e in efforts:
@@ -363,20 +362,20 @@ def _methodology_section():
                 html.Li("Cameron (1999): Non-linear distance scaling model"),
                 html.Li("Daniels VDOT (2014): VO2 cost + sustainable fraction model"),
                 html.Li("Personal exponent computed from your race history via least-squares fit"),
-            ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
+            ], style={"fontSize": "0.8rem", "color": "var(--text-secondary)"}),
         ]),
         html.Details([
             html.Summary("Altitude Adjustment"),
             html.Ul([
                 html.Li("Peronnet et al. (1991): Acclimatized model"),
                 html.Li("You train at ~5,800ft \u2014 racing at similar altitude = minimal adjustment"),
-            ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
+            ], style={"fontSize": "0.8rem", "color": "var(--text-secondary)"}),
         ]),
         html.Details([
             html.Summary("Elevation Gain Penalty"),
             html.Ul([
                 html.Li("Adapted from Minetti et al. (2002)"),
                 html.Li("~12 seconds per mile per 100ft of gain"),
-            ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
+            ], style={"fontSize": "0.8rem", "color": "var(--text-secondary)"}),
         ]),
     ], style={"fontSize": "0.9rem", "marginBottom": "24px"})

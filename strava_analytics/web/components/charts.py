@@ -964,8 +964,8 @@ def _single_race_chart(
         return _empty_chart(f"Not enough data for {label}", height=280)
 
     type_colors = {
-        "race": ACCENT, "long": ACCENT_SLATE,
-        "moderate": ACCENT_AMBER, "easy": SLATE_60,
+        "race": ACCENT, "hard_effort": "#f97316",
+        "long": ACCENT_SLATE, "moderate": ACCENT_AMBER, "easy": SLATE_60,
     }
 
     datasets = []

@@ -354,9 +354,10 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
     high_effort = (zone >= 4) | (z4_z5_frac >= 0.40)
     blended.loc[promotable & high_effort & ~is_long_easy] = "hard_effort"
 
-    # moderate (default) → downgrade to easy if low HR (only if not already promoted)
+    # moderate (default) → downgrade to easy only if true recovery-pace HR (Z1 only)
+    # Z2 is aerobic base — still counts as moderate effort
     still_mod = blended == "moderate"
-    blended.loc[still_mod & (zone <= 2)] = "easy"
+    blended.loc[still_mod & (zone == 1)] = "easy"
 
     df.loc[mask, "run_type"] = blended
     return df

@@ -931,6 +931,7 @@ main {
     border-bottom: 1px solid var(--border) !important;
     font-size: 13px;
     color: var(--foreground);
+    background-color: var(--bg-card) !important;
 }
 
 .table tr:hover td { background-color: var(--elevated) !important; }

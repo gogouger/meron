@@ -14,7 +14,9 @@ import math
 import numpy as np
 import pandas as pd
 
-from strava_analytics.vo2max import daniels_vdot, vdot_to_race_time
+from strava_analytics.vo2max import (
+    daniels_vdot, daniels_vdot_adjusted, intensity_from_zones, vdot_to_race_time,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +119,7 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         kalman_lower, run_type, name, distance_mi, date_str, R
     """
     df = runs.copy()
-    df = df[(df["distance_mi"] >= 3.0) &
+    df = df[(df["distance_mi"] >= 2.0) &
             (df["pace_min_per_mi"] >= 6) & (df["pace_min_per_mi"] <= 14)]
 
     empty_cols = ["date", "est_time_min", "kalman_min", "kalman_upper",
@@ -134,11 +136,8 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         time_min = time_s / 60.0
         run_type = r.get("run_type", "")
 
-        if dist_m < 4800 or time_min < 15:
+        if dist_m < 3200 or time_min < 10:
             continue
-
-        vdot = daniels_vdot(dist_m, time_min)
-        est_time = vdot_to_race_time(vdot, target_m)
 
         # Is this an actual race at the target distance?
         is_target_race = run_type == "race" and gt_lo <= dist_m <= gt_hi
@@ -148,6 +147,23 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         has_hr = hr_zone is not None and not (isinstance(hr_zone, float) and math.isnan(hr_zone))
         hz = int(hr_zone) if has_hr else None
 
+        # Compute intensity-corrected VDOT when HR zone data is available
+        zone_secs = {z: (r.get(f"zone_{z}_s", 0) or 0) for z in range(1, 6)}
+        total_zone_s = sum(zone_secs.values())
+
+        if total_zone_s > 0 and run_type != "race":
+            intensity = intensity_from_zones(zone_secs)
+            vdot = daniels_vdot_adjusted(dist_m, time_min, intensity)
+        elif has_hr and run_type != "race":
+            # Fallback: use single hr_zone midpoint fraction
+            zone_frac = {1: 0.60, 2: 0.70, 3: 0.80, 4: 0.88, 5: 0.95}
+            vdot = daniels_vdot_adjusted(dist_m, time_min,
+                                          zone_frac.get(hz, 0.75))
+        else:
+            vdot = daniels_vdot(dist_m, time_min)
+
+        est_time = vdot_to_race_time(vdot, target_m)
+
         if is_target_race:
             R = _GROUND_TRUTH_R
             # Use actual scaled time, not VDOT estimate
@@ -155,29 +171,35 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         elif is_other_race:
             R = 2.0     # Race effort at different distance — good VDOT signal
         elif run_type == "hard_effort":
-            # Interval/tempo — quality depends on whether HR confirms intensity
             if has_hr and hz >= 4:
                 R = 8.0     # Hard effort confirmed by HR — strong signal
             elif has_hr and hz == 3:
-                R = 20.0    # Moderate-effort hard_effort
+                R = 15.0    # Moderate-effort hard_effort
             else:
                 R = 35.0    # Low/no HR — still useful but more uncertain
         elif run_type == "long":
             if has_hr and hz >= 3:
-                R = 40.0    # Honest long effort with some intensity
+                R = 25.0    # Honest long effort with some intensity
             else:
-                R = 60.0    # Easy long run
+                R = 40.0    # Easy long run
         elif run_type == "moderate":
             if has_hr and hz >= 4:
-                R = 30.0    # Tempo-like moderate run
-            elif has_hr and hz <= 2:
-                R = 130.0   # Very easy moderate — weak signal
+                R = 20.0    # Tempo-like moderate run
+            elif has_hr and hz == 3:
+                R = 35.0    # Solid moderate effort
+            elif has_hr and hz == 2:
+                R = 60.0    # Light moderate — still useful
             else:
-                R = 80.0    # Default moderate
+                R = 100.0   # Z1 moderate — weakest but included
         elif run_type == "easy":
-            continue    # Skip easy runs — low VDOT biases filter downward
+            if has_hr and hz >= 3:
+                R = 40.0    # Misclassified easy — real effort
+            elif has_hr and hz == 2:
+                R = 80.0    # Z2 aerobic base — useful signal
+            else:
+                R = 120.0   # True recovery — weak but included
         else:
-            continue    # Skip unclassified runs
+            R = 100.0   # Unknown type — include with moderate noise
 
         rows.append({
             "date": r["date"],
