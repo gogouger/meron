@@ -453,7 +453,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                                 "label": "_runs",
                                 "data": chart_points,
                                 "backgroundColor": point_bg,
-                                "borderColor": point_border,
+                                "pointBorderColor": point_border,
                                 "pointBorderWidth": 2,
                                 "pointRadius": point_radius,
                                 "pointHoverRadius": [r + 2 for r in point_radius],
