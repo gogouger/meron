@@ -139,7 +139,9 @@
     }
 
     /* ── theme defaults ──────────────────────────────────────────── */
-    function applyThemeDefaults(cfg) {
+    function applyThemeDefaults(cfg, meta) {
+        meta = meta || cfg._meta || {};
+        delete cfg._meta;
         if (!cfg.options) cfg.options = {};
         if (!cfg.options.plugins) cfg.options.plugins = {};
         cfg.options.responsive = true;
@@ -226,8 +228,7 @@
             var zoomMode = hasCategory ? "y" : "xy";
 
             // panOnly meta flag: pan on x only, no zoom
-            var cfgMeta = cfg._meta || {};
-            if (cfgMeta.panOnly) {
+            if (meta.panOnly) {
                 cfg.options.plugins.zoom = {
                     pan: { enabled: true, mode: "x" },
                     zoom: { wheel: { enabled: false }, pinch: { enabled: false }, drag: { enabled: false } },
@@ -267,8 +268,7 @@
         if (!box) return false;
 
         var meta = cfg._meta || {};
-        delete cfg._meta;
-        cfg = applyThemeDefaults(cfg);
+        cfg = applyThemeDefaults(cfg, meta);
 
         if (_charts[chartId]) { _charts[chartId].destroy(); delete _charts[chartId]; }
 
