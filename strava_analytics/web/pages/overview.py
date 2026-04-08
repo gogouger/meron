@@ -180,13 +180,13 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
 
     month_label = html.Div(month_label_text, style={
         "fontSize": "13px", "fontWeight": "700", "textAlign": "center",
-        "color": TEXT_PRIMARY, "marginBottom": "6px",
+        "color": "var(--text-primary)", "marginBottom": "6px",
     })
 
     dow_header = html.Div(
         [html.Div(d, style={
             "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
-            "color": TEXT_MUTED,
+            "color": "var(--text-muted)",
         }) for d in ["M", "T", "W", "T", "F", "S", "S"]]
         + [html.Div()],  # empty cell for the meta column
         style={**_DOW_GRID, "marginBottom": "2px"},
@@ -208,7 +208,7 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
 
             if is_future:
                 cell = html.Div(str(day_num), style={
-                    **_CELL_BASE, "color": TEXT_MUTED, "opacity": "0.25",
+                    **_CELL_BASE, "color": "var(--text-muted)", "opacity": "0.25",
                 })
             elif activities:
                 week_activity_count += len(activities)
@@ -238,7 +238,7 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
                     [
                         html.Span(str(day_num), style={
                             "fontSize": "11px", "fontWeight": "600",
-                            "color": TEXT_PRIMARY, "marginTop": "-2px",
+                            "color": "var(--text-primary)", "marginTop": "-2px",
                         }),
                         dots_row,
                         hover,
@@ -253,7 +253,7 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
                 )
             else:
                 cell = html.Div(str(day_num), style={
-                    **_CELL_BASE, "color": TEXT_MUTED,
+                    **_CELL_BASE, "color": "var(--text-muted)",
                 })
 
             cells.append(cell)
@@ -313,7 +313,7 @@ def _activity_calendar(df: pd.DataFrame, months: int = 3) -> html.Div:
                 "borderRadius": "50%", "border": f"2px solid {color}",
                 "marginRight": "4px", "verticalAlign": "middle",
             }),
-            html.Span(atype, style={"fontSize": "10px", "color": TEXT_MUTED}),
+            html.Span(atype, style={"fontSize": "10px", "color": "var(--text-muted)"}),
         ], style={"marginRight": "14px"}))
 
     legend = html.Div(legend_items, style={
