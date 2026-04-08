@@ -258,12 +258,20 @@ def get_primary_lifts(exercises: list) -> dict:
     result = {
         "bench_weight": None,
         "bench_volume": 0,
+        "bench_sets": None,
+        "bench_reps": None,
         "squat_weight": None,
         "squat_volume": 0,
+        "squat_sets": None,
+        "squat_reps": None,
         "deadlift_weight": None,
         "deadlift_volume": 0,
+        "deadlift_sets": None,
+        "deadlift_reps": None,
         "ohp_weight": None,
         "ohp_volume": 0,
+        "ohp_sets": None,
+        "ohp_reps": None,
         "pullup_sets": None,
         "pullup_reps": None,
         "hip_thrust_weight": None,
@@ -275,6 +283,8 @@ def get_primary_lifts(exercises: list) -> dict:
         if "bench press" in lower_name or "bench" == lower_name:
             result["bench_weight"] = weight
             result["bench_volume"] = s * r * weight
+            result["bench_sets"] = s
+            result["bench_reps"] = r
         elif ("squat" in lower_name
               and "heel" not in lower_name
               and "front" not in lower_name
@@ -282,13 +292,19 @@ def get_primary_lifts(exercises: list) -> dict:
             if weight > (result["squat_weight"] or 0):
                 result["squat_weight"] = weight
                 result["squat_volume"] = s * r * weight
+                result["squat_sets"] = s
+                result["squat_reps"] = r
         elif "deadlift" in lower_name and "stiff" not in lower_name and "glute" not in lower_name:
             if weight > (result["deadlift_weight"] or 0):
                 result["deadlift_weight"] = weight
                 result["deadlift_volume"] = s * r * weight
+                result["deadlift_sets"] = s
+                result["deadlift_reps"] = r
         elif "overhead" in lower_name or "ohp" in lower_name:
             result["ohp_weight"] = weight
             result["ohp_volume"] = s * r * weight
+            result["ohp_sets"] = s
+            result["ohp_reps"] = r
         elif "pull up" in lower_name or "pull-up" in lower_name:
             result["pullup_sets"] = s
             result["pullup_reps"] = r

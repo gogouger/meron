@@ -133,7 +133,7 @@ def extract_race_efforts(df: pd.DataFrame) -> list[dict]:
     """
     runs = df[(df["type"] == "Run")].copy()
     if "run_type" in runs.columns:
-        races = runs[runs["run_type"].isin(["race", "workout"])]
+        races = runs[runs["run_type"].isin(["race", "hard_effort"])]
         if races.empty:
             races = runs
     else:

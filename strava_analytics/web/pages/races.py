@@ -78,11 +78,26 @@ def layout(**_kwargs):
 
     personal_exp = compute_personal_exponent(race_data) if len(race_data) >= 2 else 1.06
 
+    # Prefer Kalman-smoothed 5K estimate for stable calibration
     calibration = None
-    for e in recent_efforts:
-        if 4800 <= e["distance_m"] <= 5200:
-            calibration = e
-            break
+    from strava_analytics.kalman import kalman_race
+    runs_only = df[df["type"] == "Run"]
+    kalman_df = kalman_race(runs_only, target_m=5000)
+    if not kalman_df.empty:
+        latest = kalman_df.iloc[-1]
+        calibration = {
+            "distance_m": 5000,
+            "time_s": latest["kalman_min"] * 60,
+            "name": "Kalman-smoothed 5K",
+            "elevation_gain_ft": 0,
+        }
+
+    # Fall back to best recent ~5K effort
+    if not calibration:
+        for e in recent_efforts:
+            if 4800 <= e["distance_m"] <= 5200:
+                calibration = e
+                break
     if not calibration:
         calibration = recent_efforts[0] if recent_efforts else None
     if not calibration:

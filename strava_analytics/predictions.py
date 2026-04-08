@@ -397,6 +397,8 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
     """
     weight_col = f"{lift}_weight"
     volume_col = f"{lift}_volume"
+    sets_col = f"{lift}_sets"
+    reps_col = f"{lift}_reps"
 
     if weight_col not in df.columns:
         return pd.DataFrame()
@@ -405,9 +407,6 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
     if lifts.empty:
         return pd.DataFrame()
 
-    # First pass: find actual 1RM tests (1x1 = volume equals weight)
-    tested_1rm = None
-    tested_1rm_date = None
     rows = []
 
     for _, row in lifts.sort_values("date").iterrows():
@@ -417,14 +416,15 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
 
         if is_test:
             # Actual tested 1RM — use as ground truth
-            tested_1rm = w
-            tested_1rm_date = row["date"]
             estimates = {m: w for m in _1RM_METHODS}
             estimates["ensemble"] = w
             reps_per_set = 1
         else:
-            # Working set — estimate 1RM
-            if w > 0 and vol > 0:
+            # Working set — use actual reps if available, fall back to heuristic
+            actual_reps = row.get(reps_col)
+            if pd.notna(actual_reps) and actual_reps > 0:
+                reps_per_set = int(actual_reps)
+            elif w > 0 and vol > 0:
                 total_reps = vol / w
                 reps_per_set = min(int(round(total_reps / 3)), 10)
                 if reps_per_set < 1:
@@ -432,12 +432,8 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
             else:
                 reps_per_set = 1
 
-            estimates = estimate_1rm_all_methods(w, reps_per_set, rir=0)
-
-            # Cap at tested 1RM if this session is AFTER the test
-            if tested_1rm and row["date"] >= tested_1rm_date:
-                for k in estimates:
-                    estimates[k] = min(estimates[k], tested_1rm)
+            # rir=2: programmed strength work typically leaves reps in reserve
+            estimates = estimate_1rm_all_methods(w, reps_per_set, rir=2)
 
         rows.append({
             "date": row["date"],

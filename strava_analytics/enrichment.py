@@ -224,9 +224,11 @@ def map_lifting_program(df: pd.DataFrame) -> pd.DataFrame:
 
     # Initialize lifting columns
     lift_cols = [
-        "program_day", "bench_weight", "bench_volume",
-        "squat_weight", "squat_volume", "deadlift_weight", "deadlift_volume",
-        "ohp_weight", "ohp_volume", "pullup_sets", "pullup_reps",
+        "program_day", "bench_weight", "bench_volume", "bench_sets", "bench_reps",
+        "squat_weight", "squat_volume", "squat_sets", "squat_reps",
+        "deadlift_weight", "deadlift_volume", "deadlift_sets", "deadlift_reps",
+        "ohp_weight", "ohp_volume", "ohp_sets", "ohp_reps",
+        "pullup_sets", "pullup_reps",
         "hip_thrust_weight", "lift_exercises",
     ]
     for col in lift_cols:
@@ -309,11 +311,12 @@ def _compute_hr_zones(df: pd.DataFrame, max_hr: int, zone_pct: list[int]) -> pd.
 def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
     """Refine keyword-based run_type using HR zones.
 
-    4 final types: race, long, moderate, easy.
+    5 final types: race, hard_effort, long, moderate, easy.
     - race keyword → always race
-    - long keyword/distance → always long
+    - hard_effort keyword → always hard_effort
+    - long keyword/distance → stays long (unless high HR + short distance)
+    - moderate/easy → promote to hard_effort if high HR effort detected
     - moderate (default) → downgrade to easy if Z1-Z2 HR
-    - easy keyword → upgrade to moderate if Z4+ HR
     - No HR data → keep keyword classification
     """
     runs_mask = df["type"] == "Run"
@@ -325,16 +328,30 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
 
     zone = df.loc[mask, "hr_zone"]
     kw_type = df.loc[mask, "run_type"]
+    dist = df.loc[mask, "distance_mi"].fillna(0)
 
     blended = kw_type.copy()
 
-    # moderate (default) → downgrade to easy if low HR
-    mod_mask = kw_type == "moderate"
-    blended.loc[mod_mask & (zone <= 2)] = "easy"
+    # Compute Z4+Z5 fraction from per-second zone time columns (zone_1_s .. zone_5_s)
+    z4 = df.loc[mask, "zone_4_s"].fillna(0) if "zone_4_s" in df.columns else pd.Series(0, index=df.loc[mask].index)
+    z5 = df.loc[mask, "zone_5_s"].fillna(0) if "zone_5_s" in df.columns else pd.Series(0, index=df.loc[mask].index)
+    total_zone = pd.Series(0.0, index=df.loc[mask].index)
+    for zc in ["zone_1_s", "zone_2_s", "zone_3_s", "zone_4_s", "zone_5_s"]:
+        if zc in df.columns:
+            total_zone = total_zone + df.loc[mask, zc].fillna(0)
+    z4_z5_frac = (z4 + z5) / total_zone.replace(0, np.nan)
 
-    # easy → upgrade to moderate if high HR
-    easy_mask = kw_type == "easy"
-    blended.loc[easy_mask & (zone >= 4)] = "moderate"
+    # Protect long runs: long distance at easy effort stays long
+    is_long_easy = (dist >= 8) & (zone <= 3)
+
+    # Promote moderate/easy to hard_effort if high HR effort
+    promotable = (kw_type == "moderate") | (kw_type == "easy")
+    high_effort = (zone >= 4) | (z4_z5_frac >= 0.40)
+    blended.loc[promotable & high_effort & ~is_long_easy] = "hard_effort"
+
+    # moderate (default) → downgrade to easy if low HR (only if not already promoted)
+    still_mod = blended == "moderate"
+    blended.loc[still_mod & (zone <= 2)] = "easy"
 
     df.loc[mask, "run_type"] = blended
     return df
@@ -475,11 +492,12 @@ def enrich(df: pd.DataFrame, athlete_config: dict | None = None, export_dir=None
 
         conditions = [
             name_text.str.contains(r"race|10k|5k|marathon|trot|dash|frisco", na=False),
+            full_text.str.contains(r"interval|tempo|fast|speed|800|fartlek|threshold|time.trial", na=False),
             full_text.str.contains(r"long", na=False) | (dist >= 8),
             full_text.str.contains(r"recovery|shake|shakeout|easy|ruck", na=False) | (dist <= 2.5),
             pace.notna() & (pace >= 12),
         ]
-        choices = ["race", "long", "easy", "easy"]
+        choices = ["race", "hard_effort", "long", "easy", "easy"]
 
         df.loc[runs_mask, "run_type"] = np.select(
             [c[runs_mask] for c in conditions],

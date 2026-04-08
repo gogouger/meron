@@ -150,12 +150,16 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
             est_time = time_min * (target_m / dist_m)
         elif is_other_race:
             R = 2.0     # Race effort at different distance — good VDOT signal
+        elif run_type == "hard_effort":
+            R = 8.0     # Tempo/interval — good signal, not as clean as a race
         elif run_type == "long":
             R = 50.0    # Long runs — deliberately slow
         elif run_type == "moderate":
-            R = 80.0    # Moderate — weak signal
+            R = 120.0   # Moderate — weak signal
+        elif run_type == "easy":
+            continue    # Skip easy runs — low VDOT biases filter downward
         else:
-            R = 150.0   # Easy — essentially noise
+            continue    # Skip unclassified runs
 
         rows.append({
             "date": r["date"],
