@@ -795,7 +795,16 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
     if lifts_data.empty:
         return _empty_chart("No training volume data")
 
-    dates = lifts_data["date"]
+    # Month-based labels: show "Mon 'YY" for first session in each month, blank otherwise
+    labels: list[str] = []
+    seen_months: set[str] = set()
+    for d in lifts_data["date"]:
+        key = d.strftime("%Y-%m")
+        if key not in seen_months:
+            seen_months.add(key)
+            labels.append(d.strftime("%b '%y"))
+        else:
+            labels.append("")
 
     datasets = []
     stacked_totals: list[float] = [0.0] * len(lifts_data)
@@ -810,10 +819,7 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
             stacked_totals[i] += v
         datasets.append({
             "label": lift.title(),
-            "data": [
-                {"x": _ts(d), "y": round(v, 0)}
-                for d, v in zip(dates, vals)
-            ],
+            "data": [round(v, 0) for v in vals],
             "backgroundColor": _hex_to_rgba(color, 0.8),
             "borderColor": color,
             "borderWidth": 1,
@@ -826,7 +832,7 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
 
     cfg: dict[str, Any] = {
         "type": "bar",
-        "data": {"datasets": datasets},
+        "data": {"labels": labels, "datasets": datasets},
         "options": {
             "plugins": {
                 "title": _title_cfg("Training Volume"),
@@ -836,12 +842,7 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
                 },
             },
             "scales": {
-                "x": {
-                    "type": "time",
-                    "time": {"unit": "month"},
-                    "stacked": True,
-                    **_time_limits(dates, pad_days=3),
-                },
+                "x": {"stacked": True},
                 "y": {
                     "stacked": True,
                     "beginAtZero": True, "min": 0,
