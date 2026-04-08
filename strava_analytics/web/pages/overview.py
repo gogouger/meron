@@ -89,14 +89,14 @@ def _hover_card(activities_list, date_str: str):
                     "background": color, "display": "inline-block",
                     "marginRight": "6px", "flexShrink": "0",
                 }),
-                html.Span(act.get("name", act["type"]), style={
-                    "fontSize": "11px", "fontWeight": "600", "color": "var(--text-primary)",
+                html.Span(act.get("name", act["type"]), className="cal-hover-name", style={
+                    "fontSize": "11px", "fontWeight": "600",
                     "overflow": "hidden", "textOverflow": "ellipsis",
                     "whiteSpace": "nowrap",
                 }),
             ], style={"display": "flex", "alignItems": "center"}),
-            html.Div(" \u00b7 ".join(stats), style={
-                "fontSize": "10px", "color": "var(--text-muted)", "marginTop": "2px",
+            html.Div(" \u00b7 ".join(stats), className="cal-hover-stats", style={
+                "fontSize": "10px", "marginTop": "2px",
                 "paddingLeft": "14px",
             }) if stats else None,
         ], className="cal-activity-link",
@@ -113,7 +113,7 @@ def _hover_card(activities_list, date_str: str):
         "zIndex": "100",
         "padding": "8px 10px",
         "borderRadius": "6px",
-        "border": "1px solid var(--border)",
+        "borderColor": "var(--border)",
         "minWidth": "180px", "maxWidth": "240px",
     })
 
@@ -178,15 +178,14 @@ def _week_flame(count: int) -> html.Div:
 def _build_month(year: int, month: int, daily: dict, latest, month_label_text: str):
     """Build a single month block for the calendar."""
 
-    month_label = html.Div(month_label_text, style={
+    month_label = html.Div(month_label_text, className="cal-month-label", style={
         "fontSize": "13px", "fontWeight": "700", "textAlign": "center",
-        "color": "var(--text-primary)", "marginBottom": "6px",
+        "marginBottom": "6px",
     })
 
     dow_header = html.Div(
-        [html.Div(d, style={
+        [html.Div(d, className="cal-dow-label", style={
             "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
-            "color": "var(--text-muted)",
         }) for d in ["M", "T", "W", "T", "F", "S", "S"]]
         + [html.Div()],  # empty cell for the meta column
         style={**_DOW_GRID, "marginBottom": "2px"},
@@ -207,17 +206,16 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
             is_future = d > latest
 
             if is_future:
-                cell = html.Div(str(day_num), style={
-                    **_CELL_BASE, "color": "var(--text-muted)", "opacity": "0.25",
-                })
+                cell = html.Div(str(day_num), className="cal-day-future",
+                                style=_CELL_BASE)
             elif activities:
                 week_activity_count += len(activities)
-                primary_color = ACTIVITY_TYPE_COLORS.get(activities[0]["type"], "var(--text-muted)")
+                primary_color = ACTIVITY_TYPE_COLORS.get(activities[0]["type"], ACCENT)
 
                 # Dot indicators per unique activity type
                 seen = []
                 for act in activities:
-                    c = ACTIVITY_TYPE_COLORS.get(act["type"], "var(--text-muted)")
+                    c = ACTIVITY_TYPE_COLORS.get(act["type"], ACCENT)
                     if c not in seen:
                         seen.append(c)
                 dots_row = html.Div(
@@ -236,10 +234,7 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
 
                 cell = html.Div(
                     [
-                        html.Span(str(day_num), style={
-                            "fontSize": "11px", "fontWeight": "600",
-                            "color": "var(--text-primary)", "marginTop": "-2px",
-                        }),
+                        html.Span(str(day_num), className="cal-day-num"),
                         dots_row,
                         hover,
                     ],
@@ -252,9 +247,8 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
                     },
                 )
             else:
-                cell = html.Div(str(day_num), style={
-                    **_CELL_BASE, "color": "var(--text-muted)",
-                })
+                cell = html.Div(str(day_num), className="cal-day-inactive",
+                                style=_CELL_BASE)
 
             cells.append(cell)
 
@@ -313,7 +307,7 @@ def _activity_calendar(df: pd.DataFrame, months: int = 3) -> html.Div:
                 "borderRadius": "50%", "border": f"2px solid {color}",
                 "marginRight": "4px", "verticalAlign": "middle",
             }),
-            html.Span(atype, style={"fontSize": "10px", "color": "var(--text-muted)"}),
+            html.Span(atype, className="cal-legend-text", style={"fontSize": "10px"}),
         ], style={"marginRight": "14px"}))
 
     legend = html.Div(legend_items, style={
