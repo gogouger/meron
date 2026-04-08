@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
 _BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 
 
-def _geohash(lat: float, lon: float, precision: int = 8) -> str:
-    """Encode (lat, lon) as a geohash string.  Precision 8 ≈ 20 m × 40 m."""
+def _geohash(lat: float, lon: float, precision: int = 7) -> str:
+    """Encode (lat, lon) as a geohash string.  Precision 7 ≈ 150 m × 150 m."""
     lat_range, lon_range = [-90.0, 90.0], [-180.0, 180.0]
     bits = [16, 8, 4, 2, 1]
     ch, bit, is_lon = 0, 0, True
@@ -157,7 +157,7 @@ def build_route_index(df: pd.DataFrame, export_dir: Path) -> dict:
     if index_path.exists():
         try:
             saved = json.loads(index_path.read_text())
-            if saved.get("version") != 4:
+            if saved.get("version") != 5:
                 saved = {}
         except (json.JSONDecodeError, KeyError):
             saved = {}
@@ -192,7 +192,7 @@ def build_route_index(df: pd.DataFrame, export_dir: Path) -> dict:
         # Persist
         try:
             index_path.write_text(json.dumps(
-                {"version": 4, "fingerprints": fingerprints},
+                {"version": 5, "fingerprints": fingerprints},
                 indent=None, separators=(",", ":"),
             ))
         except OSError:
