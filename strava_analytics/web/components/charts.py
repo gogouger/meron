@@ -352,17 +352,17 @@ _HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 
 
 
 def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -> html.Div:
-    """Horizontal bar chart of % runs per HR zone."""
-    if "hr_zone" not in runs.columns:
+    """Horizontal bar chart of total time spent in each HR zone across all runs."""
+    if "hr_zone" not in runs.columns or "moving_time_s" not in runs.columns:
         return _empty_chart("No HR zone data")
 
     df = runs[runs["hr_zone"].notna()].copy()
     if df.empty:
         return _empty_chart("No HR zone data")
 
-    counts = df["hr_zone"].value_counts().reindex(range(1, 6), fill_value=0)
-    total = counts.sum()
-    pcts = [round(counts.get(z, 0) / total * 100, 1) if total > 0 else 0 for z in range(1, 6)]
+    # Sum moving time per zone, convert to hours
+    zone_hours = df.groupby("hr_zone")["moving_time_s"].sum().reindex(range(1, 6), fill_value=0) / 3600
+    hours = [round(zone_hours.get(z, 0), 1) for z in range(1, 6)]
     colors = [_HR_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
 
     cfg: dict[str, Any] = {
@@ -370,8 +370,8 @@ def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -
         "data": {
             "labels": _HR_ZONE_LABELS,
             "datasets": [{
-                "label": "% of Runs",
-                "data": pcts,
+                "label": "Hours",
+                "data": hours,
                 "backgroundColor": colors,
                 "borderRadius": 2,
             }],
@@ -379,14 +379,14 @@ def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -
         "options": {
             "indexAxis": "y",
             "plugins": {
-                "title": _title_cfg("HR Zone Distribution"),
+                "title": _title_cfg("Time in HR Zones"),
                 "legend": {"display": False},
             },
             "scales": {
                 "x": {
                     "beginAtZero": True, "min": 0,
-                    "title": {"display": True, "text": "% of Runs"},
-                    "max": round(max(pcts) * 1.15, 1) if pcts else 100,
+                    "title": {"display": True, "text": "Hours"},
+                    "max": round(max(hours) * 1.15, 1) if hours and max(hours) > 0 else 10,
                 },
                 "y": {},
             },
