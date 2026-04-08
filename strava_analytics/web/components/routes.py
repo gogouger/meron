@@ -406,32 +406,46 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                     }))
 
                 if run_list_rows and len(run_list_rows) >= 2:
-                    # Chart: limit to last 20 runs, sorted chronologically
-                    chart_rows = all_rows.sort_values("date").tail(20)
+                    # Chart: all runs sorted chronologically, windowed to last 20
+                    chart_rows = all_rows.sort_values("date")
                     chart_points = []
                     point_bg = []
                     point_border = []
                     point_radius = []
                     avg_paces = []
+                    _max_visible = 20
                     for _, cr in chart_rows.iterrows():
                         ap = cr.get("pace_min_per_mi", 0) or 0
                         if not ap or ap <= 0:
                             continue
                         is_fast = cr["filename"] == fastest_fn
                         is_cur = cr["filename"] == filename
+                        avg_hr = cr.get("avg_hr", 0) or 0
+                        dist = cr.get("distance_mi", 0) or 0
                         chart_points.append({
                             "x": cr["date"].isoformat() if hasattr(cr["date"], "isoformat") else str(cr["date"]),
                             "y": round(ap, 2),
+                            "_dist": round(dist, 1),
+                            "_hr": int(avg_hr) if avg_hr else 0,
+                            "_pace": format_pace(ap) if ap else "",
                         })
-                        # Hollow dots: transparent fill, colored border. Fastest = filled.
                         point_bg.append(ACCENT if is_fast else "transparent")
-                        point_border.append(ACCENT if is_fast else dot_color)
+                        point_border.append(ACCENT if is_fast else ACCENT_SLATE)
                         point_radius.append(7 if is_fast or is_cur else 5)
                         avg_paces.append(ap)
 
                     if len(chart_points) >= 2:
                         p_min = min(avg_paces) - 0.3
                         p_max = max(avg_paces) + 0.3
+
+                        # Window x-axis to last N points if more data exists
+                        x_cfg: dict = {
+                            "type": "time", "time": {"unit": "month"},
+                            "grid": {"display": True},
+                        }
+                        if len(chart_points) > _max_visible:
+                            window_start = chart_points[-_max_visible]["x"]
+                            x_cfg["min"] = window_start
 
                         hist_cfg_obj = {
                             "type": "scatter",
@@ -440,12 +454,12 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                                 "data": chart_points,
                                 "backgroundColor": point_bg,
                                 "borderColor": point_border,
-                                "borderWidth": 2,
+                                "pointBorderWidth": 2,
                                 "pointRadius": point_radius,
                                 "pointHoverRadius": [r + 2 for r in point_radius],
                                 "showLine": True,
-                                "borderColor": "rgba(168,162,158,0.18)",
-                                "borderWidth": 1,
+                                "borderColor": ACCENT,
+                                "borderWidth": 1.5,
                                 "borderDash": [4, 4],
                                 "fill": False,
                                 "tension": 0.3,
@@ -455,10 +469,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                                 "interaction": {"mode": "nearest", "intersect": True},
                                 "plugins": {"legend": {"display": False}},
                                 "scales": {
-                                    "x": {
-                                        "type": "time", "time": {"unit": "month"},
-                                        "grid": {"display": True},
-                                    },
+                                    "x": x_cfg,
                                     "y": {
                                         "reverse": True, "min": p_min, "max": p_max,
                                         "title": {"display": True, "text": "avg pace /mi"},
@@ -468,6 +479,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                             },
                             "_meta": {
                                 "routeHistoryHover": True,
+                                "panOnly": True,
                                 "scrollListId": f"{hist_id}-list",
                             },
                         }

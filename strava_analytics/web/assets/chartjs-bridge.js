@@ -99,21 +99,38 @@
         }
 
         if (model.body) {
-            var lines = model.body.map(function (b) { return b.lines; });
             var inner = "";
-            var isRace = (context.chart.canvas.parentElement.parentElement.id || "").indexOf("race-pred") >= 0;
-            if (model.title && model.title.length)
-                inner += '<div style="font-weight:600;font-size:12px;margin-bottom:4px;color:var(--text-primary)">' + model.title.join(", ") + "</div>";
-            lines.forEach(function (ln) {
-                var text = ln.join(", ");
-                if (isRace) {
-                    text = text.replace(/:\s*(\d+\.?\d*)$/, function (_match, num) {
-                        return ": " + _fmtMinSec(num);
-                    });
-                }
-                inner += '<div style="font-size:11px;color:var(--text-secondary)">' + text + "</div>";
-            });
-            tooltip.innerHTML = inner;
+
+            // Route history tooltip: show custom fields (_dist, _pace, _hr)
+            var dp = model.dataPoints && model.dataPoints[0];
+            var rawPt = dp && dp.dataset && dp.dataset.data && dp.dataset.data[dp.dataIndex];
+            if (rawPt && rawPt._pace !== undefined) {
+                if (model.title && model.title.length)
+                    inner += '<div style="font-weight:600;font-size:12px;margin-bottom:4px;color:var(--text-primary)">' + model.title.join(", ") + "</div>";
+                var statStyle = 'font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text-primary)';
+                var labelStyle = 'font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted)';
+                inner += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 12px;margin-top:2px">';
+                inner += '<div><div style="' + labelStyle + '">Pace</div><div style="' + statStyle + '">' + rawPt._pace + '/mi</div></div>';
+                inner += '<div><div style="' + labelStyle + '">Dist</div><div style="' + statStyle + '">' + rawPt._dist + ' mi</div></div>';
+                if (rawPt._hr) inner += '<div><div style="' + labelStyle + '">Avg HR</div><div style="' + statStyle + '">' + rawPt._hr + '</div></div>';
+                inner += '</div>';
+                tooltip.innerHTML = inner;
+            } else {
+                var lines = model.body.map(function (b) { return b.lines; });
+                var isRace = (context.chart.canvas.parentElement.parentElement.id || "").indexOf("race-pred") >= 0;
+                if (model.title && model.title.length)
+                    inner += '<div style="font-weight:600;font-size:12px;margin-bottom:4px;color:var(--text-primary)">' + model.title.join(", ") + "</div>";
+                lines.forEach(function (ln) {
+                    var text = ln.join(", ");
+                    if (isRace) {
+                        text = text.replace(/:\s*(\d+\.?\d*)$/, function (_match, num) {
+                            return ": " + _fmtMinSec(num);
+                        });
+                    }
+                    inner += '<div style="font-size:11px;color:var(--text-secondary)">' + text + "</div>";
+                });
+                tooltip.innerHTML = inner;
+            }
         }
         var pos = context.chart.canvas.getBoundingClientRect();
         tooltip.style.display = "block";
@@ -208,24 +225,33 @@
             // For bar charts, only allow y-axis zoom (category x can't zoom sensibly)
             var zoomMode = hasCategory ? "y" : "xy";
 
-            cfg.options.plugins.zoom = {
-                pan: {
-                    enabled: true,
-                    mode: zoomMode,
-                },
-                zoom: {
-                    wheel: { enabled: true },
-                    pinch: { enabled: true },
-                    drag: {
+            // panOnly meta flag: pan on x only, no zoom
+            if (meta.panOnly) {
+                cfg.options.plugins.zoom = {
+                    pan: { enabled: true, mode: "x" },
+                    zoom: { wheel: { enabled: false }, pinch: { enabled: false }, drag: { enabled: false } },
+                    limits: zoomLimits,
+                };
+            } else {
+                cfg.options.plugins.zoom = {
+                    pan: {
                         enabled: true,
-                        backgroundColor: "rgba(239,60,74,0.08)",
-                        borderColor: "rgba(239,60,74,0.3)",
-                        borderWidth: 1,
+                        mode: zoomMode,
                     },
-                    mode: zoomMode,
-                },
-                limits: zoomLimits,
-            };
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        drag: {
+                            enabled: true,
+                            backgroundColor: "rgba(239,60,74,0.08)",
+                            borderColor: "rgba(239,60,74,0.3)",
+                            borderWidth: 1,
+                        },
+                        mode: zoomMode,
+                    },
+                    limits: zoomLimits,
+                };
+            }
         }
 
         return cfg;
