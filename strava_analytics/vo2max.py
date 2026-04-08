@@ -145,6 +145,15 @@ def extract_race_efforts(df: pd.DataFrame) -> list[dict]:
         time_s = row.get("moving_time_s", 0)
         if dist_m <= 0 or time_s <= 0:
             continue
+
+        # Gate workout-type efforts: require Z3+ HR to confirm intensity.
+        # If no HR data available, include it (can't know).
+        if row.get("run_type") == "workout":
+            hr_zone = row.get("hr_zone")
+            if hr_zone is not None and not (isinstance(hr_zone, float) and pd.isna(hr_zone)):
+                if int(hr_zone) < 3:
+                    continue  # Low-HR workout is not a quality effort signal
+
         time_min = time_s / 60.0
         vdot = daniels_vdot(dist_m, time_min)
 

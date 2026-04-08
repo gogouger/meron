@@ -309,9 +309,11 @@ def _compute_hr_zones(df: pd.DataFrame, max_hr: int, zone_pct: list[int]) -> pd.
 def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
     """Refine keyword-based run_type using HR zones.
 
-    4 final types: race, long, moderate, easy.
     - race keyword → always race
     - long keyword/distance → always long
+    - workout + Z1-Z2 HR → downgrade to easy (mislabeled by keyword)
+    - workout + Z3 HR → downgrade to moderate (not truly high-intensity)
+    - workout + Z4-Z5 HR → stays workout (confirmed high-intensity)
     - moderate (default) → downgrade to easy if Z1-Z2 HR
     - easy keyword → upgrade to moderate if Z4+ HR
     - No HR data → keep keyword classification
@@ -327,6 +329,11 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
     kw_type = df.loc[mask, "run_type"]
 
     blended = kw_type.copy()
+
+    # workout + low HR → mislabeled; downgrade
+    workout_mask = kw_type == "workout"
+    blended.loc[workout_mask & (zone <= 2)] = "easy"
+    blended.loc[workout_mask & (zone == 3)] = "moderate"
 
     # moderate (default) → downgrade to easy if low HR
     mod_mask = kw_type == "moderate"
