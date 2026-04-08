@@ -438,14 +438,10 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                         p_min = min(avg_paces) - 0.3
                         p_max = max(avg_paces) + 0.3
 
-                        # Window x-axis to last N points if more data exists
                         x_cfg: dict = {
                             "type": "time", "time": {"unit": "month"},
                             "grid": {"display": True},
                         }
-                        if len(chart_points) > _max_visible:
-                            window_start = chart_points[-_max_visible]["x"]
-                            x_cfg["min"] = window_start
 
                         hist_cfg_obj = {
                             "type": "scatter",
