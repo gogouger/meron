@@ -450,7 +450,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                         hist_cfg_obj = {
                             "type": "scatter",
                             "data": {"datasets": [{
-                                "label": "_runs",
+                                "label": "Route History",
                                 "data": chart_points,
                                 "backgroundColor": point_bg,
                                 "pointBorderColor": point_border,
