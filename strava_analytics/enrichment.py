@@ -344,10 +344,37 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
 # Full enrichment pipeline
 # ---------------------------------------------------------------------------
 
+_ZONE_CACHE_FILE = ".zone_times_cache.json"
+
+
+def _load_zone_cache(export_dir) -> dict:
+    """Load cached zone times from disk. Returns {filename: {zone_1_s: ..., ...}, ...}."""
+    import json
+    cache_path = export_dir / _ZONE_CACHE_FILE
+    if cache_path.exists():
+        try:
+            with open(cache_path) as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_zone_cache(export_dir, cache: dict, max_hr: int, zone_pct: list[int]) -> None:
+    """Write zone times cache to disk, including zone config for invalidation."""
+    import json
+    cache_path = export_dir / _ZONE_CACHE_FILE
+    payload = {"max_hr": max_hr, "zone_pct": zone_pct, "activities": cache}
+    with open(cache_path, "w") as f:
+        json.dump(payload, f)
+
+
 def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: list[int]) -> pd.DataFrame:
     """Compute per-second time-in-zone from FIT HR streams.
 
     Adds zone_1_s .. zone_5_s columns (seconds spent in each zone per activity).
+    Results are cached to disk; only new activities are parsed on subsequent runs.
+    Cache is invalidated when max_hr or zone boundaries change.
     """
     from .routes import parse_hr_stream
 
@@ -361,11 +388,29 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
 
     from pathlib import Path
     export_dir = Path(export_dir)
+
+    # Load cache; invalidate if zone config changed
+    raw_cache = _load_zone_cache(export_dir)
+    if isinstance(raw_cache, dict) and raw_cache.get("max_hr") == max_hr and raw_cache.get("zone_pct") == zone_pct:
+        cache = raw_cache.get("activities", {})
+    else:
+        cache = {}
+        logger.info("Zone cache invalidated (zone config changed)")
+
     processed = 0
+    cache_hits = 0
 
     for idx, row in df.iterrows():
         fn = row.get("filename")
         if not isinstance(fn, str) or not fn.strip():
+            continue
+
+        # Use cached result if available
+        if fn in cache:
+            cached = cache[fn]
+            for z in range(1, 6):
+                df.at[idx, f"zone_{z}_s"] = cached[f"zone_{z}_s"]
+            cache_hits += 1
             continue
 
         fit_path = export_dir / fn
@@ -391,11 +436,14 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
             else:
                 zone_secs[4] += dt
 
-        for z in range(5):
-            df.at[idx, f"zone_{z + 1}_s"] = zone_secs[z]
+        entry = {f"zone_{z}_s": zone_secs[z - 1] for z in range(1, 6)}
+        cache[fn] = entry
+        for z in range(1, 6):
+            df.at[idx, f"zone_{z}_s"] = entry[f"zone_{z}_s"]
         processed += 1
 
-    logger.info("Zone times: computed per-second HR zones for %d activities", processed)
+    _save_zone_cache(export_dir, cache, max_hr, zone_pct)
+    logger.info("Zone times: parsed %d activities, %d from cache", processed, cache_hits)
     return df
 
 
