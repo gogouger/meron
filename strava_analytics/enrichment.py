@@ -313,7 +313,7 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
 
     5 final types: race, hard_effort, long, moderate, easy.
     - race keyword → always race
-    - hard_effort keyword → always hard_effort
+    - hard_effort keyword → stays hard_effort if Z4+ HR; downgrade if low HR
     - long keyword/distance → stays long (unless high HR + short distance)
     - moderate/easy → promote to hard_effort if high HR effort detected
     - moderate (default) → downgrade to easy if Z1-Z2 HR
@@ -340,6 +340,11 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
         if zc in df.columns:
             total_zone = total_zone + df.loc[mask, zc].fillna(0)
     z4_z5_frac = (z4 + z5) / total_zone.replace(0, np.nan)
+
+    # hard_effort + low HR → mislabeled by keyword; downgrade
+    hard_effort_mask = kw_type == "hard_effort"
+    blended.loc[hard_effort_mask & (zone <= 2)] = "easy"
+    blended.loc[hard_effort_mask & (zone == 3)] = "moderate"
 
     # Protect long runs: long distance at easy effort stays long
     is_long_easy = (dist >= 8) & (zone <= 3)

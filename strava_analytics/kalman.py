@@ -144,6 +144,10 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         is_target_race = run_type == "race" and gt_lo <= dist_m <= gt_hi
         is_other_race = run_type == "race" and not is_target_race
 
+        hr_zone = r.get("hr_zone") if "hr_zone" in r.index else None
+        has_hr = hr_zone is not None and not (isinstance(hr_zone, float) and math.isnan(hr_zone))
+        hz = int(hr_zone) if has_hr else None
+
         if is_target_race:
             R = _GROUND_TRUTH_R
             # Use actual scaled time, not VDOT estimate
@@ -151,11 +155,25 @@ def kalman_race(runs: pd.DataFrame, target_m: int = 5_000) -> pd.DataFrame:
         elif is_other_race:
             R = 2.0     # Race effort at different distance — good VDOT signal
         elif run_type == "hard_effort":
-            R = 8.0     # Tempo/interval — good signal, not as clean as a race
+            # Interval/tempo — quality depends on whether HR confirms intensity
+            if has_hr and hz >= 4:
+                R = 8.0     # Hard effort confirmed by HR — strong signal
+            elif has_hr and hz == 3:
+                R = 20.0    # Moderate-effort hard_effort
+            else:
+                R = 35.0    # Low/no HR — still useful but more uncertain
         elif run_type == "long":
-            R = 50.0    # Long runs — deliberately slow
+            if has_hr and hz >= 3:
+                R = 40.0    # Honest long effort with some intensity
+            else:
+                R = 60.0    # Easy long run
         elif run_type == "moderate":
-            R = 120.0   # Moderate — weak signal
+            if has_hr and hz >= 4:
+                R = 30.0    # Tempo-like moderate run
+            elif has_hr and hz <= 2:
+                R = 130.0   # Very easy moderate — weak signal
+            else:
+                R = 80.0    # Default moderate
         elif run_type == "easy":
             continue    # Skip easy runs — low VDOT biases filter downward
         else:
