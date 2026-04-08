@@ -358,34 +358,34 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                 all_fns = [filename] + match_fns
                 all_rows = df[df["filename"].isin(all_fns)].sort_values("date", ascending=False)
 
-                # Normalize relative effort for color gradient
-                efforts = all_rows["relative_effort"].fillna(0).tolist()
-                e_min, e_max = min(efforts), max(efforts)
-                e_range = e_max - e_min if e_max > e_min else 1.0
-
-                # Build datasets and run list rows
                 _route_map_counter += 1
                 hist_id = f"route-hist-{_route_map_counter}"
-                run_list_rows = []
+                _mono = "'IBM Plex Mono', monospace"
+                dot_color = ACCENT_SLATE
 
+                # Find fastest run for highlighting
+                valid_paces = [(r.get("pace_min_per_mi", 0) or 0, r["filename"])
+                               for _, r in all_rows.iterrows()
+                               if (r.get("pace_min_per_mi", 0) or 0) > 0]
+                fastest_fn = min(valid_paces, key=lambda x: x[0])[1] if valid_paces else None
+
+                # Build scrollable run list (all runs, newest first)
+                run_list_rows = []
                 for ri, (_, rrow) in enumerate(all_rows.iterrows()):
                     is_current = rrow["filename"] == filename
-                    effort = rrow.get("relative_effort", 0) or 0
-                    t = (effort - e_min) / e_range
-                    color = _effort_color(t)
-
+                    is_fastest = rrow["filename"] == fastest_fn
                     r_date = rrow["date"].strftime("%b %d, %Y") if hasattr(rrow["date"], "strftime") else str(rrow["date"])
                     avg_pace = rrow.get("pace_min_per_mi", 0) or 0
                     dist = rrow.get("distance_mi", 0) or 0
 
-                    # Run list row
-                    _mono = "'IBM Plex Mono', monospace"
+                    row_dot_style = {
+                        "width": "10px", "height": "10px", "borderRadius": "50%",
+                        "border": f"2px solid {dot_color}",
+                        "background": dot_color if is_fastest else "transparent",
+                        "display": "inline-block", "flexShrink": "0",
+                    }
                     run_list_rows.append(html.Div([
-                        html.Span(style={
-                            "width": "10px", "height": "10px", "borderRadius": "50%",
-                            "background": color, "display": "inline-block",
-                            "flexShrink": "0",
-                        }),
+                        html.Span(style=row_dot_style),
                         html.Span(r_date, style={
                             "fontWeight": "700" if is_current else "500",
                             "fontSize": "12px", "color": "var(--text-primary)",
@@ -393,14 +393,12 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                         }),
                         html.Span(format_pace(avg_pace) + "/mi" if avg_pace else "",
                                   style={"fontFamily": _mono, "fontSize": "12px",
-                                         "color": "var(--text-primary)", "minWidth": "55px"}),
+                                         "color": ACCENT if is_fastest else "var(--text-primary)",
+                                         "fontWeight": "600" if is_fastest else "400",
+                                         "minWidth": "55px"}),
                         html.Span(f"{dist:.1f} mi" if dist else "",
                                   style={"fontFamily": _mono, "fontSize": "11px",
                                          "color": "var(--text-muted)", "minWidth": "45px"}),
-                        html.Span(f"{int(effort)}" if effort else "",
-                                  style={"fontFamily": _mono, "fontSize": "10px",
-                                         "color": color, "fontWeight": "600",
-                                         "minWidth": "30px", "textAlign": "right"}),
                     ], style={
                         "display": "flex", "gap": "8px", "alignItems": "center",
                         "padding": "5px 8px", "borderRadius": "4px",
@@ -408,25 +406,27 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                     }))
 
                 if run_list_rows and len(run_list_rows) >= 2:
-                    # Pace-over-time scatter: x=date, y=avg pace, dot colored by effort
-                    # Sort chronologically for the chart
-                    chart_rows = all_rows.sort_values("date")
+                    # Chart: limit to last 20 runs, sorted chronologically
+                    chart_rows = all_rows.sort_values("date").tail(20)
                     chart_points = []
-                    chart_colors = []
-                    chart_sizes = []
+                    point_bg = []
+                    point_border = []
+                    point_radius = []
                     avg_paces = []
                     for _, cr in chart_rows.iterrows():
                         ap = cr.get("pace_min_per_mi", 0) or 0
                         if not ap or ap <= 0:
                             continue
-                        eff = cr.get("relative_effort", 0) or 0
-                        t = (eff - e_min) / e_range
+                        is_fast = cr["filename"] == fastest_fn
+                        is_cur = cr["filename"] == filename
                         chart_points.append({
                             "x": cr["date"].isoformat() if hasattr(cr["date"], "isoformat") else str(cr["date"]),
                             "y": round(ap, 2),
                         })
-                        chart_colors.append(_effort_color(t))
-                        chart_sizes.append(6 if cr["filename"] != filename else 9)
+                        # Hollow dots: transparent fill, colored border. Fastest = filled.
+                        point_bg.append(ACCENT if is_fast else "transparent")
+                        point_border.append(ACCENT if is_fast else dot_color)
+                        point_radius.append(7 if is_fast or is_cur else 5)
                         avg_paces.append(ap)
 
                     if len(chart_points) >= 2:
@@ -438,13 +438,15 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                             "data": {"datasets": [{
                                 "label": "_runs",
                                 "data": chart_points,
-                                "backgroundColor": chart_colors,
-                                "borderColor": chart_colors,
-                                "pointRadius": chart_sizes,
-                                "pointHoverRadius": [s + 2 for s in chart_sizes],
+                                "backgroundColor": point_bg,
+                                "borderColor": point_border,
+                                "borderWidth": 2,
+                                "pointRadius": point_radius,
+                                "pointHoverRadius": [r + 2 for r in point_radius],
                                 "showLine": True,
-                                "borderColor": "rgba(168,162,158,0.25)",
+                                "borderColor": "rgba(168,162,158,0.18)",
                                 "borderWidth": 1,
+                                "borderDash": [4, 4],
                                 "fill": False,
                                 "tension": 0.3,
                             }]},
@@ -454,7 +456,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                                 "plugins": {"legend": {"display": False}},
                                 "scales": {
                                     "x": {
-                                        "type": "time", "time": {"unit": "week"},
+                                        "type": "time", "time": {"unit": "month"},
                                         "grid": {"display": True},
                                     },
                                     "y": {
