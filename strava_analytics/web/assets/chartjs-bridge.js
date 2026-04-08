@@ -227,8 +227,16 @@
             // For bar charts, only allow y-axis zoom (category x can't zoom sensibly)
             var zoomMode = hasCategory ? "y" : "xy";
 
-            // panOnly meta flag: pan on x only, no zoom
+            // panOnly meta flag: pan on x only, no zoom, clamp to data
             if (meta.panOnly) {
+                // Ensure all axes are clamped to original bounds
+                if (cfg.options.scales) {
+                    Object.keys(cfg.options.scales).forEach(function (key) {
+                        if (!zoomLimits[key]) {
+                            zoomLimits[key] = { min: "original", max: "original", minRange: 0 };
+                        }
+                    });
+                }
                 cfg.options.plugins.zoom = {
                     pan: { enabled: true, mode: "x" },
                     zoom: { wheel: { enabled: false }, pinch: { enabled: false }, drag: { enabled: false } },
@@ -364,25 +372,53 @@
             });
         }
 
-        // Route history hover → scroll run list
+        // Route history hover + pan → scroll run list
         if (meta.routeHistoryHover && meta.scrollListId) {
-            (function (listId) {
+            (function (listId, ci) {
+                // Scroll list to center the middle visible point
+                function syncListToView() {
+                    var list = document.getElementById(listId);
+                    if (!list || !list.children.length) return;
+                    var totalRows = list.children.length;
+                    var xScale = ci.scales.x;
+                    if (!xScale) return;
+                    var xMin = xScale.min, xMax = xScale.max;
+                    var xMid = (xMin + xMax) / 2;
+                    // Find the data point closest to the center of the visible range
+                    var ds = ci.data.datasets[0];
+                    if (!ds || !ds.data.length) return;
+                    var bestIdx = 0, bestDist = Infinity;
+                    for (var i = 0; i < ds.data.length; i++) {
+                        var px = new Date(ds.data[i].x).getTime();
+                        var d = Math.abs(px - xMid);
+                        if (d < bestDist) { bestDist = d; bestIdx = i; }
+                    }
+                    // Chart is chronological (0=oldest), list is newest-first
+                    var listIdx = totalRows - 1 - bestIdx;
+                    var row = list.children[Math.max(0, Math.min(listIdx, totalRows - 1))];
+                    if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+                }
+
+                // Hook into zoom plugin pan events
+                if (ci.options.plugins.zoom && ci.options.plugins.zoom.pan) {
+                    ci.options.plugins.zoom.pan.onPan = function () { syncListToView(); };
+                    ci.options.plugins.zoom.pan.onPanComplete = function () { syncListToView(); };
+                    ci.update("none");
+                }
+
                 var lastIdx = -1;
                 canvas.addEventListener("mousemove", function (evt) {
-                    var pts = chart.getElementsAtEventForMode(evt, "nearest", { intersect: false }, false);
+                    var pts = ci.getElementsAtEventForMode(evt, "nearest", { intersect: false }, false);
                     if (!pts.length) return;
                     var idx = pts[0].index;
                     if (idx === lastIdx) return;
                     lastIdx = idx;
-                    // The chart is sorted chronologically but the list is newest-first
                     var list = document.getElementById(listId);
                     if (!list) return;
                     var totalRows = list.children.length;
-                    // Chart index 0 = oldest, list index 0 = newest → reverse
                     var listIdx = totalRows - 1 - idx;
                     var row = list.children[listIdx];
                     if (row) {
-                        // Highlight row
                         for (var r = 0; r < list.children.length; r++) {
                             list.children[r].style.outline = "";
                         }
@@ -398,7 +434,7 @@
                         list.children[r].style.outline = "";
                     }
                 });
-            })(meta.scrollListId);
+            })(meta.scrollListId, chart);
         }
 
         // Hover card for run charts
