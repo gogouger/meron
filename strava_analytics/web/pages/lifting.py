@@ -143,12 +143,7 @@ def _baseline_grid(baseline: dict) -> html.Div:
         ("Squat 1RM", f"{baseline.get('squat_1rm', '')} lbs"),
         ("Deadlift 1RM", f"{baseline.get('deadlift_1rm', '')} lbs"),
         ("OHP 1RM", f"{baseline.get('ohp_1rm', '')} lbs"),
-        ("Fastest Mile", str(baseline.get('fastest_mile', ''))),
-        ("Fastest 5K", str(baseline.get('fastest_5k', ''))),
         ("Max Pull-ups", str(baseline.get('max_pullups', ''))),
-        ("Max Push-ups", str(baseline.get('max_pushups', ''))),
-        ("Max Hang", f"{baseline.get('max_hang_s', '')}s"),
-        ("Vertical Jump", f"{baseline.get('vertical_jump_in', '')}\""),
     ]
     for label, val in metrics:
         cells.append(metric_cell(label, val))
