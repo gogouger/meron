@@ -196,6 +196,9 @@ clientside_callback(
     """
     function(n_clicks) {
         if (!n_clicks) return window.dash_clientside.no_update;
+        if (window._currentZonePct && window._currentZonePct.length === 4) {
+            return window._currentZonePct.join(",");
+        }
         var bar = document.getElementById("hr-zone-bar");
         if (!bar) return "";
         return bar.getAttribute("data-zone-pct") || "60,70,80,90";

@@ -121,6 +121,7 @@
                 pct = Math.max(minPct, Math.min(maxPct, pct));
 
                 pcts[idx] = pct;
+                window._currentZonePct = pcts.slice();
                 render();
             });
 
@@ -147,6 +148,7 @@
                 var minPct = idx === 0 ? 10 : pcts[idx - 1] + 5;
                 var maxPct = idx === 3 ? 95 : pcts[idx + 1] - 5;
                 pcts[idx] = Math.max(minPct, Math.min(maxPct, pct));
+                window._currentZonePct = pcts.slice();
                 render();
             }, { passive: false });
 
@@ -168,6 +170,7 @@
             });
         }
 
+        window._currentZonePct = pcts.slice();
         render();
     }
 
