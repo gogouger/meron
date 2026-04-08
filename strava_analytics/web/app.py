@@ -87,6 +87,8 @@ def create_app() -> dash.Dash:
     app.layout = html.Div([
         dcc.Location(id="url"),
         html.Div(id="page-title-target", style={"display": "none"}),
+        # Global data version — incremented whenever settings are saved and data reloaded
+        dcc.Store(id="data-version-store", data=0, storage_type="memory"),
         # Modal system: JS sets location hash → clientside callback → store → server renders
         dcc.Store(id="activity-modal-store", data=None),
         navbar,

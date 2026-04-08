@@ -465,7 +465,7 @@ def layout(**_kwargs):
 
         # HR Analysis
         page_section("HEART RATE ANALYSIS", [
-            _adjusted_hr_section(runs),
+            html.Div(id="hr-analysis-container"),
         ], alt_bg=True),
 
 
@@ -564,12 +564,14 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
     Output("weekly-miles-container", "children"),
     Output("hr-vs-pace-container", "children"),
     Output("race-pred-container", "children"),
+    Output("hr-analysis-container", "children"),
     Input("run-type-filter", "value"),
     Input("run-date-range", "start_date"),
     Input("run-date-range", "end_date"),
+    Input("data-version-store", "data"),
     State("run-meta-store", "data"),
 )
-def update_charts(run_types, start_date, end_date, run_meta):
+def update_charts(run_types, start_date, end_date, _data_version, run_meta):
     runs = data.get_runs().copy()
 
     if run_types:
@@ -586,6 +588,7 @@ def update_charts(run_types, start_date, end_date, run_meta):
         charts.weekly_mileage_chart(runs, chart_id="weekly-miles"),
         charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace"),
         charts.race_predictions_chart(runs, chart_id="race-pred"),
+        _adjusted_hr_section(runs),
     )
 
 

@@ -209,13 +209,15 @@ clientside_callback(
 
 @callback(
     Output("hr-save-status", "children"),
+    Output("data-version-store", "data"),
     Input("zone-pct-sync", "data"),
     State("max-hr-input", "value"),
+    State("data-version-store", "data"),
     prevent_initial_call=True,
 )
-def save_hr_settings(zone_pct_str, max_hr):
+def save_hr_settings(zone_pct_str, max_hr, current_version):
     if not zone_pct_str or not max_hr:
-        return ""
+        return "", (current_version or 0)
     pcts = [int(p) for p in zone_pct_str.split(",")]
     cfg = data.get_athlete_config()
     cfg["max_hr"] = int(max_hr)
@@ -223,4 +225,4 @@ def save_hr_settings(zone_pct_str, max_hr):
     data.save_athlete_config(cfg)
     # Re-enrich data with new zones so charts update immediately
     data.reload()
-    return "Saved and applied."
+    return "Saved and applied.", (current_version or 0) + 1
