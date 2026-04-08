@@ -432,7 +432,7 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
             else:
                 reps_per_set = 1
 
-            estimates = estimate_1rm_all_methods(w, reps_per_set, rir=2)
+            estimates = estimate_1rm_all_methods(w, reps_per_set, rir=0)
 
             # Cap at tested 1RM if this session is AFTER the test
             if tested_1rm and row["date"] >= tested_1rm_date:

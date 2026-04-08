@@ -1,25 +1,46 @@
-"""Ozni AI brand-aligned theme for Plotly charts and Dash layout.
+"""Ozni AI brand-aligned theme for the Dash layout.
 
-Color palette extracted from ozniai.com (light theme):
+3-color palette: red (vivid accent), slate (cool neutral), amber (warm neutral).
+Gradients via opacity variants when more distinction is needed.
+
   background: #fafaf9 (light stone white)
   foreground: #0c0a09 (near black)
-  accent:     #ef3c4a (Ozni red)
-  muted:      #57534e (warm gray)
-  subtle:     #a8a29e (light warm gray)
-  border:     #e7e5e4 (light warm border)
-  surface:    #ffffff (white cards)
+  accent:     #ef3c4a (Ozni red — the only loud color)
+  slate:      #64748b (cool gray-blue)
+  amber:      #b49352 (warm muted gold)
 """
 
-import plotly.graph_objects as go
-import plotly.io as pio
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
+    """Convert hex color to rgba string."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
 
 # ---------------------------------------------------------------------------
 # Ozni brand colors (light theme — matching ozniai.com)
 # ---------------------------------------------------------------------------
 
-# Primary accent — Ozni red
+# Primary accent — Ozni red (the only vivid color)
 ACCENT = "#ef3c4a"
 ACCENT_HOVER = "#dc2f3c"
+
+# Data viz accents — cool + warm
+ACCENT_SLATE = "#5b9bd5"    # bright steel-blue (secondary)
+ACCENT_AMBER = "#d4a84b"    # warm gold (tertiary)
+
+# Semantic danger/warning — distinct from brand red
+ACCENT_RED = "#dc2626"
+
+# Pre-computed gradient variants (60% / 40% opacity as solid-looking colors)
+ACCENT_60 = _hex_to_rgba(ACCENT, 0.6)
+SLATE_60 = _hex_to_rgba(ACCENT_SLATE, 0.6)
+SLATE_40 = _hex_to_rgba(ACCENT_SLATE, 0.4)
+AMBER_60 = _hex_to_rgba(ACCENT_AMBER, 0.6)
 
 # Backgrounds (light theme)
 BG_LIGHT = "#fafaf9"       # page background
@@ -35,49 +56,60 @@ TEXT_MUTED = "#a8a29e"      # subtle warm gray
 # Border
 BORDER = "#e7e5e4"          # light warm border
 
-# Semantic accents for data viz
-ACCENT_TEAL = "#0891b2"
-ACCENT_GREEN = "#16a34a"
-ACCENT_RED = "#dc2626"
-ACCENT_YELLOW = "#ca8a04"
-ACCENT_PURPLE = "#9333ea"
-
 # Fonts — matching ozniai.com exactly
 FONT_SANS = "Inter, -apple-system, sans-serif"
 FONT_MONO = "'IBM Plex Mono', monospace"
 
-# Chart series colors — accent first, then semantic
-SERIES_COLORS = [
-    ACCENT, ACCENT_TEAL, ACCENT_GREEN, ACCENT_YELLOW,
-    ACCENT_PURPLE, "#ea580c", "#db2777", "#0891b2",
-]
+# ---------------------------------------------------------------------------
+# Data viz color mappings — all derived from the 3 base colors
+# ---------------------------------------------------------------------------
+
+SERIES_COLORS = [ACCENT, ACCENT_SLATE, ACCENT_AMBER, SLATE_60, AMBER_60]
 
 LIFT_COLORS = {
-    "bench": ACCENT,
-    "squat": ACCENT_TEAL,
-    "deadlift": ACCENT_GREEN,
-    "ohp": ACCENT_YELLOW,
+    "bench": ACCENT,            # red — primary lift
+    "squat": ACCENT_SLATE,      # slate
+    "deadlift": ACCENT_AMBER,   # amber
+    "ohp": SLATE_60,            # light slate
 }
 
 RUN_TYPE_COLORS = {
-    "race": ACCENT, "workout": "#ea580c", "long": ACCENT_TEAL,
-    "moderate": ACCENT_YELLOW, "easy": ACCENT_GREEN,
-    "short/easy": "#0284c7", "ruck": ACCENT_PURPLE,
+    "race": ACCENT,             # red
+    "long": ACCENT_SLATE,       # slate
+    "moderate": ACCENT_AMBER,   # amber
+    "easy": SLATE_60,           # light slate
 }
 
 FATIGUE_COLORS = {
-    "Fresh": ACCENT_GREEN, "Normal": ACCENT_TEAL,
-    "Fatigued": ACCENT_YELLOW, "Heavy Load": ACCENT_RED,
+    "Fresh": ACCENT_SLATE,
+    "Normal": TEXT_MUTED,
+    "Fatigued": ACCENT_AMBER,
+    "Heavy Load": ACCENT_RED,
 }
 
 PHASE_COLORS = {
-    "build1": ACCENT_TEAL, "build2": ACCENT,
-    "taper": ACCENT_YELLOW, "race": ACCENT_RED,
+    "build1": ACCENT_SLATE,
+    "build2": ACCENT,
+    "taper": ACCENT_AMBER,
+    "race": ACCENT_RED,
 }
 
 WORKOUT_TYPE_COLORS = {
-    "lift": ACCENT, "run": ACCENT_TEAL, "rest": TEXT_MUTED,
-    "obstacle": ACCENT_PURPLE, "mobility": ACCENT_GREEN,
+    "lift": ACCENT,
+    "run": ACCENT_SLATE,
+    "rest": TEXT_MUTED,
+    "obstacle": ACCENT_AMBER,
+    "mobility": SLATE_60,
+}
+
+ACTIVITY_TYPE_COLORS = {
+    "Run": ACCENT,
+    "Weight Training": ACCENT_AMBER,
+    "Walk": SLATE_60,
+    "Hike": SLATE_60,
+    "Ride": ACCENT_SLATE,
+    "Swim": ACCENT_SLATE,
+    "Yoga": AMBER_60,
 }
 
 GRIDLINE = "#f5f5f4"
@@ -98,46 +130,11 @@ DARK_COLORS = {
     "gridline": "#292524",
 }
 
-# Keep old names as aliases for backwards compat
+# ---------------------------------------------------------------------------
+# Backwards-compat aliases (old names → new palette)
+# ---------------------------------------------------------------------------
 STRAVA_ORANGE = ACCENT
-
-# ---------------------------------------------------------------------------
-# Plotly template (light theme)
-# ---------------------------------------------------------------------------
-
-PLOTLY_TEMPLATE = go.layout.Template(
-    layout=go.Layout(
-        # Transparent backgrounds — CSS controls the visual color for light/dark
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family=FONT_SANS, color=TEXT_SECONDARY, size=13),
-        title=dict(font=dict(size=15, color=TEXT_SECONDARY, family=FONT_SANS), x=0.02),
-        xaxis=dict(
-            gridcolor=GRIDLINE, linecolor=AXIS_COLOR,
-            zerolinecolor=GRIDLINE,
-            tickfont=dict(color=TEXT_MUTED, size=10, family=FONT_MONO),
-        ),
-        yaxis=dict(
-            gridcolor=GRIDLINE, linecolor=AXIS_COLOR,
-            zerolinecolor=GRIDLINE,
-            tickfont=dict(color=TEXT_MUTED, size=10, family=FONT_MONO),
-        ),
-        legend=dict(
-            bgcolor="rgba(0,0,0,0)",
-            font=dict(color=TEXT_SECONDARY, size=11),
-            borderwidth=0,
-        ),
-        colorway=SERIES_COLORS,
-        hoverlabel=dict(
-            bgcolor="rgba(0,0,0,0)", font_color=TEXT_PRIMARY,
-            font_family=FONT_MONO, font_size=12,
-            bordercolor=BORDER,
-        ),
-        margin=dict(l=50, r=20, t=40, b=40),
-        dragmode="pan",
-        clickmode="event",
-    )
-)
-
-pio.templates["strava_dark"] = PLOTLY_TEMPLATE
-pio.templates.default = "strava_dark"
+ACCENT_TEAL = ACCENT_SLATE
+ACCENT_GREEN = ACCENT_SLATE      # sage-like uses now map to slate
+ACCENT_YELLOW = ACCENT_AMBER
+ACCENT_PURPLE = ACCENT_AMBER     # violet uses now map to amber

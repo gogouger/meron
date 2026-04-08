@@ -4,9 +4,8 @@ import json
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc, callback, clientside_callback, Output, Input, State, ALL, MATCH, ctx, no_update, ClientsideFunction
+from dash import html, dcc, callback, clientside_callback, Output, Input, State, ALL, MATCH, ctx, no_update
 import pandas as pd
-import plotly.graph_objects as go
 
 from strava_analytics.web import data
 from strava_analytics.web.components import charts
@@ -15,34 +14,20 @@ from strava_analytics.web.components.layout import (
     cta_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_TEAL, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW,
-    ACCENT_PURPLE, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     BG_CARD, BORDER, RUN_TYPE_COLORS,
 )
 from strava_analytics.metrics import format_pace
 
 dash.register_page(__name__, path="/running", name="Running")
 
-CHART_CONFIG = {
-    "displaylogo": False,
-    "scrollZoom": False,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage", "autoScale2d"],
-}
 
 # Colors for run type badges
 _TYPE_COLORS = {
-    "race": ACCENT, "workout": ACCENT_TEAL, "long": ACCENT_PURPLE,
-    "moderate": ACCENT_YELLOW, "easy": ACCENT_GREEN,
-    "short/easy": "#0284c7", "ruck": ACCENT_PURPLE,
+    "race": ACCENT, "long": ACCENT_SLATE,
+    "moderate": ACCENT_AMBER, "easy": ACCENT_SLATE,
 }
-
-
-def _pace_str(pace_float):
-    if pd.isna(pace_float):
-        return "--"
-    m = int(pace_float)
-    s = int((pace_float - m) * 60)
-    return f"{m}:{s:02d}"
 
 
 def _duration_str(seconds):
@@ -56,7 +41,8 @@ def _duration_str(seconds):
     return f"{m}:{s:02d}"
 
 
-_route_cache = {}  # filename -> children; lazy-filled by load_route callback
+_route_cache = {}  # filename -> children; bounded to 32 entries
+_ROUTE_CACHE_MAX = 32
 
 
 def _stat_cell(label, val):
@@ -82,7 +68,7 @@ def _run_card(run, idx):
     day_str = run["date"].strftime("%A")
     name = run.get("name", "Run")
     dist = run.get("distance_mi", 0)
-    pace = _pace_str(run.get("pace_min_per_mi"))
+    pace = format_pace(run.get("pace_min_per_mi"))
     duration = _duration_str(run.get("moving_time_s", 0))
     hr = run.get("avg_hr", 0)
     max_hr_val = run.get("max_hr", 0)
@@ -146,15 +132,10 @@ def _run_card(run, idx):
     if filename:
         route_key = f"{date_id}-{idx}"
         detail_content.append(html.Button(
-            "View Route & Charts",
+            "",
             id={"type": "route-btn", "index": route_key},
             n_clicks=0,
-            style={
-                "background": "none", "border": "none", "cursor": "pointer",
-                "color": ACCENT_TEAL, "fontSize": "13px", "fontWeight": "600",
-                "padding": "0", "marginTop": "12px",
-                "textDecoration": "underline",
-            },
+            style={"display": "none"},  # hidden — auto-triggered on card open
         ))
         detail_content.append(
             dcc.Loading(
@@ -202,6 +183,28 @@ def _run_card(run, idx):
     })
 
 
+def _split_shoes_by_gap(shoes: pd.DataFrame, gap_days: int = 90) -> pd.DataFrame:
+    """Split same-name shoes into separate pairs by temporal gap."""
+    results = []
+    for gear_name, group in shoes.groupby("gear"):
+        group = group.sort_values("date")
+        diffs = group["date"].diff()
+        splits = diffs > pd.Timedelta(days=gap_days)
+        pair_id = splits.cumsum()
+        for pid, sub in group.groupby(pair_id):
+            suffix = f" #{pid + 1}" if pair_id.max() > 0 else ""
+            results.append({
+                "gear": f"{gear_name}{suffix}",
+                "miles": sub["distance_mi"].sum(),
+                "runs": len(sub),
+                "first_used": sub["date"].min(),
+                "last_used": sub["date"].max(),
+            })
+    if not results:
+        return pd.DataFrame(columns=["gear", "miles", "runs", "first_used", "last_used"])
+    return pd.DataFrame(results).sort_values("miles", ascending=False).reset_index(drop=True)
+
+
 def _shoe_mileage_section(runs: pd.DataFrame) -> html.Div:
     """Show cumulative miles per shoe with retirement warnings."""
     if "gear" not in runs.columns:
@@ -211,16 +214,15 @@ def _shoe_mileage_section(runs: pd.DataFrame) -> html.Div:
     if shoes.empty:
         return html.Div()
 
-    shoe_stats = shoes.groupby("gear").agg(
-        miles=("distance_mi", "sum"),
-        runs=("activity_id", "count"),
-        last_used=("date", "max"),
-    ).sort_values("miles", ascending=False).reset_index()
+    shoe_stats = _split_shoes_by_gap(shoes)
 
     cards = []
     for _, shoe in shoe_stats.iterrows():
         miles = shoe["miles"]
         warning = miles >= 400
+        first_dt = shoe["first_used"]
+        last_dt = shoe["last_used"]
+        date_range = f"{first_dt.strftime('%b %Y')} — {last_dt.strftime('%b %Y')}"
         cards.append(html.Div([
             html.Div([
                 html.Span(shoe["gear"], style={
@@ -229,12 +231,15 @@ def _shoe_mileage_section(runs: pd.DataFrame) -> html.Div:
                 html.Span(f"  {shoe['runs']} runs", style={
                     "color": TEXT_MUTED, "fontSize": "12px",
                 }),
+                html.Span(f"  {date_range}", style={
+                    "color": TEXT_MUTED, "fontSize": "11px", "marginLeft": "8px",
+                }),
             ]),
             html.Div([
                 html.Span(f"{miles:.0f} mi", style={
                     "fontFamily": "'IBM Plex Mono', monospace",
                     "fontSize": "18px", "fontWeight": "700",
-                    "color": ACCENT_RED if warning else ACCENT_GREEN,
+                    "color": ACCENT_RED if warning else ACCENT_SLATE,
                 }),
                 html.Span(" — consider retiring" if warning else "", style={
                     "color": ACCENT_RED, "fontSize": "12px", "marginLeft": "8px",
@@ -243,7 +248,7 @@ def _shoe_mileage_section(runs: pd.DataFrame) -> html.Div:
         ], style={
             "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
             "padding": "16px 20px", "marginBottom": "8px",
-            "borderLeft": f"3px solid {ACCENT_RED if warning else ACCENT_GREEN}",
+            "borderLeft": f"3px solid {ACCENT_RED if warning else ACCENT_SLATE}",
         }))
 
     return html.Div(cards)
@@ -265,9 +270,9 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
     def _compare_row(label, stroller_val, normal_val, unit="", lower_is_better=False):
         diff = stroller_val - normal_val
         if lower_is_better:
-            color = ACCENT_GREEN if diff < 0 else ACCENT_RED
+            color = ACCENT_SLATE if diff < 0 else ACCENT_RED
         else:
-            color = ACCENT_GREEN if diff > 0 else ACCENT_RED
+            color = ACCENT_SLATE if diff > 0 else ACCENT_RED
         sign = "+" if diff > 0 else ""
         return html.Div([
             html.Div(label, style={"fontSize": "10px", "textTransform": "uppercase",
@@ -317,6 +322,10 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
                              stroller["distance_mi"].mean(),
                              normal["distance_mi"].mean()))
 
+    rows.append(_compare_row("Avg Duration (min)",
+                             stroller["moving_time_s"].mean() / 60,
+                             normal["moving_time_s"].mean() / 60))
+
     return html.Div([
         html.Div([
             html.Span(f"{len(stroller)} stroller runs", style={
@@ -330,7 +339,66 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
             "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
             "padding": "16px 20px",
         }),
+        html.Div(
+            charts.stroller_pace_chart(runs, chart_id="stroller-pace"),
+            style={"marginTop": "24px"},
+        ),
     ])
+
+
+def _heat_pace_section(runs: pd.DataFrame) -> html.Div:
+    """Temperature impact on running pace."""
+    if "weather_temp_f" not in runs.columns:
+        return html.Div()
+
+    df = runs[runs["weather_temp_f"].notna()
+              & runs["pace_min_per_mi"].between(6, 15)].copy()
+    if len(df) < 10:
+        return html.P("Not enough runs with temperature data.",
+                       style={"color": TEXT_MUTED})
+
+    # Temperature buckets
+    buckets = [
+        ("<45\u00b0F", df[df["weather_temp_f"] < 45]),
+        ("45-60\u00b0F", df[df["weather_temp_f"].between(45, 60)]),
+        ("60-75\u00b0F", df[df["weather_temp_f"].between(60, 75)]),
+        ("75-90\u00b0F", df[df["weather_temp_f"].between(75, 90)]),
+        (">90\u00b0F", df[df["weather_temp_f"] > 90]),
+    ]
+
+    bucket_cards = []
+    for label, subset in buckets:
+        if subset.empty:
+            continue
+        avg_pace = format_pace(subset["pace_min_per_mi"].mean())
+        bucket_cards.append(_stat_cell(label, f"{avg_pace} /mi"))
+
+    # Heat cost estimate
+    hot = df[df["weather_temp_f"] > 60]
+    heat_cost_text = ""
+    if len(hot) > 10:
+        import numpy as np
+        coeffs = np.polyfit(hot["weather_temp_f"], hot["pace_min_per_mi"], 1)
+        cost_per_10 = coeffs[0] * 10
+        if cost_per_10 > 0:
+            secs = cost_per_10 * 60
+            heat_cost_text = f"+{secs:.0f} sec/mi per 10\u00b0F above 60\u00b0F"
+
+    children = []
+    if bucket_cards:
+        children.append(html.Div(bucket_cards, style={
+            "display": "flex", "gap": "24px", "flexWrap": "wrap",
+            "marginBottom": "20px",
+        }))
+    if heat_cost_text:
+        children.append(html.P(heat_cost_text, style={
+            "color": TEXT_SECONDARY, "fontSize": "0.9rem",
+            "fontFamily": "'IBM Plex Mono', monospace",
+            "marginBottom": "16px",
+        }))
+    children.append(charts.heat_vs_pace_chart(runs, chart_id="heat-pace"))
+
+    return html.Div(children)
 
 
 def layout(**_kwargs):
@@ -357,7 +425,7 @@ def layout(**_kwargs):
         run_meta[date_str] = {
             "name": r.get("name", "Run"),
             "dist": f"{r.get('distance_mi', 0):.1f} mi",
-            "pace": _pace_str(r.get("pace_min_per_mi")),
+            "pace": format_pace(r.get("pace_min_per_mi")),
             "duration": _duration_str(r.get("moving_time_s", 0)),
             "hr": f"{r['avg_hr']:.0f} bpm" if not pd.isna(r.get("avg_hr", None)) else "",
             "type": r.get("run_type", ""),
@@ -389,9 +457,9 @@ def layout(**_kwargs):
                 numbered_card(1, "Total Runs", f"{total_miles:.0f} total miles",
                               value=str(total_runs), color=ACCENT),
                 numbered_card(2, "Average Pace", "all runs",
-                              value=f"{avg_pace} /mi", color=ACCENT_TEAL),
+                              value=f"{avg_pace} /mi", color=ACCENT_SLATE),
                 numbered_card(3, "Best 5K+ Pace", "runs over 3 miles",
-                              value=f"{best_pace} /mi", color=ACCENT_GREEN),
+                              value=f"{best_pace} /mi", color=ACCENT_SLATE),
                 numbered_card(4, "Average HR", f"Max: {max_hr:.0f} bpm",
                               value=f"{avg_hr:.0f} bpm", color=ACCENT_RED),
             ], columns=4),
@@ -433,15 +501,13 @@ def layout(**_kwargs):
             html.P("Hover for preview. Click to jump to that run.",
                    style={"color": TEXT_MUTED, "fontSize": "12px",
                           "marginBottom": "8px"}),
-            dcc.Loading(type="dot", children=[
-                dcc.Graph(id="pace-trend", config=CHART_CONFIG),
-            ]),
+            html.Div(id="pace-trend-container"),
             # Floating hover tooltip — follows mouse
             html.Div(id="run-hover-card", style={
                 "display": "none",
                 "position": "fixed",
                 "zIndex": "1000",
-                "backgroundColor": "#ffffff",
+                "backgroundColor": "var(--bg-card)",
                 "border": f"1px solid {BORDER}",
                 "boxShadow": "0 8px 24px rgba(0,0,0,0.12)",
                 "padding": "12px",
@@ -450,31 +516,19 @@ def layout(**_kwargs):
             }),
         ]),
 
-        # Hidden divs for callbacks
-        html.Div(id="scroll-target", style={"display": "none"}),
-        html.Div(id="hover-target", style={"display": "none"}),
-        html.Div(id="hr-scroll-target", style={"display": "none"}),
-        html.Div(id="est5k-scroll-target", style={"display": "none"}),
-
         # Race Fitness
-        page_section("RACE FITNESS", [
-            html.P("How fast could you run a 5K right now? Click a point to jump to that run.",
+        page_section("RACE PREDICTIONS", [
+            html.P("Estimated race times across four distances. Click a point for details.",
                    style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
                           "marginBottom": "20px"}),
-            dcc.Loading(type="dot", children=[
-                dcc.Graph(id="est-5k", config=CHART_CONFIG),
-            ]),
+            html.Div(id="race-pred-container"),
         ], alt_bg=True),
 
         # Volume & Heart Rate
-        page_section("VOLUME & HEART RATE", [
+        page_section("VOLUME & EFFICIENCY", [
             dbc.Row([
-                dbc.Col(dcc.Loading(type="dot", children=[
-                    dcc.Graph(id="weekly-miles", config=CHART_CONFIG),
-                ]), md=6),
-                dbc.Col(dcc.Loading(type="dot", children=[
-                    dcc.Graph(id="hr-vs-pace", config=CHART_CONFIG),
-                ]), md=6),
+                dbc.Col(html.Div(id="weekly-miles-container"), md=6),
+                dbc.Col(html.Div(id="hr-vs-pace-container"), md=6),
             ]),
         ]),
 
@@ -497,37 +551,26 @@ def layout(**_kwargs):
             _stroller_comparison_section(runs),
         ]),
 
-        # Run Log
-        page_section("RUN LOG", [
-            html.P(f"{total_runs} runs, most recent first. Click a chart point to jump here.",
-                   style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
-                          "marginBottom": "20px"}),
-            html.Div(run_cards[:25], id="visible-run-cards"),
-            html.Div(run_cards[25:], id="hidden-run-cards",
-                      style={"display": "none"}) if len(run_cards) > 25 else html.Div(id="hidden-run-cards", style={"display": "none"}),
-            html.Button(
-                f"Show All Runs ({len(run_cards) - 25} more)",
-                id="show-all-runs-btn",
-                n_clicks=0,
-                style={
-                    "display": "block" if len(run_cards) > 25 else "none",
-                    "margin": "20px auto",
-                    "padding": "10px 24px",
-                    "fontSize": "14px",
-                    "fontWeight": "600",
-                    "color": TEXT_PRIMARY,
-                    "backgroundColor": BG_CARD,
-                    "border": f"1px solid {BORDER}",
-                    "cursor": "pointer",
-                },
-            ),
-        ]),
+        # Heat & Pace
+        page_section("HEAT & PACE", [
+            html.P("How temperature affects your running pace.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "0.9rem", "marginBottom": "20px"}),
+            _heat_pace_section(runs),
+        ], alt_bg=True),
 
         # CTA
         cta_section(
-            "Want to see where this fitness takes you?",
-            "Race predictions powered by your actual training data.",
-            "Race Predictions \u2192", "/races",
+            "Want to see every run?",
+            "All activities in one place.",
+            "View Activities \u2192", "/activities",
+        ),
+
+        # Floating "jump back" button (legacy, kept for calendar click)
+        html.Button(
+            "\u2191 Back to chart",
+            id="jump-back-btn",
+            n_clicks=0,
+            style={"display": "none"},
         ),
 
         # Footer
@@ -540,39 +583,68 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
         return html.P("No HR adjustment data.",
                        style={"color": TEXT_SECONDARY})
 
-    adjusted = runs[runs["hr_adjustment"] > 0]
-    if adjusted.empty:
-        return html.P("No runs with HR adjustments (heat/stroller).",
+    hr_runs = runs[runs["adjusted_hr"].notna()]
+    if hr_runs.empty:
+        return html.P("No runs with HR data.",
                        style={"color": TEXT_SECONDARY})
 
-    avg_adj = adjusted["hr_adjustment"].mean()
-    kid_runs = (adjusted[adjusted.get("with_kid", False)]
+    # Summary metrics
+    adjusted = runs[runs["hr_adjustment"] > 0]
+    avg_adj = adjusted["hr_adjustment"].mean() if not adjusted.empty else 0
+    kid_runs = (adjusted[adjusted["with_kid"] == True]
                 if "with_kid" in adjusted.columns else pd.DataFrame())
 
-    items = [
-        html.P(f"Avg HR adjustment: -{avg_adj:.1f} bpm across {len(adjusted)} runs",
-               style={"color": TEXT_SECONDARY, "fontSize": "0.9rem"}),
-    ]
-    if not kid_runs.empty:
-        items.append(html.P(
-            f"Stroller/kid runs: {len(kid_runs)} "
-            f"(avg -{kid_runs['hr_adjustment'].mean():.1f} bpm)",
-            style={"color": TEXT_SECONDARY, "fontSize": "0.9rem"},
-        ))
+    zone_runs = hr_runs[hr_runs["hr_zone"].notna()] if "hr_zone" in hr_runs.columns else pd.DataFrame()
+    most_common_zone = ""
+    pct_easy = 0
+    pct_hard = 0
+    if not zone_runs.empty:
+        zone_counts = zone_runs["hr_zone"].value_counts()
+        top_zone = int(zone_counts.idxmax())
+        zone_names = {1: "Recovery", 2: "Easy", 3: "Moderate", 4: "Threshold", 5: "Max"}
+        most_common_zone = f"Z{top_zone} {zone_names.get(top_zone, '')}"
+        total_z = len(zone_runs)
+        pct_easy = round((zone_counts.get(1, 0) + zone_counts.get(2, 0)) / total_z * 100)
+        pct_hard = round((zone_counts.get(4, 0) + zone_counts.get(5, 0)) / total_z * 100)
 
-    return html.Div(items)
+    metrics_row = html.Div([
+        _stat_cell("Avg HR Adjustment",
+                   f"-{avg_adj:.1f} bpm" if avg_adj > 0 else "None"),
+        _stat_cell("Most Common Zone", most_common_zone or "--"),
+        _stat_cell("Easy (Z1-Z2)", f"{pct_easy}%"),
+        _stat_cell("Hard (Z4-Z5)", f"{pct_hard}%"),
+    ], style={"display": "flex", "gap": "24px", "flexWrap": "wrap",
+              "marginBottom": "20px"})
+
+    text_items = []
+    if not adjusted.empty:
+        text_items.append(html.P(
+            f"{len(adjusted)} runs adjusted for heat/stroller conditions.",
+            style={"color": TEXT_MUTED, "fontSize": "0.85rem"}))
+    if not kid_runs.empty:
+        text_items.append(html.P(
+            f"{len(kid_runs)} stroller runs (avg -{kid_runs['hr_adjustment'].mean():.1f} bpm adjustment).",
+            style={"color": TEXT_MUTED, "fontSize": "0.85rem"}))
+
+    chart_row = dbc.Row([
+        dbc.Col(charts.hr_zone_distribution_chart(hr_runs, chart_id="hr-zones"), md=5),
+        dbc.Col(charts.hr_over_time_chart(hr_runs, chart_id="hr-trend"), md=7),
+    ])
+
+    return html.Div([metrics_row, *text_items, chart_row])
 
 
 @callback(
-    Output("pace-trend", "figure"),
-    Output("weekly-miles", "figure"),
-    Output("hr-vs-pace", "figure"),
-    Output("est-5k", "figure"),
+    Output("pace-trend-container", "children"),
+    Output("weekly-miles-container", "children"),
+    Output("hr-vs-pace-container", "children"),
+    Output("race-pred-container", "children"),
     Input("run-type-filter", "value"),
     Input("run-date-range", "start_date"),
     Input("run-date-range", "end_date"),
+    State("run-meta-store", "data"),
 )
-def update_charts(run_types, start_date, end_date):
+def update_charts(run_types, start_date, end_date, run_meta):
     runs = data.get_runs().copy()
 
     if run_types:
@@ -582,145 +654,55 @@ def update_charts(run_types, start_date, end_date):
     if end_date:
         runs = runs[runs["date"] <= end_date]
 
-    pace_fig = charts.pace_trend_chart(runs)
-    pace_fig.update_layout(clickmode="event+select")
-    # Suppress native Plotly tooltip — custom hover card provides the info
-    pace_fig.update_traces(hovertemplate=None, hoverinfo="none")
-
-    hr_fig = charts.hr_vs_pace_chart(runs)
-    hr_fig.update_layout(clickmode="event+select")
-
-    est5k_fig = charts.est_5k_chart(runs)
-    est5k_fig.update_layout(clickmode="event+select")
-
+    # Charts return html.Div with inline Chart.js rendering script
+    pace_chart = charts.pace_trend_chart(runs, chart_id="pace-trend", run_meta=run_meta)
     return (
-        pace_fig,
-        charts.weekly_mileage_chart(runs),
-        hr_fig,
-        est5k_fig,
+        pace_chart,
+        charts.weekly_mileage_chart(runs, chart_id="weekly-miles"),
+        charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace"),
+        charts.race_predictions_chart(runs, chart_id="race-pred"),
     )
 
 
+def _smooth(vals, window=7):
+    """Rolling average for smoothing noisy stream data."""
+    arr = pd.Series(vals)
+    return arr.rolling(window, min_periods=1, center=True).mean().tolist()
+
+
+def _gap_factor(grade_pct: float) -> float:
+    """Minetti cost factor for grade-adjusted pace. Shared by splits table and chart."""
+    f = 1.0 + grade_pct * 0.033 if grade_pct > 0 else 1.0 + grade_pct * 0.017
+    return max(0.7, min(1.8, f))
+
+
+def _compute_gap(speed_ms, altitude_m, distance_m):
+    """Grade-adjusted pace from speed, altitude, and distance streams."""
+    if not speed_ms or not altitude_m or not distance_m or len(speed_ms) < 3:
+        return []
+    gap = []
+    for i in range(len(speed_ms)):
+        s = speed_ms[i]
+        if s is None or s <= 0.3:
+            gap.append(None)
+            continue
+        if i > 0 and i < len(altitude_m) and i < len(distance_m):
+            d_elev = altitude_m[min(i, len(altitude_m)-1)] - altitude_m[max(i-1, 0)]
+            d_dist = distance_m[min(i, len(distance_m)-1)] - distance_m[max(i-1, 0)]
+            grade = d_elev / d_dist if d_dist > 1 else 0
+        else:
+            grade = 0
+        adj = _gap_factor(grade * 100)
+        gap_speed = s * adj
+        pace = 26.8224 / gap_speed if gap_speed > 0.3 else None
+        gap.append(pace if pace and pace < 20 else None)
+    return gap
+
+
 def _build_route_charts(filename):
-    """Build route map + stream charts for a run. Called by individual route callbacks."""
-    if filename in _route_cache:
-        return _route_cache[filename]
-
-    from strava_analytics.routes import parse_activity
-
-    export_dir = data.get_export_dir()
-    stream = parse_activity(export_dir / filename)
-    children = []
-
-    map_config = {"displaylogo": False, "scrollZoom": True,
-                  "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage"]}
-    sm_config = {"displaylogo": False, "scrollZoom": True,
-                 "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage",
-                                             "autoScale2d", "zoom2d", "zoomIn2d", "zoomOut2d"]}
-
-    if stream.coords:
-        lats = [c[0] for c in stream.coords]
-        lons = [c[1] for c in stream.coords]
-        center_lat = (min(lats) + max(lats)) / 2
-        center_lon = (min(lons) + max(lons)) / 2
-        extent = max(max(lats) - min(lats), max(lons) - min(lons))
-        zoom = 15 if extent < 0.005 else 14 if extent < 0.02 else 13 if extent < 0.05 else 12 if extent < 0.1 else 11 if extent < 0.3 else 10
-
-        map_fig = go.Figure(go.Scattermapbox(
-            lat=lats, lon=lons, mode="lines",
-            line=dict(width=3, color=ACCENT), hoverinfo="skip",
-        ))
-        map_fig.update_layout(
-            mapbox=dict(style="carto-positron",
-                        center=dict(lat=center_lat, lon=center_lon), zoom=zoom),
-            margin=dict(l=0, r=0, t=0, b=0),
-            height=300, paper_bgcolor="rgba(0,0,0,0)", showlegend=False, dragmode="pan",
-        )
-        children.append(dcc.Graph(figure=map_fig, config=map_config))
-
-    dist_mi = [d / 1609.344 for d in stream.distance_m] if stream.distance_m else []
-    x_title = "Distance (mi)" if dist_mi else ""
-    _cl = dict(height=180, margin=dict(l=45, r=10, t=30, b=30),
-               paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", xaxis_title=x_title)
-
-    if stream.heart_rate and len(stream.heart_rate) > 5:
-        hr = [h for h in stream.heart_rate if h > 0]
-        hr_x = dist_mi[:len(stream.heart_rate)] if dist_mi else list(range(len(stream.heart_rate)))
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=hr_x, y=[min(hr)-10]*len(hr_x), mode="lines",
-                                  line=dict(width=0), showlegend=False, hoverinfo="skip"))
-        fig.add_trace(go.Scatter(x=hr_x, y=stream.heart_rate, mode="lines",
-                                  line=dict(color=ACCENT_RED, width=1.5),
-                                  fill="tonexty", fillcolor="rgba(220,38,38,0.1)",
-                                  hovertemplate="%{y} bpm<extra></extra>", showlegend=False))
-        fig.update_layout(title=dict(text="Heart Rate", font=dict(size=12)),
-                          yaxis=dict(title="bpm", range=[min(hr)-10, max(hr)+10]),
-                          showlegend=False, **_cl)
-        children.append(dcc.Graph(figure=fig, config=sm_config))
-
-    if stream.speed_ms and len(stream.speed_ms) > 5:
-        pv = [26.8224/s if s > 0.5 else None for s in stream.speed_ms]
-        px = dist_mi[:len(pv)] if dist_mi else list(range(len(pv)))
-        vp = [p for p in pv if p and p < 20]
-        if vp:
-            fig = go.Figure(go.Scatter(x=px, y=pv, mode="lines",
-                                        line=dict(color=ACCENT_TEAL, width=1.5),
-                                        hovertemplate="%{y:.1f} min/mi<extra></extra>",
-                                        connectgaps=False))
-            fig.update_layout(title=dict(text="Pace", font=dict(size=12)),
-                              yaxis=dict(title="min/mi", range=[min(max(vp)+0.5,18), min(vp)-0.5]),
-                              showlegend=False, **_cl)
-            children.append(dcc.Graph(figure=fig, config=sm_config))
-
-    if stream.altitude_m and len(stream.altitude_m) > 5:
-        ef = [a * 3.28084 for a in stream.altitude_m]
-        ex = dist_mi[:len(ef)] if dist_mi else list(range(len(ef)))
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=ex, y=[min(ef)-20]*len(ex), mode="lines",
-                                  line=dict(width=0), showlegend=False, hoverinfo="skip"))
-        fig.add_trace(go.Scatter(x=ex, y=ef, mode="lines",
-                                  line=dict(color=ACCENT_GREEN, width=1.5),
-                                  fill="tonexty", fillcolor="rgba(22,163,74,0.1)",
-                                  hovertemplate="%{y:.0f} ft<extra></extra>", showlegend=False))
-        fig.update_layout(title=dict(text="Elevation", font=dict(size=12)),
-                          yaxis=dict(title="ft", range=[min(ef)-20, max(ef)+20]),
-                          showlegend=False, **_cl)
-        children.append(dcc.Graph(figure=fig, config=sm_config))
-
-    # Splits bar chart
-    from strava_analytics.routes import compute_splits
-    splits = compute_splits(stream)
-    if splits:
-        split_labels = [f"Mi {s['split_num']}" if s['distance_mi'] > 0.9
-                        else f"{s['distance_mi']:.1f}" for s in splits]
-        split_paces = [s["pace_min_per_mi"] for s in splits]
-
-        # Color by pace: faster = green, slower = red
-        avg_pace = sum(split_paces) / len(split_paces) if split_paces else 10
-        colors = [ACCENT_GREEN if p <= avg_pace else ACCENT_RED for p in split_paces]
-
-        # Format pace for hover
-        pace_strs = [f"{int(p)}:{int((p % 1) * 60):02d}" for p in split_paces]
-
-        fig = go.Figure(go.Bar(
-            x=split_labels, y=split_paces,
-            marker_color=colors,
-            hovertemplate="%{x}: %{customdata} /mi<extra></extra>",
-            customdata=pace_strs,
-        ))
-        fig.update_layout(
-            title=dict(text="Mile Splits", font=dict(size=12)),
-            yaxis=dict(title="Pace (min/mi)", autorange="reversed"),
-            showlegend=False,
-            height=200,
-            margin=dict(l=45, r=10, t=30, b=30),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        )
-        children.append(dcc.Graph(figure=fig, config=sm_config))
-
-    result = children if children else [html.P("No GPS data.", style={"color": TEXT_MUTED})]
-    _route_cache[filename] = result
-    return result
+    """Delegate to shared route builder."""
+    from strava_analytics.web.components.routes import build_route_charts
+    return build_route_charts(filename)
 
 
 @callback(
@@ -736,113 +718,9 @@ def load_route(n_clicks, btn_id, filenames):
     key = btn_id["index"]
     filename = filenames.get(key, "")
     if not filename:
-        return html.P("No GPS data for this run.", style={"color": "#a8a29e"})
+        return html.P("No GPS data for this run.", style={"color": TEXT_MUTED})
     return _build_route_charts(filename)
 
 
-def _scroll_to_card_js(customdata_index: int) -> str:
-    """Generate JS that scrolls to the run card matching the clicked chart point."""
-    return f"""
-    function(clickData) {{
-        if (!clickData || !clickData.points || !clickData.points[0]) return "";
-        var pt = clickData.points[0];
-        var dateStr = pt.customdata ? pt.customdata[{customdata_index}] : null;
-        if (!dateStr) return "";
-        var hoverCard = document.getElementById("run-hover-card");
-        if (hoverCard) hoverCard.style.display = "none";
-        var cards = document.querySelectorAll('details[id^="run-card-' + dateStr + '"]');
-        if (cards.length > 0) {{
-            var card = cards[0];
-            card.open = true;
-            card.scrollIntoView({{behavior: "smooth", block: "center"}});
-            card.style.transition = "box-shadow 0.3s";
-            card.style.boxShadow = "0 0 0 3px #ef3c4a";
-            setTimeout(function() {{ card.style.boxShadow = ""; }}, 2500);
-        }}
-        return dateStr;
-    }}
-    """
 
 
-# Click-to-scroll: pace-trend (date_str at customdata[3])
-clientside_callback(
-    _scroll_to_card_js(3),
-    Output("scroll-target", "children"),
-    Input("pace-trend", "clickData"),
-    prevent_initial_call=True,
-)
-
-# Click-to-scroll: hr-vs-pace (date_str at customdata[2])
-clientside_callback(
-    _scroll_to_card_js(2),
-    Output("hr-scroll-target", "children"),
-    Input("hr-vs-pace", "clickData"),
-    prevent_initial_call=True,
-)
-
-# Click-to-scroll: est-5k (date_str at customdata[3])
-clientside_callback(
-    _scroll_to_card_js(3),
-    Output("est5k-scroll-target", "children"),
-    Input("est-5k", "clickData"),
-    prevent_initial_call=True,
-)
-
-
-# Clientside callback: hover on pace-trend → show mini route preview card
-clientside_callback(
-    """
-    function(hoverData, runMeta) {
-        var card = document.getElementById("run-hover-card");
-        if (!card) return "";
-        if (!hoverData || !hoverData.points || !hoverData.points[0]) {
-            card.style.display = "none";
-            return "";
-        }
-        var pt = hoverData.points[0];
-        var dateStr = pt.customdata ? pt.customdata[3] : null;
-        if (!dateStr || !runMeta || !runMeta[dateStr]) {
-            card.style.display = "none";
-            return "";
-        }
-
-        var info = runMeta[dateStr];
-
-        var typeColor = {"race":"#ef3c4a","workout":"#0891b2","long":"#9333ea","moderate":"#ca8a04","easy":"#16a34a","short/easy":"#0284c7"};
-        var tc = typeColor[info.type] || "#a8a29e";
-        var badge = info.type ? '<span style="background:' + tc + ';color:#fff;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;padding:1px 6px;margin-left:6px">' + info.type + '</span>' : '';
-
-        card.innerHTML =
-            '<div style="font-weight:600;font-size:13px;color:#0c0a09">' + info.name + badge + '</div>' +
-            '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:#a8a29e">Distance</div><div style="font-family:IBM Plex Mono,monospace;font-size:14px;font-weight:600;color:#0c0a09">' + info.dist + '</div></div>' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:#a8a29e">Pace</div><div style="font-family:IBM Plex Mono,monospace;font-size:14px;font-weight:600;color:#0c0a09">' + info.pace + '/mi</div></div>' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:#a8a29e">Duration</div><div style="font-family:IBM Plex Mono,monospace;font-size:14px;font-weight:600;color:#0c0a09">' + info.duration + '</div></div>' +
-                (info.hr ? '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:#a8a29e">Avg HR</div><div style="font-family:IBM Plex Mono,monospace;font-size:14px;font-weight:600;color:#0c0a09">' + info.hr + '</div></div>' : '') +
-            '</div>' +
-            '<div style="margin-top:8px;font-size:11px;color:#a8a29e">Click to view details \u2193</div>';
-
-        card.style.display = "block";
-        return dateStr;
-    }
-    """,
-    Output("hover-target", "children"),
-    Input("pace-trend", "hoverData"),
-    State("run-meta-store", "data"),
-    prevent_initial_call=True,
-)
-
-
-# Show all runs: unhide hidden cards and hide the button
-clientside_callback(
-    """
-    function(n_clicks) {
-        if (!n_clicks) return [window.dash_clientside.no_update, window.dash_clientside.no_update];
-        return [{"display": "block"}, {"display": "none"}];
-    }
-    """,
-    Output("hidden-run-cards", "style"),
-    Output("show-all-runs-btn", "style"),
-    Input("show-all-runs-btn", "n_clicks"),
-    prevent_initial_call=True,
-)

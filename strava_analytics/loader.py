@@ -37,6 +37,8 @@ _COLUMN_MAP = {
     85: "total_steps",
     88: "training_load",
     89: "intensity",
+    95: "competition",
+    98: "strava_with_kid",
 }
 
 _NUMERIC_COLS = [
@@ -86,8 +88,14 @@ def load_activities(export_dir: str | Path) -> pd.DataFrame:
     selected = raw[list(_COLUMN_MAP.keys())].copy()
     selected.columns = list(_COLUMN_MAP.values())
 
-    # Parse dates
+    # Parse dates (Strava exports in UTC; convert to US/Mountain for Denver)
     selected["date"] = pd.to_datetime(selected["date"], format="mixed", dayfirst=False)
+    selected["date"] = (
+        selected["date"]
+        .dt.tz_localize("UTC")
+        .dt.tz_convert("US/Mountain")
+        .dt.tz_localize(None)  # drop tz info for pandas compat
+    )
 
     # Coerce numerics
     for col in _NUMERIC_COLS:

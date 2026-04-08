@@ -10,7 +10,7 @@ from strava_analytics.web.components.layout import (
     numbered_card, product_card, cta_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_TEAL, ACCENT_GREEN, ACCENT_YELLOW,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, BG_CARD, BORDER,
 )
 from strava_analytics.predictions import (
@@ -142,15 +142,15 @@ def layout(**_kwargs):
                               value=f"{vdot:.1f}", color=ACCENT),
                 numbered_card(2, "Calibration",
                               f"adjusted from {_fmt(known_time_raw)} ({calibration_label[:25]})",
-                              value=_fmt(known_time), color=ACCENT_GREEN),
+                              value=_fmt(known_time), color=ACCENT_SLATE),
                 numbered_card(3, "Training Elevation",
                               f"{avg_gain_per_mi:.0f} ft/mi avg gain",
                               value=f"{training_elev['mid_ft']:,.0f} ft",
-                              color=ACCENT_TEAL),
+                              color=ACCENT_SLATE),
                 numbered_card(4, "Current Fitness",
                               f"{current_weekly_miles:.0f} mi/wk (30d avg)",
                               value=f"{current_avg_pace:.1f} min/mi",
-                              color=ACCENT_YELLOW),
+                              color=ACCENT_AMBER),
             ], columns=4),
         ]),
 
@@ -266,7 +266,7 @@ def _standard_predictions_table(known_dist, known_time, exponent, vdot):
             html.Td(_fmt(pred.riegel_personal_time_s)),
             html.Td(_fmt(pred.cameron_time_s)),
             html.Td(_fmt(pred.daniels_time_s)),
-            html.Td(pace, style={"color": ACCENT_TEAL}),
+            html.Td(pace, style={"color": ACCENT_SLATE}),
         ]))
 
     return html.Table([

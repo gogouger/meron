@@ -13,7 +13,7 @@ from strava_analytics.web.components.layout import (
     numbered_card, cta_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_TEAL, ACCENT_GREEN, ACCENT_YELLOW,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, LIFT_COLORS,
     BG_CARD, BORDER,
 )
@@ -22,11 +22,6 @@ from strava_analytics.lifting_program import BASELINE, END_PRS
 
 dash.register_page(__name__, path="/lifting", name="Lifting")
 
-CHART_CONFIG = {
-    "displaylogo": False,
-    "scrollZoom": False,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage", "autoScale2d"],
-}
 
 
 def layout(**_kwargs):
@@ -45,16 +40,17 @@ def layout(**_kwargs):
 
     # 1RM progression charts
     onerm_charts = []
+    onerm_ids = []
     for lift_name, color in LIFT_COLORS.items():
         prog = extract_1rm_progression(df, lift_name)
         if not prog.empty:
+            chart_id = f"onerm-{lift_name}"
+            onerm_ids.append(chart_id)
             onerm_charts.append(
-                dbc.Col(dcc.Loading(type="dot", children=[
-                    dcc.Graph(
-                        figure=charts.onerm_progression_chart(prog, lift_name.title(), color),
-                        config=CHART_CONFIG,
-                    ),
-                ]), md=6)
+                dbc.Col(
+                    charts.onerm_progression_chart(prog, lift_name.title(), color, chart_id=chart_id),
+                    md=6,
+                )
             )
 
     return html.Div([
@@ -98,9 +94,7 @@ def layout(**_kwargs):
 
         # Working Weight Progression
         page_section("WORKING WEIGHT PROGRESSION", [
-            dcc.Loading(type="dot", children=[
-                dcc.Graph(figure=charts.lift_progression_chart(df), config=CHART_CONFIG),
-            ]),
+            charts.lift_progression_chart(df),
         ], alt_bg=True),
 
         # Estimated 1RM
@@ -126,25 +120,14 @@ def layout(**_kwargs):
 
         # Volume
         page_section("TRAINING VOLUME", [
-            dcc.Loading(type="dot", children=[
-                dcc.Graph(figure=charts.volume_chart(df), config=CHART_CONFIG),
-            ]),
+            charts.volume_chart(df),
         ]),
-
-        # Session Log
-        page_section("SESSION LOG", [
-            html.P(
-                "Every session, expandable. Click a card to see the full exercise list.",
-                style={"color": TEXT_SECONDARY, "fontSize": "0.85rem", "marginBottom": "20px"},
-            ),
-            html.Div(_build_session_cards(lifts)),
-        ], alt_bg=True),
 
         # CTA
         cta_section(
-            "Now go run it off.",
-            "See how your cardio stacks up.",
-            "Running \u2192", "/running",
+            "Want every session?",
+            "All activities in one feed.",
+            "View Activities \u2192", "/activities",
         ),
 
         # Footer
@@ -190,12 +173,12 @@ def _current_grid(baseline: dict, end_prs: dict) -> html.Div:
 
     for label, val, key in pr_metrics:
         delta = _delta(key, val)
-        color = ACCENT_GREEN if delta.startswith("+") else ACCENT_TEAL
+        color = ACCENT_SLATE if delta.startswith("+") else ACCENT_SLATE
         cells.append(metric_cell(label, f"{val} lbs" if val else "\u2014",
                                   delta, color))
 
     cells.append(metric_cell("Max Pull-ups", "15",
-                              _delta("max_pullups", 15), ACCENT_GREEN))
+                              _delta("max_pullups", 15), ACCENT_SLATE))
 
     return metric_grid(cells)
 
@@ -418,3 +401,9 @@ def _build_program_table(lifts):
         page_size=36,
         style_table={"overflowX": "auto"},
     )
+
+
+charts.register_chart_callback("lift-prog")
+charts.register_chart_callback("volume")
+for _lift in LIFT_COLORS:
+    charts.register_chart_callback(f"onerm-{_lift}")

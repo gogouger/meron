@@ -50,11 +50,15 @@ def parse_activity(fit_gz_path: str | Path, max_points: int = 300) -> ActivitySt
                 if hr is not None:
                     rec["hr"] = int(hr)
 
-                speed = record.get_value("enhanced_speed") or record.get_value("speed")
+                speed = record.get_value("enhanced_speed")
+                if speed is None:
+                    speed = record.get_value("speed")
                 if speed is not None:
                     rec["speed"] = float(speed)
 
-                alt = record.get_value("enhanced_altitude") or record.get_value("altitude")
+                alt = record.get_value("enhanced_altitude")
+                if alt is None:
+                    alt = record.get_value("altitude")
                 if alt is not None:
                     rec["alt"] = float(alt)
 
@@ -88,24 +92,31 @@ def parse_activity(fit_gz_path: str | Path, max_points: int = 300) -> ActivitySt
         step = len(records) / max_points
         records = [records[int(i * step)] for i in range(max_points)]
 
+    # Build aligned streams. Only include records that have a distance value
+    # (the primary x-axis). Carry forward HR/speed/altitude/etc. for records
+    # that have distance but are missing other fields.
     stream = ActivityStream()
+    last = {}  # last-seen value per field for carry-forward
     for rec in records:
-        if "lat" in rec and "lon" in rec:
-            stream.coords.append((rec["lat"], rec["lon"]))
-        if "hr" in rec:
-            stream.heart_rate.append(rec["hr"])
-        if "speed" in rec:
-            stream.speed_ms.append(rec["speed"])
-        if "alt" in rec:
-            stream.altitude_m.append(rec["alt"])
-        if "cad" in rec:
-            stream.cadence.append(rec["cad"])
-        if "dist" in rec:
-            stream.distance_m.append(rec["dist"])
-        if "ts" in rec:
-            stream.timestamps.append(rec["ts"])
-        if "temp" in rec:
-            stream.temperature_c.append(rec["temp"])
+        last.update(rec)
+        # Only emit a point when this record has its own distance
+        if "dist" not in rec:
+            continue
+        if "lat" in last and "lon" in last:
+            stream.coords.append((last["lat"], last["lon"]))
+        if "hr" in last:
+            stream.heart_rate.append(last["hr"])
+        if "speed" in last:
+            stream.speed_ms.append(last["speed"])
+        if "alt" in last:
+            stream.altitude_m.append(last["alt"])
+        if "cad" in last:
+            stream.cadence.append(last["cad"])
+        stream.distance_m.append(rec["dist"])
+        if "ts" in last:
+            stream.timestamps.append(last["ts"])
+        if "temp" in last:
+            stream.temperature_c.append(last["temp"])
 
     return stream
 
@@ -147,10 +158,12 @@ def compute_splits(stream: ActivityStream, split_distance_m: float = 1609.34) ->
                 valid_hr = [h for h in hr_slice if h > 0]
                 avg_hr = sum(valid_hr) / len(valid_hr) if valid_hr else 0
 
-            # Elevation gain for the split
+            # Elevation for the split
             elev_gain_ft = 0
-            if stream.altitude_m:
+            elev_change_ft = 0
+            if stream.altitude_m and len(stream.altitude_m) > i:
                 alt_slice = stream.altitude_m[split_start_idx:i+1]
+                elev_change_ft = (alt_slice[-1] - alt_slice[0]) * 3.28084
                 for j in range(1, len(alt_slice)):
                     if alt_slice[j] > alt_slice[j-1]:
                         elev_gain_ft += (alt_slice[j] - alt_slice[j-1]) * 3.28084
@@ -161,6 +174,7 @@ def compute_splits(stream: ActivityStream, split_distance_m: float = 1609.34) ->
                 "pace_min_per_mi": pace,
                 "avg_hr": avg_hr,
                 "elevation_gain_ft": elev_gain_ft,
+                "elevation_change_ft": elev_change_ft,
                 "elapsed_s": time_s,
             })
 
@@ -187,12 +201,18 @@ def compute_splits(stream: ActivityStream, split_distance_m: float = 1609.34) ->
                 valid_hr = [h for h in hr_slice if h > 0]
                 avg_hr = sum(valid_hr) / len(valid_hr) if valid_hr else 0
 
+            elev_change_ft = 0
+            if stream.altitude_m and len(stream.altitude_m) > split_start_idx:
+                alt_slice = stream.altitude_m[split_start_idx:]
+                elev_change_ft = (alt_slice[-1] - alt_slice[0]) * 3.28084
+
             splits.append({
                 "split_num": split_num,
                 "distance_mi": dist_mi,
                 "pace_min_per_mi": pace,
                 "avg_hr": avg_hr,
                 "elevation_gain_ft": 0,
+                "elevation_change_ft": elev_change_ft,
                 "elapsed_s": time_s,
             })
 

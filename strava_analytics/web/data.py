@@ -1,5 +1,6 @@
 """Data loading and caching layer for the web dashboard."""
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -12,14 +13,44 @@ from strava_analytics.lifting_program import BASELINE, END_PRS, PROGRAM
 _df: pd.DataFrame | None = None
 _profile: dict | None = None
 _export_dir: Path | None = None
+_athlete_config: dict | None = None
+
+# Default athlete config
+_DEFAULT_CONFIG = {
+    "max_hr": 200,
+    "hr_zones_pct": [60, 70, 80, 90],  # boundaries as % of max HR
+    "zone_names": ["Recovery", "Easy", "Moderate", "Threshold", "Max"],
+}
+
+
+def _load_athlete_config(export_dir: Path) -> dict:
+    """Load athlete config from JSON file, or return defaults."""
+    cfg_path = export_dir / "athlete_config.json"
+    if cfg_path.exists():
+        with open(cfg_path) as f:
+            user_cfg = json.load(f)
+        return {**_DEFAULT_CONFIG, **user_cfg}
+    return _DEFAULT_CONFIG.copy()
+
+
+def save_athlete_config(config: dict) -> None:
+    """Write athlete config to JSON file in the export directory."""
+    global _athlete_config
+    if _export_dir is None:
+        return
+    cfg_path = _export_dir / "athlete_config.json"
+    with open(cfg_path, "w") as f:
+        json.dump(config, f, indent=2)
+    _athlete_config = config
 
 
 def init(export_dir: str | Path) -> None:
     """Load and enrich the Strava data. Call once at startup."""
-    global _df, _profile, _export_dir
+    global _df, _profile, _export_dir, _athlete_config
     _export_dir = Path(export_dir)
+    _athlete_config = _load_athlete_config(_export_dir)
     raw = load_activities(_export_dir)
-    _df = enrich(raw)
+    _df = enrich(raw, athlete_config=_athlete_config)
     _profile = load_profile(_export_dir)
 
 
@@ -58,6 +89,11 @@ def get_end_prs() -> dict:
 def get_program() -> list:
     """Return the lifting program."""
     return PROGRAM
+
+
+def get_athlete_config() -> dict:
+    """Return athlete config dict."""
+    return _athlete_config or _DEFAULT_CONFIG.copy()
 
 
 def get_export_dir() -> Path:

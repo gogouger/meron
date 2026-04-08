@@ -270,17 +270,92 @@ def map_lifting_program(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# HR zone computation
+# ---------------------------------------------------------------------------
+
+# Default zone boundaries as % of max HR
+_DEFAULT_MAX_HR = 200
+_DEFAULT_ZONE_PCT = [60, 70, 80, 90]  # Z1/Z2 boundary, Z2/Z3, Z3/Z4, Z4/Z5
+_ZONE_NAMES = ["Recovery", "Easy", "Moderate", "Threshold", "Max"]
+
+
+def _compute_hr_zones(df: pd.DataFrame, max_hr: int, zone_pct: list[int]) -> pd.DataFrame:
+    """Add hr_zone (1-5) and hr_zone_name columns based on adjusted_hr."""
+    # Use adjusted_hr for more accurate classification (accounts for heat/stroller)
+    hr = df["adjusted_hr"]
+
+    # Compute zone boundaries in bpm
+    boundaries = [max_hr * p / 100 for p in zone_pct]  # e.g. [120, 140, 160, 180]
+
+    conditions = [
+        hr < boundaries[0],                           # Z1: < 60%
+        (hr >= boundaries[0]) & (hr < boundaries[1]), # Z2: 60-70%
+        (hr >= boundaries[1]) & (hr < boundaries[2]), # Z3: 70-80%
+        (hr >= boundaries[2]) & (hr < boundaries[3]), # Z4: 80-90%
+        hr >= boundaries[3],                           # Z5: >= 90%
+    ]
+    zones = [1, 2, 3, 4, 5]
+
+    df["hr_zone"] = np.select(conditions, zones, default=np.nan)
+    df.loc[hr.isna(), "hr_zone"] = np.nan
+
+    zone_name_map = {1: _ZONE_NAMES[0], 2: _ZONE_NAMES[1], 3: _ZONE_NAMES[2],
+                     4: _ZONE_NAMES[3], 5: _ZONE_NAMES[4]}
+    df["hr_zone_name"] = df["hr_zone"].map(zone_name_map)
+
+    return df
+
+
+def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
+    """Refine keyword-based run_type using HR zones.
+
+    4 final types: race, long, moderate, easy.
+    - race keyword → always race
+    - long keyword/distance → always long
+    - moderate (default) → downgrade to easy if Z1-Z2 HR
+    - easy keyword → upgrade to moderate if Z4+ HR
+    - No HR data → keep keyword classification
+    """
+    runs_mask = df["type"] == "Run"
+    has_hr = df["hr_zone"].notna()
+    mask = runs_mask & has_hr
+
+    if not mask.any():
+        return df
+
+    zone = df.loc[mask, "hr_zone"]
+    kw_type = df.loc[mask, "run_type"]
+
+    blended = kw_type.copy()
+
+    # moderate (default) → downgrade to easy if low HR
+    mod_mask = kw_type == "moderate"
+    blended.loc[mod_mask & (zone <= 2)] = "easy"
+
+    # easy → upgrade to moderate if high HR
+    easy_mask = kw_type == "easy"
+    blended.loc[easy_mask & (zone >= 4)] = "moderate"
+
+    df.loc[mask, "run_type"] = blended
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Full enrichment pipeline
 # ---------------------------------------------------------------------------
 
-def enrich(df: pd.DataFrame) -> pd.DataFrame:
+def enrich(df: pd.DataFrame, athlete_config: dict | None = None) -> pd.DataFrame:
     """Run all enrichment steps on the activity DataFrame."""
     logger.info("Starting enrichment pipeline on %d activities", len(df))
     df = df.copy()
 
-    # Kid detection (vectorized)
+    # Kid detection (vectorized) — check name/description regex AND Strava tag
     combined_text = df["name"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)
-    df["with_kid"] = combined_text.str.contains(_KID_RE, na=False)
+    regex_match = combined_text.str.contains(_KID_RE, na=False)
+    strava_tag = pd.Series(False, index=df.index)
+    if "strava_with_kid" in df.columns:
+        strava_tag = pd.to_numeric(df["strava_with_kid"], errors="coerce").fillna(0) == 1
+    df["with_kid"] = regex_match | strava_tag
     logger.info("Kid detection: %d stroller runs found", df["with_kid"].sum())
 
     # Run type classification (vectorized with np.select)
@@ -288,20 +363,20 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df["run_type"] = ""  # default
 
     if runs_mask.any():
-        text = (df["name"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)).str.lower()
+        # Race detection uses NAME only (description catches false positives
+        # like "first run since the race" or "training for the marathon")
+        name_text = df["name"].fillna("").astype(str).str.lower()
+        full_text = (df["name"].fillna("").astype(str) + " " + df["description"].fillna("").astype(str)).str.lower()
         dist = df["distance_mi"].fillna(0)
         pace = df["pace_min_per_mi"]
 
         conditions = [
-            text.str.contains(r"race|10k|5k|marathon|trot|dash|frisco", na=False),
-            text.str.contains(r"interval|tempo|fast|speed|800", na=False),
-            text.str.contains(r"ruck", na=False),
-            text.str.contains(r"long", na=False) | (dist >= 8),
-            text.str.contains(r"recovery|shake|shakeout|easy", na=False),
-            dist <= 2.5,
+            name_text.str.contains(r"race|10k|5k|marathon|trot|dash|frisco", na=False),
+            full_text.str.contains(r"long", na=False) | (dist >= 8),
+            full_text.str.contains(r"recovery|shake|shakeout|easy|ruck", na=False) | (dist <= 2.5),
             pace.notna() & (pace >= 12),
         ]
-        choices = ["race", "workout", "ruck", "long", "easy", "short/easy", "easy"]
+        choices = ["race", "long", "easy", "easy"]
 
         df.loc[runs_mask, "run_type"] = np.select(
             [c[runs_mask] for c in conditions],
@@ -328,6 +403,24 @@ def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df.loc[df["avg_hr"].isna(), "adjusted_hr"] = np.nan
     df.loc[df["avg_hr"].isna(), "hr_adjustment"] = 0.0
     logger.info("HR adjustment: %d activities adjusted", (df["hr_adjustment"] > 0).sum())
+
+    # HR zones (uses adjusted_hr)
+    cfg = athlete_config or {}
+    max_hr = cfg.get("max_hr", _DEFAULT_MAX_HR)
+    zone_pct = cfg.get("hr_zones_pct", _DEFAULT_ZONE_PCT)
+    df["estimated_max_hr"] = max_hr
+    df = _compute_hr_zones(df, max_hr, zone_pct)
+    has_zones = df["hr_zone"].notna().sum()
+    logger.info("HR zones: %d activities zoned (max_hr=%d)", has_zones, max_hr)
+
+    # Blend keyword + HR zone for more accurate run type
+    before = df[df["type"] == "Run"]["run_type"].value_counts().to_dict()
+    df = _blend_run_type(df)
+    after = df[df["type"] == "Run"]["run_type"].value_counts().to_dict()
+    logger.info("Run classification (after HR blending): %s", after)
+    changed = {k: after.get(k, 0) - before.get(k, 0) for k in set(list(before) + list(after)) if after.get(k, 0) != before.get(k, 0)}
+    if changed:
+        logger.info("  Reclassified: %s", changed)
 
     # Fatigue
     df = compute_fatigue(df)

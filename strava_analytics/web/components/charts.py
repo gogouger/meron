@@ -1,720 +1,1171 @@
-"""Chart builder functions for the dashboard."""
+"""Chart builder functions — Chart.js via data-chartcfg + MutationObserver.
+
+Each public function takes the same DataFrame as before but returns an
+html.Div with a ``data-chartcfg`` JSON attribute.  ``chartjs-bridge.js``
+auto-detects these and renders Chart.js instances.
+"""
+
+from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any
 
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import json as _json
+
+from dash import html, dcc
 
 from strava_analytics.web.theme import (
-    STRAVA_ORANGE, ACCENT_TEAL, ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW,
-    ACCENT_PURPLE, BG_CARD, TEXT_SECONDARY, GRIDLINE,
-    LIFT_COLORS, RUN_TYPE_COLORS, FATIGUE_COLORS,
-    PHASE_COLORS, WORKOUT_TYPE_COLORS,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
+    SLATE_60, AMBER_60, TEXT_SECONDARY, TEXT_MUTED,
+    LIFT_COLORS, RUN_TYPE_COLORS, WORKOUT_TYPE_COLORS,
 )
 from strava_analytics.metrics import format_pace
 
 
-def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
-    """Convert hex color to rgba string."""
-    h = hex_color.lstrip("#")
+# ── helpers ───────────────────────────────────────────────────────────
+
+def _hex_to_rgba(color: str, alpha: float = 0.3) -> str:
+    """Convert a hex color to rgba, or re-alpha an existing rgba string."""
+    if color.startswith("rgba("):
+        # Already rgba — replace the alpha value
+        inner = color[5:].rstrip(")")
+        parts = inner.split(",")
+        return f"rgba({parts[0]},{parts[1]},{parts[2]},{alpha})"
+    h = color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
 
 
-# No Plotly logo, no modebar
-CHART_CONFIG = {
-    "displayModeBar": False,
-    "displaylogo": False,
-    "staticPlot": False,
-}
+def _chart_wrap(chart_id: str, cfg: dict, height: int = 400) -> html.Div:
+    """Wrapper that stores the Chart.js config in a data attribute.
 
-
-def _clean_layout(fig: go.Figure, **kwargs) -> go.Figure:
-    """Apply clean layout defaults to every chart."""
-    fig.update_layout(
-        legend=dict(
-            orientation="h", y=-0.15, x=0.5, xanchor="center",
-            font=dict(size=11),
-            bgcolor="rgba(0,0,0,0)",
-        ),
-        margin=dict(l=50, r=20, t=45, b=60),
-        dragmode="zoom",
-        **kwargs,
-    )
-
-
-    return fig
-
-
-def _empty_chart(message: str = "No data available") -> go.Figure:
-    """Return a styled empty chart with a centered message."""
-    fig = go.Figure()
-    fig.add_annotation(
-        text=message,
-        xref="paper", yref="paper",
-        x=0.5, y=0.5,
-        showarrow=False,
-        font=dict(size=14, color=TEXT_SECONDARY),
-    )
-    fig.update_layout(
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        height=200,
-    )
-    return fig
-
-
-def _apply_range_limits(
-    fig: go.Figure,
-    x_min=None, x_max=None,
-    y_min=None, y_max=None,
-    y_reversed: bool = False,
-) -> go.Figure:
-    """Constrain zoom/pan so the user cannot scroll beyond the data.
-
-    Sets explicit range (for correct initial view) and minallowed/maxallowed
-    (to prevent zooming/panning past the data). For reversed y-axes (pace,
-    5K time), pass y_reversed=True — the range order is flipped automatically
-    and autorange="reversed" should NOT be used on the chart.
+    ``chartjs-bridge.js`` uses a MutationObserver to detect elements with
+    a ``data-chartcfg`` attribute and renders them automatically.
     """
-    if x_min is not None and x_max is not None:
-        fig.update_xaxes(
-            range=[x_min, x_max], autorange=False,
-            minallowed=x_min, maxallowed=x_max,
-        )
-    if y_min is not None and y_max is not None:
-        y_range = [y_max, y_min] if y_reversed else [y_min, y_max]
-        fig.update_yaxes(
-            range=y_range, autorange=False,
-            minallowed=y_min, maxallowed=y_max,
-        )
-    return fig
+    cfg_json = _json.dumps(cfg, default=str)
+    return html.Div([
+        html.Div(className="cjs-canvas-box",
+                 style={"height": f"{height}px"}),
+    ], id=f"{chart_id}-wrap", className="cjs-chart-wrap",
+       **{"data-chartcfg": cfg_json})
 
 
-# ---------------------------------------------------------------------------
-# Running charts
-# ---------------------------------------------------------------------------
+def _empty_chart(message: str = "No data available", height: int = 200) -> html.Div:
+    return html.Div(message, className="cjs-empty", style={"height": f"{height}px"})
 
-def pace_trend_chart(runs: pd.DataFrame) -> go.Figure:
-    """Scatter plot of pace over time, color-coded by run type."""
+
+def register_chart_callback(chart_id: str) -> None:
+    """No-op — rendering is handled by MutationObserver in chartjs-bridge.js."""
+
+
+def _ts(dt) -> str:
+    """Datetime → ISO string for JSON serialisation."""
+    if hasattr(dt, "isoformat"):
+        return dt.isoformat()
+    return str(dt)
+
+
+def _title_cfg(text: str) -> dict:
+    return {"display": True, "text": text, "padding": {"bottom": 12}}
+
+
+def _time_limits(dates: pd.Series, pad_days: int = 7) -> dict:
+    """Return min/max for a time axis with padding."""
+    return {
+        "min": _ts(dates.min() - timedelta(days=pad_days)),
+        "max": _ts(dates.max() + timedelta(days=pad_days)),
+    }
+
+
+def _val_limits(vals, pad_frac: float = 0.05, floor=None, ceil=None) -> dict:
+    """Return min/max for a value axis with fractional padding."""
+    vmin, vmax = float(vals.min()), float(vals.max())
+    pad = (vmax - vmin) * pad_frac if vmax != vmin else 1
+    lo = vmin - pad if floor is None else max(floor, vmin - pad)
+    hi = vmax + pad if ceil is None else min(ceil, vmax + pad)
+    return {"min": round(lo, 2), "max": round(hi, 2)}
+
+
+# ── point size constants ──────────────────────────────────────────────
+_PT = 3          # default scatter point radius
+_PT_HOVER = 5    # hover radius
+_PT_LINE = 3     # point radius on line charts with markers
+_PT_LINE_H = 5   # hover radius on line charts
+
+
+# ── running charts ────────────────────────────────────────────────────
+
+def pace_trend_chart(runs: pd.DataFrame, chart_id: str = "pace-trend", run_meta: dict | None = None) -> html.Div:
+    """Scatter of pace over time, colour-coded by run type + 30-day avg."""
     if runs.empty:
         return _empty_chart("No runs to display")
 
     df = runs.copy()
-    # Filter out extreme paces (walks miscategorized as runs, GPS errors)
     df = df[(df["pace_min_per_mi"] >= 6) & (df["pace_min_per_mi"] <= 15)]
     if df.empty:
         return _empty_chart("No runs with valid pace data")
-    df["pace_str"] = df["pace_min_per_mi"].apply(format_pace)
 
-    fig = go.Figure()
-
-    # Include date string in customdata for click-to-scroll
     df["date_str"] = df["date"].dt.strftime("%Y-%m-%d")
 
-    # Plot by run type with clean legend
+    datasets = []
+    date_strings: dict[int, list[str]] = {}
+
     if "run_type" in df.columns:
         for rtype in sorted(df["run_type"].unique()):
-            subset = df[df["run_type"] == rtype]
+            subset = df[df["run_type"] == rtype].sort_values("date")
             color = RUN_TYPE_COLORS.get(rtype, TEXT_SECONDARY)
-            fig.add_trace(go.Scatter(
-                x=subset["date"], y=subset["pace_min_per_mi"],
-                mode="markers", name=rtype.title(),
-                marker=dict(color=color, size=10, opacity=0.85),
-                customdata=subset[["name", "distance_mi", "pace_str", "date_str"]].values,
-                hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} mi @ %{customdata[2]}<extra></extra>",
-            ))
+            ds_idx = len(datasets)
+            datasets.append({
+                "label": rtype.title(),
+                "data": [
+                    {"x": _ts(row["date"]), "y": round(row["pace_min_per_mi"], 2)}
+                    for _, row in subset.iterrows()
+                ],
+                "backgroundColor": color,
+                "borderColor": color,
+                "pointRadius": _PT,
+                "pointHoverRadius": _PT_HOVER,
+                "showLine": False,
+            })
+            date_strings[ds_idx] = subset["date_str"].tolist()
     else:
-        df["_name"] = df.get("name", "Run")
-        fig.add_trace(go.Scatter(
-            x=df["date"], y=df["pace_min_per_mi"],
-            mode="markers", name="Runs",
-            marker=dict(color=STRAVA_ORANGE, size=7, opacity=0.7),
-            customdata=df[["_name", "distance_mi", "pace_str", "date_str"]].values,
-            hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} mi @ %{customdata[2]}<extra></extra>",
-        ))
+        datasets.append({
+            "label": "Runs",
+            "data": [
+                {"x": _ts(row["date"]), "y": round(row["pace_min_per_mi"], 2)}
+                for _, row in df.iterrows()
+            ],
+            "backgroundColor": ACCENT,
+            "borderColor": ACCENT,
+            "pointRadius": _PT,
+            "pointHoverRadius": _PT_HOVER,
+            "showLine": False,
+        })
+        date_strings[0] = df["date_str"].tolist()
 
-    # 30-day rolling average
+    # 30-day rolling average (recalculated dynamically by JS when legend items toggled)
+    trend_idx = len(datasets)
     df_sorted = df.sort_values("date")
     rolling = df_sorted.set_index("date")["pace_min_per_mi"].rolling("30D").mean()
-    fig.add_trace(go.Scatter(
-        x=rolling.index, y=rolling.values,
-        mode="lines", name="30-day avg",
-        line=dict(color=STRAVA_ORANGE, width=3),
-        hoverinfo="skip",
-    ))
+    datasets.append({
+        "label": "30-day avg",
+        "data": [
+            {"x": _ts(d), "y": round(v, 2)}
+            for d, v in zip(rolling.index, rolling.values)
+            if pd.notna(v)
+        ],
+        "borderColor": ACCENT,
+        "borderWidth": 2.5,
+        "pointRadius": 0,
+        "showLine": True,
+        "fill": False,
+        "tension": 0.3,
+    })
 
-    fig.update_yaxes(title="Pace (min/mi)")
-    fig.update_xaxes(title="")
-    _apply_range_limits(
-        fig,
-        x_min=df["date"].min() - timedelta(days=7),
-        x_max=df["date"].max() + timedelta(days=7),
-        y_min=df["pace_min_per_mi"].min() - 0.5,
-        y_max=df["pace_min_per_mi"].max() + 0.5,
-        y_reversed=True,
-    )
-    return _clean_layout(fig, title="Pace Trend", height=400)
+    y_lim = _val_limits(df["pace_min_per_mi"], pad_frac=0.05)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Pace Trend"),
+                "legend": {
+                    "position": "right",
+                    "labels": {"boxWidth": 12, "padding": 10},
+                },
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "week"},
+                    **_time_limits(df["date"]),
+                },
+                "y": {
+                    "reverse": True,
+                    "title": {"display": True, "text": "Pace (min/mi)"},
+                    **y_lim,
+                },
+            },
+        },
+        "_meta": {
+            "clickToScroll": True,
+            "runHoverCard": True,
+            "runMeta": run_meta or {},
+            "dateStrings": date_strings,
+            "dynamicTrendLine": True,
+            "trendLineIndex": trend_idx,
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=400)
 
 
-def weekly_mileage_chart(runs: pd.DataFrame) -> go.Figure:
-    """Bar chart of weekly miles using date-based labels."""
+def weekly_mileage_chart(runs: pd.DataFrame, chart_id: str = "weekly-miles") -> html.Div:
+    """Bar chart of weekly miles."""
     if runs.empty:
         return _empty_chart("No runs for weekly mileage")
 
     df = runs.copy()
-    # Use the Monday of each week as label to avoid period serialization issues
     df["week_start"] = df["date"].dt.to_period("W").apply(lambda p: p.start_time)
     weekly = df.groupby("week_start")["distance_mi"].sum().reset_index()
-    weekly["label"] = weekly["week_start"].dt.strftime("%b %d")
+    weekly = weekly.sort_values("week_start")
 
-    fig = go.Figure(go.Bar(
-        x=weekly["week_start"], y=weekly["distance_mi"],
-        marker_color=STRAVA_ORANGE,
-        hovertemplate="%{x|%b %d}: %{y:.1f} mi<extra></extra>",
-    ))
-    fig.update_xaxes(title="", tickangle=-45, nticks=15)
-    fig.update_yaxes(title="Miles")
-    _apply_range_limits(
-        fig,
-        x_min=weekly["week_start"].min() - timedelta(days=7),
-        x_max=weekly["week_start"].max() + timedelta(days=7),
-        y_min=0,
-        y_max=weekly["distance_mi"].max() * 1.05,
-    )
-    return _clean_layout(fig, title="Weekly Mileage", height=320, showlegend=False)
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": [d.strftime("%b %d") for d in weekly["week_start"]],
+            "datasets": [{
+                "label": "Miles",
+                "data": [round(v, 1) for v in weekly["distance_mi"]],
+                "backgroundColor": ACCENT,
+                "borderRadius": 2,
+            }],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Weekly Mileage"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45}},
+                "y": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Miles"},
+                    "max": round(float(weekly["distance_mi"].max()) * 1.05, 1),
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=320)
 
 
-def hr_vs_pace_chart(runs: pd.DataFrame) -> go.Figure:
-    """Scatter: avg HR vs pace. Single color, no per-type legend clutter."""
+def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -> html.Div:
+    """Aerobic efficiency: estimated pace at a fixed reference HR over time.
+
+    For each run, computes what pace you'd hold at 140 bpm (Z2 ceiling for
+    max_hr=200) by normalizing: efficiency = pace × (ref_hr / adjusted_hr).
+    Lower = faster at the same HR = better aerobic fitness.
+    Includes a 30-day rolling average trend line.
+    """
     if runs.empty:
         return _empty_chart("No runs with heart rate data")
 
-    df = runs[runs["avg_hr"].notna()].copy()
-    # Filter to reasonable paces
+    df = runs[runs["adjusted_hr"].notna()].copy()
     df = df[(df["pace_min_per_mi"] >= 6) & (df["pace_min_per_mi"] <= 15)]
+    df = df[df["adjusted_hr"] > 100]  # filter out sensor glitches
     if df.empty:
-        return _empty_chart("No runs with valid HR and pace data")
+        return _empty_chart("No runs with valid HR data")
 
+    # Reference HR = 70% of max (Z2 ceiling). Use estimated_max_hr if available.
+    ref_hr = 140
+    if "estimated_max_hr" in df.columns:
+        max_hr = df["estimated_max_hr"].iloc[0]
+        ref_hr = int(max_hr * 0.70)
+
+    # Efficiency: what pace would this run be at reference HR?
+    # Linear approximation: pace_at_ref = pace × (ref_hr / actual_hr)
+    df["efficiency"] = df["pace_min_per_mi"] * (ref_hr / df["adjusted_hr"])
     df["date_str"] = df["date"].dt.strftime("%Y-%m-%d")
+    df = df.sort_values("date")
 
-    fig = go.Figure(go.Scatter(
-        x=df["pace_min_per_mi"], y=df["avg_hr"],
-        mode="markers",
-        marker=dict(color=ACCENT_TEAL, size=9, opacity=0.75),
-        customdata=df[["name", "distance_mi", "date_str"]].values,
-        hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} mi<br>Pace: %{x:.1f} | HR: %{y:.0f}<extra></extra>",
-    ))
+    # Filter extreme outliers
+    q01, q99 = df["efficiency"].quantile(0.01), df["efficiency"].quantile(0.99)
+    df = df[(df["efficiency"] >= q01) & (df["efficiency"] <= q99)]
 
-    fig.update_xaxes(title="Pace (min/mi)")
-    fig.update_yaxes(title="Avg HR (bpm)")
-    x_pad = (df["pace_min_per_mi"].max() - df["pace_min_per_mi"].min()) * 0.05
-    y_pad = (df["avg_hr"].max() - df["avg_hr"].min()) * 0.05
-    _apply_range_limits(
-        fig,
-        x_min=df["pace_min_per_mi"].min() - x_pad,
-        x_max=df["pace_min_per_mi"].max() + x_pad,
-        y_min=df["avg_hr"].min() - y_pad,
-        y_max=df["avg_hr"].max() + y_pad,
-    )
-    return _clean_layout(fig, title="Heart Rate vs Pace", height=320, showlegend=False)
+    datasets = []
+    date_strings: dict[int, list[str]] = {}
+
+    datasets.append({
+        "label": "_runs",
+        "data": [
+            {"x": _ts(row["date"]), "y": round(row["efficiency"], 2)}
+            for _, row in df.iterrows()
+        ],
+        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.5),
+        "borderColor": ACCENT_SLATE,
+        "pointRadius": _PT,
+        "pointHoverRadius": _PT_HOVER,
+        "showLine": False,
+    })
+    date_strings[0] = df["date_str"].tolist()
+
+    # 30-day rolling average trend line
+    trend_idx = len(datasets)
+    rolling = df.set_index("date")["efficiency"].rolling("30D").mean()
+    datasets.append({
+        "label": "30-day avg",
+        "data": [
+            {"x": _ts(d), "y": round(v, 2)}
+            for d, v in zip(rolling.index, rolling.values)
+            if pd.notna(v)
+        ],
+        "borderColor": ACCENT,
+        "borderWidth": 2.5,
+        "pointRadius": 0,
+        "showLine": True,
+        "fill": False,
+        "tension": 0.3,
+    })
+
+    y_lim = _val_limits(df["efficiency"], pad_frac=0.05)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg(f"Aerobic Efficiency (pace @ {ref_hr} bpm)"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "month"},
+                    **_time_limits(df["date"]),
+                },
+                "y": {
+                    "reverse": True,
+                    "title": {"display": True, "text": f"Pace @ {ref_hr} bpm (min/mi)"},
+                    **y_lim,
+                },
+            },
+        },
+        "_meta": {
+            "clickToScroll": True,
+            "dateStrings": date_strings,
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=320)
 
 
-def fatigue_chart(df: pd.DataFrame) -> go.Figure:
-    """Fatigue/freshness chart with ATL, CTL, and TSB."""
+# ── HR analysis charts ───────────────────────────────────────────────
+
+_HR_ZONE_COLORS = {
+    1: SLATE_60,        # Recovery
+    2: ACCENT_SLATE,    # Easy
+    3: ACCENT_AMBER,    # Moderate
+    4: ACCENT,          # Threshold
+    5: ACCENT_RED,      # Max
+}
+_HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
+
+
+def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -> html.Div:
+    """Horizontal bar chart of % runs per HR zone."""
+    if "hr_zone" not in runs.columns:
+        return _empty_chart("No HR zone data")
+
+    df = runs[runs["hr_zone"].notna()].copy()
+    if df.empty:
+        return _empty_chart("No HR zone data")
+
+    counts = df["hr_zone"].value_counts().reindex(range(1, 6), fill_value=0)
+    total = counts.sum()
+    pcts = [round(counts.get(z, 0) / total * 100, 1) if total > 0 else 0 for z in range(1, 6)]
+    colors = [_HR_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
+
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": _HR_ZONE_LABELS,
+            "datasets": [{
+                "label": "% of Runs",
+                "data": pcts,
+                "backgroundColor": colors,
+                "borderRadius": 2,
+            }],
+        },
+        "options": {
+            "indexAxis": "y",
+            "plugins": {
+                "title": _title_cfg("HR Zone Distribution"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "% of Runs"},
+                    "max": round(max(pcts) * 1.15, 1) if pcts else 100,
+                },
+                "y": {},
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=250)
+
+
+def hr_over_time_chart(runs: pd.DataFrame, chart_id: str = "hr-trend") -> html.Div:
+    """Scatter of adjusted HR over time with 30-day rolling avg."""
+    if "adjusted_hr" not in runs.columns:
+        return _empty_chart("No HR data")
+
+    df = runs[runs["adjusted_hr"].notna()].copy()
+    df = df[(df["adjusted_hr"] > 100) & (df["adjusted_hr"] < 220)]
+    if df.empty:
+        return _empty_chart("No valid HR data")
+
+    df = df.sort_values("date")
+
+    datasets = [{
+        "label": "_runs",
+        "data": [
+            {"x": _ts(row["date"]), "y": round(row["adjusted_hr"], 1)}
+            for _, row in df.iterrows()
+        ],
+        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.4),
+        "borderColor": ACCENT_SLATE,
+        "pointRadius": _PT,
+        "pointHoverRadius": _PT_HOVER,
+        "showLine": False,
+    }]
+
+    trend_idx = len(datasets)
+    rolling = df.set_index("date")["adjusted_hr"].rolling("30D").mean()
+    datasets.append({
+        "label": "30-day avg",
+        "data": [
+            {"x": _ts(d), "y": round(v, 1)}
+            for d, v in zip(rolling.index, rolling.values)
+            if pd.notna(v)
+        ],
+        "borderColor": ACCENT,
+        "borderWidth": 2.5,
+        "pointRadius": 0,
+        "showLine": True,
+        "fill": False,
+        "tension": 0.3,
+    })
+
+    y_lim = _val_limits(df["adjusted_hr"], pad_frac=0.05)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Adjusted HR Over Time"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "month"},
+                    **_time_limits(df["date"]),
+                },
+                "y": {
+                    "title": {"display": True, "text": "Adjusted HR (bpm)"},
+                    **y_lim,
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=280)
+
+
+# ── stroller chart ───────────────────────────────────────────────────
+
+def stroller_pace_chart(runs: pd.DataFrame, chart_id: str = "stroller-pace") -> html.Div:
+    """Scatter: stroller vs solo pace over time with trend lines."""
+    if "with_kid" not in runs.columns:
+        return _empty_chart("No stroller data")
+
+    stroller = runs[runs["with_kid"] == True].copy()
+    solo = runs[runs["with_kid"] == False].copy()
+    if stroller.empty or len(stroller) < 3:
+        return _empty_chart("Not enough stroller runs")
+
+    both = pd.concat([stroller, solo])
+    both = both[(both["pace_min_per_mi"] >= 6) & (both["pace_min_per_mi"] <= 15)]
+    stroller = both[both["with_kid"] == True].sort_values("date")
+    solo = both[both["with_kid"] == False].sort_values("date")
+
+    datasets = [
+        {
+            "label": "Solo",
+            "data": [{"x": _ts(r["date"]), "y": round(r["pace_min_per_mi"], 2)} for _, r in solo.iterrows()],
+            "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.25),
+            "borderColor": ACCENT_SLATE,
+            "pointRadius": 2,
+            "pointHoverRadius": 4,
+            "showLine": False,
+        },
+        {
+            "label": "Stroller",
+            "data": [{"x": _ts(r["date"]), "y": round(r["pace_min_per_mi"], 2)} for _, r in stroller.iterrows()],
+            "backgroundColor": ACCENT,
+            "borderColor": ACCENT,
+            "pointRadius": 4,
+            "pointHoverRadius": 6,
+            "showLine": False,
+        },
+    ]
+
+    # Trend lines
+    if len(solo) >= 3:
+        solo_roll = solo.set_index("date")["pace_min_per_mi"].rolling("30D").mean()
+        datasets.append({
+            "label": "_solo_trend",
+            "data": [{"x": _ts(d), "y": round(v, 2)} for d, v in zip(solo_roll.index, solo_roll.values) if pd.notna(v)],
+            "borderColor": ACCENT_SLATE,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+    if len(stroller) >= 3:
+        str_roll = stroller.set_index("date")["pace_min_per_mi"].rolling("60D").mean()
+        datasets.append({
+            "label": "_stroller_trend",
+            "data": [{"x": _ts(d), "y": round(v, 2)} for d, v in zip(str_roll.index, str_roll.values) if pd.notna(v)],
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+
+    y_lim = _val_limits(both["pace_min_per_mi"], pad_frac=0.05)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Stroller vs Solo Pace Over Time"),
+                "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "month"},
+                    **_time_limits(both["date"]),
+                },
+                "y": {
+                    "reverse": True,
+                    "title": {"display": True, "text": "Pace (min/mi)"},
+                    **y_lim,
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
+
+
+# ── heat vs pace chart ───────────────────────────────────────────────
+
+def heat_vs_pace_chart(runs: pd.DataFrame, chart_id: str = "heat-pace") -> html.Div:
+    """Scatter of temperature vs pace, color-coded by run type."""
+    if "weather_temp_f" not in runs.columns:
+        return _empty_chart("No temperature data")
+
+    df = runs[
+        runs["weather_temp_f"].notna()
+        & runs["pace_min_per_mi"].between(6, 15)
+    ].copy()
+    if len(df) < 10:
+        return _empty_chart("Not enough runs with temperature data")
+
+    datasets = []
+    if "run_type" in df.columns:
+        for rtype in sorted(df["run_type"].unique()):
+            subset = df[df["run_type"] == rtype]
+            color = RUN_TYPE_COLORS.get(rtype, TEXT_SECONDARY)
+            datasets.append({
+                "label": rtype.title(),
+                "data": [
+                    {"x": round(r["weather_temp_f"], 1), "y": round(r["pace_min_per_mi"], 2)}
+                    for _, r in subset.iterrows()
+                ],
+                "backgroundColor": color,
+                "borderColor": color,
+                "pointRadius": _PT,
+                "pointHoverRadius": _PT_HOVER,
+                "showLine": False,
+            })
+    else:
+        datasets.append({
+            "label": "Runs",
+            "data": [
+                {"x": round(r["weather_temp_f"], 1), "y": round(r["pace_min_per_mi"], 2)}
+                for _, r in df.iterrows()
+            ],
+            "backgroundColor": ACCENT,
+            "borderColor": ACCENT,
+            "pointRadius": _PT,
+            "pointHoverRadius": _PT_HOVER,
+            "showLine": False,
+        })
+
+    # Linear trend line
+    import numpy as np
+    valid = df[["weather_temp_f", "pace_min_per_mi"]].dropna()
+    if len(valid) >= 10:
+        coeffs = np.polyfit(valid["weather_temp_f"], valid["pace_min_per_mi"], 1)
+        x_min, x_max = float(valid["weather_temp_f"].min()), float(valid["weather_temp_f"].max())
+        datasets.append({
+            "label": "_trend",
+            "data": [
+                {"x": round(x_min, 1), "y": round(coeffs[0] * x_min + coeffs[1], 2)},
+                {"x": round(x_max, 1), "y": round(coeffs[0] * x_max + coeffs[1], 2)},
+            ],
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+        })
+
+    y_lim = _val_limits(df["pace_min_per_mi"], pad_frac=0.05)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Temperature vs Pace"),
+                "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            },
+            "scales": {
+                "x": {
+                    "title": {"display": True, "text": "Temperature (\u00b0F)"},
+                    **_val_limits(df["weather_temp_f"], pad_frac=0.05),
+                },
+                "y": {
+                    "reverse": True,
+                    "title": {"display": True, "text": "Pace (min/mi)"},
+                    **y_lim,
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
+
+
+def fatigue_chart(df: pd.DataFrame, chart_id: str = "fatigue") -> html.Div:
+    """Training load: ATL, CTL, TSB with area fill."""
     if "acute_load_7d" not in df.columns:
         return _empty_chart("No training load data available")
-    has_fatigue = df[df["acute_load_7d"].notna()].copy()
-    if has_fatigue.empty:
+    has = df[df["acute_load_7d"].notna()].copy()
+    if has.empty:
         return _empty_chart("No training load data available")
 
-    fig = go.Figure()
+    labels = [_ts(d) for d in has["date"]]
 
-    fig.add_trace(go.Scatter(
-        x=has_fatigue["date"], y=has_fatigue["chronic_load_28d"],
-        mode="lines", name="Fitness (CTL)",
-        line=dict(color=ACCENT_TEAL, width=2),
-        hovertemplate="Fitness: %{y:.0f}<extra></extra>",
-    ))
-    fig.add_trace(go.Scatter(
-        x=has_fatigue["date"], y=has_fatigue["acute_load_7d"],
-        mode="lines", name="Fatigue (ATL)",
-        line=dict(color=ACCENT_RED, width=2),
-        hovertemplate="Fatigue: %{y:.0f}<extra></extra>",
-    ))
-    fig.add_trace(go.Scatter(
-        x=has_fatigue["date"], y=has_fatigue["freshness"],
-        mode="lines", name="Form (TSB)",
-        line=dict(color=ACCENT_GREEN, width=2),
-        fill="tozeroy", fillcolor=_hex_to_rgba(ACCENT_GREEN, 0.1),
-        hovertemplate="Form: %{y:.0f}<extra></extra>",
-    ))
+    datasets = [
+        {
+            "label": "Fitness (CTL)",
+            "data": [round(v, 1) if pd.notna(v) else None for v in has["chronic_load_28d"]],
+            "borderColor": ACCENT_SLATE,
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "fill": False,
+            "tension": 0.3,
+        },
+        {
+            "label": "Fatigue (ATL)",
+            "data": [round(v, 1) if pd.notna(v) else None for v in has["acute_load_7d"]],
+            "borderColor": ACCENT_RED,
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "fill": False,
+            "tension": 0.3,
+        },
+        {
+            "label": "Form (TSB)",
+            "data": [round(v, 1) if pd.notna(v) else None for v in has["freshness"]],
+            "borderColor": ACCENT_AMBER,
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "fill": "origin",
+            "backgroundColor": _hex_to_rgba(ACCENT_AMBER, 0.1),
+            "tension": 0.3,
+        },
+    ]
 
-    fig.update_xaxes(title="")
-    fig.update_yaxes(title="Load / Freshness")
-    all_y = pd.concat([
-        has_fatigue["chronic_load_28d"], has_fatigue["acute_load_7d"],
-        has_fatigue["freshness"],
-    ]).dropna()
-    y_pad = (all_y.max() - all_y.min()) * 0.1 if len(all_y) else 5
-    _apply_range_limits(
-        fig,
-        x_min=has_fatigue["date"].min() - timedelta(days=7),
-        x_max=has_fatigue["date"].max() + timedelta(days=7),
-        y_min=all_y.min() - y_pad,
-        y_max=all_y.max() + y_pad,
-    )
-    return _clean_layout(fig, title="Training Load & Freshness", height=400)
+    all_y = pd.concat([has["chronic_load_28d"], has["acute_load_7d"], has["freshness"]]).dropna()
+
+    cfg: dict[str, Any] = {
+        "type": "line",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Training Load & Freshness"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "week"},
+                    **_time_limits(has["date"]),
+                },
+                "y": {
+                    "title": {"display": True, "text": "Load / Freshness"},
+                    **_val_limits(all_y, pad_frac=0.1),
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=400)
 
 
-# ---------------------------------------------------------------------------
-# Lifting charts
-# ---------------------------------------------------------------------------
+# ── lifting charts ────────────────────────────────────────────────────
 
-def lift_progression_chart(df: pd.DataFrame) -> go.Figure:
-    """Line chart of working weights over time for primary lifts."""
+def lift_progression_chart(df: pd.DataFrame, chart_id: str = "lift-prog") -> html.Div:
+    """Line chart of working weights over time."""
     lifts_data = df[df["type"] == "Weight Training"].copy()
     if lifts_data.empty:
         return _empty_chart("No weight training sessions found")
 
-    fig = go.Figure()
-
+    datasets = []
+    all_weights = []
+    all_dates = []
     for lift, color in LIFT_COLORS.items():
         col = f"{lift}_weight"
         if col not in lifts_data.columns:
             continue
-        subset = lifts_data[lifts_data[col].notna() & (lifts_data[col] > 0)]
+        subset = lifts_data[lifts_data[col].notna() & (lifts_data[col] > 0)].sort_values("date")
         if subset.empty:
             continue
-        fig.add_trace(go.Scatter(
-            x=subset["date"], y=subset[col],
-            mode="lines+markers", name=lift.title(),
-            line=dict(color=color, width=2),
-            marker=dict(size=6),
-            hovertemplate=f"{lift.title()}: %{{y:.0f}} lbs<extra></extra>",
-        ))
+        all_weights.extend(subset[col].tolist())
+        all_dates.extend(subset["date"].tolist())
+        datasets.append({
+            "label": lift.title(),
+            "data": [
+                {"x": _ts(row["date"]), "y": round(float(row[col]), 1)}
+                for _, row in subset.iterrows()
+            ],
+            "borderColor": color,
+            "backgroundColor": color,
+            "borderWidth": 2,
+            "pointRadius": _PT_LINE,
+            "pointHoverRadius": _PT_LINE_H,
+            "tension": 0.2,
+            "fill": False,
+        })
 
-    fig.update_xaxes(title="")
-    fig.update_yaxes(title="Weight (lbs)")
-    weight_cols = [f"{l}_weight" for l in LIFT_COLORS if f"{l}_weight" in lifts_data.columns]
-    all_weights = lifts_data[weight_cols].stack().dropna()
-    if not all_weights.empty:
-        y_pad = (all_weights.max() - all_weights.min()) * 0.05
-        _apply_range_limits(
-            fig,
-            x_min=lifts_data["date"].min() - timedelta(days=7),
-            x_max=lifts_data["date"].max() + timedelta(days=7),
-            y_min=all_weights.min() - y_pad,
-            y_max=all_weights.max() + y_pad,
-        )
-    return _clean_layout(fig, title="Working Weight Progression", height=400)
+    if not datasets:
+        return _empty_chart("No weight data for primary lifts")
+
+    w_series = pd.Series(all_weights)
+    date_series = pd.Series(all_dates)
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Working Weight Progression"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "week"},
+                    **_time_limits(date_series),
+                },
+                "y": {
+                    "title": {"display": True, "text": "Weight (lbs)"},
+                    **_val_limits(w_series),
+                },
+            },
+            "showLine": True,
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=400)
 
 
-def volume_chart(df: pd.DataFrame) -> go.Figure:
-    """Bar chart of volume per lift over time (stacked area was buggy)."""
+def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
+    """Stacked bar chart of volume per lift."""
     lifts_data = df[df["type"] == "Weight Training"].copy()
     if lifts_data.empty:
         return _empty_chart("No training volume data")
 
-    fig = go.Figure()
+    lifts_data = lifts_data.sort_values("date")
+    labels = [d.strftime("%b %d") for d in lifts_data["date"]]
 
+    datasets = []
+    all_vol = []
     for lift, color in LIFT_COLORS.items():
         col = f"{lift}_volume"
         if col not in lifts_data.columns:
             continue
-        subset = lifts_data[lifts_data[col].notna() & (lifts_data[col] > 0)]
-        if subset.empty:
+        vals = lifts_data[col].fillna(0).tolist()
+        if all(v == 0 for v in vals):
             continue
-        fig.add_trace(go.Bar(
-            x=subset["date"], y=subset[col],
-            name=lift.title(),
-            marker_color=color,
-            opacity=0.8,
-            hovertemplate=f"{lift.title()}: %{{y:,.0f}}<extra></extra>",
-        ))
+        all_vol.extend(v for v in vals if v > 0)
+        datasets.append({
+            "label": lift.title(),
+            "data": [round(v, 0) for v in vals],
+            "backgroundColor": _hex_to_rgba(color, 0.8),
+            "borderColor": color,
+            "borderWidth": 1,
+        })
 
-    fig.update_xaxes(title="")
-    fig.update_yaxes(title="Volume (sets x reps x weight)")
-    vol_cols = [f"{l}_volume" for l in LIFT_COLORS if f"{l}_volume" in lifts_data.columns]
-    all_vol = lifts_data[vol_cols].stack().dropna()
-    if not all_vol.empty:
-        _apply_range_limits(
-            fig,
-            x_min=lifts_data["date"].min() - timedelta(days=7),
-            x_max=lifts_data["date"].max() + timedelta(days=7),
-            y_min=0,
-            y_max=all_vol.max() * 1.05,
-        )
-    return _clean_layout(fig, title="Training Volume", height=350, barmode="stack")
+    if not datasets:
+        return _empty_chart("No volume data for primary lifts")
+
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Training Volume"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {"stacked": True, "ticks": {"maxRotation": 45}},
+                "y": {
+                    "stacked": True,
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Volume (sets x reps x weight)"},
+                    "max": round(max(all_vol) * 1.05) if all_vol else None,
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
 
 
-def onerm_progression_chart(progression_df: pd.DataFrame,
-                             lift_name: str, color: str) -> go.Figure:
-    """Line chart of estimated 1RM from the predictions module."""
+def onerm_progression_chart(
+    progression_df: pd.DataFrame,
+    lift_name: str,
+    color: str,
+    chart_id: str | None = None,
+) -> html.Div:
+    """Estimated 1RM with Kalman filter smoothing and confidence band."""
+    from strava_analytics.kalman import kalman_1rm
+
+    if chart_id is None:
+        chart_id = f"onerm-{lift_name.lower().replace(' ', '-')}"
+
     if progression_df.empty:
         return _empty_chart(f"No 1RM data for {lift_name}")
 
-    fig = go.Figure()
+    kdf = kalman_1rm(progression_df)
+    if kdf.empty:
+        return _empty_chart(f"No 1RM data for {lift_name}")
 
-    fig.add_trace(go.Scatter(
-        x=progression_df["date"], y=progression_df["estimated_1rm"],
-        mode="lines+markers", name="Ensemble",
-        line=dict(color=color, width=3),
-        marker=dict(size=6),
-        hovertemplate="Est. 1RM: %{y:.0f} lbs<extra></extra>",
-    ))
+    labels = [_ts(d) for d in kdf["date"]]
 
-    # Show range band instead of cluttered individual method lines
-    method_cols = [c for c in progression_df.columns if c.startswith("1rm_")]
-    if method_cols:
-        progression_df = progression_df.copy()
-        progression_df["_min"] = progression_df[method_cols].min(axis=1)
-        progression_df["_max"] = progression_df[method_cols].max(axis=1)
+    datasets = [
+        # Raw estimates as light dots
+        {
+            "label": "Estimates",
+            "data": [round(float(v), 1) for v in kdf["estimated_1rm"]],
+            "borderColor": _hex_to_rgba(color, 0.4),
+            "backgroundColor": _hex_to_rgba(color, 0.4),
+            "borderWidth": 0,
+            "pointRadius": _PT,
+            "pointHoverRadius": _PT_HOVER,
+        },
+        # Kalman smoothed line
+        {
+            "label": "Kalman",
+            "data": [round(float(v), 1) for v in kdf["kalman_1rm"]],
+            "borderColor": color,
+            "backgroundColor": color,
+            "borderWidth": 3,
+            "pointRadius": 0,
+            "fill": False,
+            "tension": 0.3,
+        },
+        # Confidence band (upper)
+        {
+            "label": "Upper",
+            "data": [round(float(v), 1) for v in kdf["kalman_upper"]],
+            "borderColor": "transparent",
+            "backgroundColor": _hex_to_rgba(color, 0.12),
+            "pointRadius": 0,
+            "fill": "+1",
+            "tension": 0.3,
+        },
+        # Confidence band (lower)
+        {
+            "label": "_lower",
+            "data": [round(float(v), 1) for v in kdf["kalman_lower"]],
+            "borderColor": "transparent",
+            "pointRadius": 0,
+            "fill": False,
+            "tension": 0.3,
+        },
+    ]
 
-        fig.add_trace(go.Scatter(
-            x=progression_df["date"], y=progression_df["_max"],
-            mode="lines", line=dict(width=0), showlegend=False,
-            hoverinfo="skip",
-        ))
-        fig.add_trace(go.Scatter(
-            x=progression_df["date"], y=progression_df["_min"],
-            mode="lines", line=dict(width=0), showlegend=False,
-            fill="tonexty", fillcolor=_hex_to_rgba(color, 0.15),
-            name="Model range",
-            hoverinfo="skip",
-        ))
-
-    fig.update_xaxes(title="")
-    fig.update_yaxes(title="Est. 1RM (lbs)")
-    y_pad = (progression_df["estimated_1rm"].max() - progression_df["estimated_1rm"].min()) * 0.05
-    _apply_range_limits(
-        fig,
-        x_min=progression_df["date"].min() - timedelta(days=7),
-        x_max=progression_df["date"].max() + timedelta(days=7),
-        y_min=progression_df["estimated_1rm"].min() - y_pad,
-        y_max=progression_df["estimated_1rm"].max() + y_pad,
-    )
-    return _clean_layout(fig, title=f"{lift_name} — Estimated 1RM", height=350)
-
-
-# ---------------------------------------------------------------------------
-# Estimated 5K time progression
-# ---------------------------------------------------------------------------
-
-def est_5k_chart(runs: pd.DataFrame) -> go.Figure:
-    """Estimated 5K race time progression.
-
-    Uses runs >= 3 miles to estimate 5K fitness via VDOT.
-    Adjusts for altitude and elevation gain. Shows actual races as stars.
-    Color-codes by run type. 30-day rolling best for the trend line.
-    """
-    from strava_analytics.vo2max import daniels_vdot, vdot_to_race_time
-    from strava_analytics.predictions import (
-        altitude_adjustment_peronnet, elevation_gain_penalty_s,
-    )
-
-    if runs.empty:
-        return _empty_chart("No runs for 5K estimation")
-
-    df = runs.copy()
-    # Only runs >= 3 miles with reasonable pace — short runs extrapolate poorly
-    df = df[(df["distance_mi"] >= 3.0) &
-            (df["pace_min_per_mi"] >= 6) & (df["pace_min_per_mi"] <= 14)]
-    if df.empty:
-        return _empty_chart("Need runs of 3+ miles for 5K estimation")
-
-    # Training altitude for adjustment
-    elev_high = df["elevation_high_m"].dropna()
-    elev_low = df["elevation_low_m"].dropna()
-    if not elev_high.empty and not elev_low.empty:
-        training_alt_m = (elev_high.mean() + elev_low.mean()) / 2
-    else:
-        training_alt_m = 1768  # ~5800ft default
-    alt_fraction = altitude_adjustment_peronnet(training_alt_m, acclimatized=True)
-
-    est_5k = []
-    actual_races = []
-
-    for _, r in df.sort_values("date").iterrows():
-        dist_m = r.get("distance_m", 0)
-        time_s = r.get("moving_time_s", 0)
-        time_min = time_s / 60.0
-        run_type = r.get("run_type", "")
-        elev_gain_ft = r.get("elevation_gain_ft", 0) or 0
-        dist_mi = r.get("distance_mi", 0)
-
-        if dist_m < 4800 or time_min < 15:
-            continue
-
-        # VDOT from the run as-performed
-        raw_vdot = daniels_vdot(dist_m, time_min)
-        adjusted_vdot = raw_vdot
-
-        # Credit for altitude
-        if 0 < alt_fraction < 1.0:
-            sl_time_min = time_min * alt_fraction
-            adjusted_vdot = daniels_vdot(dist_m, sl_time_min)
-
-        # Credit for elevation gain
-        if elev_gain_ft > 0 and dist_mi > 0:
-            gain_penalty_s = elevation_gain_penalty_s(elev_gain_ft, dist_mi)
-            flat_time_min = time_min - (gain_penalty_s / 60)
-            if flat_time_min > 0:
-                flat_vdot = daniels_vdot(dist_m, flat_time_min)
-                adjusted_vdot = max(adjusted_vdot, flat_vdot)
-
-        t5k = vdot_to_race_time(adjusted_vdot, 5000)
-
-        est_5k.append({
-            "date": r["date"],
-            "est_5k_min": t5k,
-            "name": r.get("name", ""),
-            "distance_mi": dist_mi,
-            "run_type": run_type,
-            "date_str": r["date"].strftime("%Y-%m-%d"),
-        })
-
-        # Track actual 5K-ish races as ground truth
-        if run_type == "race" and 4500 <= dist_m <= 5500:
-            actual_races.append({
-                "date": r["date"],
-                "actual_5k_min": time_min * (5000 / dist_m),
-                "name": r.get("name", ""),
+    # Highlight tested maxes
+    if "is_test" in kdf.columns:
+        tests = kdf[kdf["is_test"] == True]
+        if not tests.empty:
+            # Create sparse array with None for non-test points
+            test_data = [None] * len(kdf)
+            for idx in tests.index:
+                pos = kdf.index.get_loc(idx)
+                test_data[pos] = round(float(tests.loc[idx, "estimated_1rm"]), 1)
+            datasets.append({
+                "label": "Tested max",
+                "data": test_data,
+                "backgroundColor": "#ffffff",
+                "borderColor": color,
+                "borderWidth": 2,
+                "pointRadius": 6,
+                "pointHoverRadius": 8,
+                "pointStyle": "rectRot",
+                "showLine": False,
             })
 
-    if not est_5k:
-        return _empty_chart("Insufficient data for 5K estimate (need 3+ mile runs)")
+    all_vals = pd.concat([kdf["kalman_upper"], kdf["kalman_lower"], kdf["estimated_1rm"]])
+    y_lim = _val_limits(all_vals)
 
-    edf = pd.DataFrame(est_5k).sort_values("date")
-
-    def _fmt_5k(mins):
-        m, s = int(mins), int((mins % 1) * 60)
-        return f"{m}:{s:02d}"
-
-    edf["est_5k_str"] = edf["est_5k_min"].apply(_fmt_5k)
-
-    fig = go.Figure()
-
-    # Color-code dots by run type
-    type_colors = {
-        "race": STRAVA_ORANGE, "workout": ACCENT_TEAL,
-        "long": ACCENT_PURPLE, "moderate": ACCENT_YELLOW,
-        "easy": ACCENT_GREEN,
+    cfg: dict[str, Any] = {
+        "type": "line",
+        "data": {"labels": labels, "datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg(f"{lift_name} — Estimated 1RM (Kalman)"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "week"},
+                    **_time_limits(kdf["date"]),
+                },
+                "y": {
+                    "title": {"display": True, "text": "Est. 1RM (lbs)"},
+                    **y_lim,
+                },
+            },
+        },
     }
+    return _chart_wrap(chart_id, cfg, height=350)
+
+
+# ── race predictions (4 distances) ────────────────────────────────────
+
+_RACE_DISTANCES = [
+    (5_000,  "5K"),
+    (10_000, "10K"),
+    (21_097, "Half Marathon"),
+    (42_195, "Marathon"),
+]
+
+
+def _single_race_chart(
+    runs: pd.DataFrame, target_m: int, label: str, chart_id: str,
+) -> html.Div:
+    """Build one Kalman-filtered race prediction chart for a single distance."""
+    from strava_analytics.kalman import kalman_race
+
+    kdf = kalman_race(runs, target_m)
+    if kdf.empty:
+        return _empty_chart(f"Not enough data for {label}", height=280)
+
+    type_colors = {
+        "race": ACCENT, "long": ACCENT_SLATE,
+        "moderate": ACCENT_AMBER, "easy": SLATE_60,
+    }
+
+    datasets = []
+    date_strings: dict[int, list[str]] = {}
+
     for rtype, color in type_colors.items():
-        subset = edf[edf["run_type"] == rtype]
+        subset = kdf[kdf["run_type"] == rtype]
         if subset.empty:
             continue
-        fig.add_trace(go.Scatter(
-            x=subset["date"], y=subset["est_5k_min"],
-            mode="markers", name=rtype.title(),
-            marker=dict(color=color, size=10, opacity=0.8),
-            customdata=subset[["name", "distance_mi", "est_5k_str", "date_str"]].values,
-            hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} mi<br>Est 5K: %{customdata[2]}<extra></extra>",
-        ))
-    # Any types not in the map
-    other = edf[~edf["run_type"].isin(type_colors)]
-    if not other.empty:
-        fig.add_trace(go.Scatter(
-            x=other["date"], y=other["est_5k_min"],
-            mode="markers", name="Other",
-            marker=dict(color=TEXT_SECONDARY, size=9, opacity=0.7),
-            customdata=other[["name", "distance_mi", "est_5k_str", "date_str"]].values,
-            hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]:.1f} mi<br>Est 5K: %{customdata[2]}<extra></extra>",
-        ))
+        ds_idx = len(datasets)
+        datasets.append({
+            "label": rtype.title(),
+            "data": [
+                {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
+                for _, row in subset.iterrows()
+            ],
+            "backgroundColor": color,
+            "borderColor": color,
+            "pointRadius": 2,
+            "pointHoverRadius": 4,
+            "showLine": False,
+        })
+        date_strings[ds_idx] = subset["date_str"].tolist()
 
-    # 30-day rolling best (not average) — fitness is best measured by peaks
-    if len(edf) >= 3:
-        rolling = edf.set_index("date")["est_5k_min"].rolling("30D", min_periods=2).min()
-        fig.add_trace(go.Scatter(
-            x=rolling.index, y=rolling.values,
-            mode="lines", name="30-day best",
-            line=dict(color=STRAVA_ORANGE, width=3),
-            hovertemplate="Best: %{y:.1f} min<extra></extra>",
-        ))
-
-    # Actual race results as stars
-    if actual_races:
-        adf = pd.DataFrame(actual_races)
-        adf["label"] = adf["actual_5k_min"].apply(_fmt_5k)
-        fig.add_trace(go.Scatter(
-            x=adf["date"], y=adf["actual_5k_min"],
-            mode="markers", name="Actual 5K race",
-            marker=dict(color=ACCENT_GREEN, size=14, symbol="star",
-                         line=dict(width=1, color="white")),
-            customdata=adf[["name", "label"]].values,
-            hovertemplate="<b>%{customdata[0]}</b><br>Actual: %{customdata[1]}<extra></extra>",
-        ))
-
-    fig.update_yaxes(title="5K Time (min)")
-    fig.update_xaxes(title="")
-    _apply_range_limits(
-        fig,
-        x_min=edf["date"].min() - timedelta(days=7),
-        x_max=edf["date"].max() + timedelta(days=7),
-        y_min=edf["est_5k_min"].min() - 0.5,
-        y_max=edf["est_5k_min"].max() + 0.5,
-        y_reversed=True,
-    )
-    return _clean_layout(fig, title="Estimated 5K Race Time (altitude + elevation adjusted)", height=380)
-
-
-# ---------------------------------------------------------------------------
-# Activity heatmap (fixed for multi-year data)
-# ---------------------------------------------------------------------------
-
-def activity_heatmap(df: pd.DataFrame) -> go.Figure:
-    """GitHub-style contribution calendar — uniform cells, color = activity count."""
-    import numpy as np
-
-    if df.empty:
-        return _empty_chart("No activity data for heatmap")
-
-    # Build daily counts
-    daily = df.groupby(df["date"].dt.date).agg(
-        count=("activity_id", "count"),
-        types=("type", lambda x: ", ".join(x.unique())),
-    ).reset_index()
-    daily.columns = ["date", "count", "types"]
-    daily["date"] = pd.to_datetime(daily["date"])
-
-    # Fill every day in range so the grid has no gaps
-    date_range = pd.date_range(daily["date"].min(), daily["date"].max(), freq="D")
-    full = pd.DataFrame({"date": date_range})
-    full = full.merge(daily, on="date", how="left")
-    full["count"] = full["count"].fillna(0).astype(int)
-    full["types"] = full["types"].fillna("")
-
-    # Week number (continuous from start) on x-axis, weekday on y-axis
-    start = full["date"].min()
-    full["week"] = ((full["date"] - start).dt.days // 7).astype(int)
-    full["weekday"] = full["date"].dt.weekday  # 0=Mon, 6=Sun
-
-    # Build the 7 x N_weeks grid
-    n_weeks = full["week"].max() + 1
-    z = np.zeros((7, n_weeks))
-    hover_text = [[" "] * n_weeks for _ in range(7)]
-
-    for _, row in full.iterrows():
-        w = int(row["week"])
-        wd = int(row["weekday"])
-        z[wd][w] = row["count"]
-        dt = row["date"].strftime("%b %d, %Y")
-        c = int(row["count"])
-        t = row["types"]
-        if c > 0:
-            hover_text[wd][w] = f"<b>{dt}</b><br>{t}<br>{c} activit{'y' if c == 1 else 'ies'}"
-        else:
-            hover_text[wd][w] = f"{dt}<br>Rest day"
-
-    # Month labels for x-axis
-    month_ticks = []
-    month_labels = []
-    for _, row in full.drop_duplicates("week").iterrows():
-        if row["date"].day <= 7:  # first week of month
-            month_ticks.append(int(row["week"]))
-            month_labels.append(row["date"].strftime("%b '%y"))
-
-    fig = go.Figure(go.Heatmap(
-        z=z,
-        x=list(range(n_weeks)),
-        y=list(range(7)),
-        text=hover_text,
-        hoverinfo="text",
-        colorscale=[
-            [0, "#f5f5f4"],       # no activity — light gray
-            [0.01, "#fde8e8"],    # just above zero — lightest pink
-            [0.35, "#fca5a5"],    # moderate
-            [0.65, STRAVA_ORANGE],  # active
-            [1, ACCENT_RED],      # very active
+    # Kalman smoothed line
+    datasets.append({
+        "label": "Predicted",
+        "data": [
+            {"x": _ts(row["date"]), "y": row["kalman_min"]}
+            for _, row in kdf.iterrows()
         ],
-        showscale=False,
-        xgap=3,
-        ygap=3,
-        zmin=0,
-        zmax=max(3, full["count"].max()),
-    ))
+        "borderColor": ACCENT,
+        "borderWidth": 2,
+        "pointRadius": 0,
+        "showLine": True,
+        "fill": False,
+        "tension": 0.3,
+    })
 
-    # Default view: last 6 months; user can pan/scroll to see all
-    default_weeks = 26
-    x_end = n_weeks - 1
-    x_start = max(0, x_end - default_weeks)
+    # Confidence band
+    datasets.append({
+        "label": "_upper",
+        "data": [{"x": _ts(row["date"]), "y": row["kalman_upper"]}
+                 for _, row in kdf.iterrows()],
+        "borderColor": "transparent",
+        "backgroundColor": _hex_to_rgba(ACCENT, 0.1),
+        "pointRadius": 0, "showLine": True, "fill": "+1", "tension": 0.3,
+    })
+    datasets.append({
+        "label": "_lower",
+        "data": [{"x": _ts(row["date"]), "y": row["kalman_lower"]}
+                 for _, row in kdf.iterrows()],
+        "borderColor": "transparent",
+        "pointRadius": 0, "showLine": True, "fill": False, "tension": 0.3,
+    })
 
-    fig.update_yaxes(
-        tickvals=[0, 1, 2, 3, 4, 5, 6],
-        ticktext=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        title="",
-        autorange="reversed",
-        showgrid=False,
-        tickfont=dict(size=12, color="#57534e"),
-        fixedrange=True,
-    )
-    fig.update_xaxes(
-        tickvals=month_ticks,
-        ticktext=month_labels,
-        title="",
-        showgrid=False,
-        tickfont=dict(size=12, color="#57534e"),
-        range=[x_start - 0.5, x_end + 0.5],
-        minallowed=-0.5,
-        maxallowed=n_weeks - 0.5,
-    )
+    # Ground truth race markers
+    gt = kdf[kdf["R"] < 0]
+    if not gt.empty:
+        datasets.append({
+            "label": "Race result",
+            "data": [{"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
+                     for _, row in gt.iterrows()],
+            "backgroundColor": ACCENT_SLATE,
+            "borderColor": "#ffffff",
+            "borderWidth": 1,
+            "pointRadius": 6,
+            "pointHoverRadius": 8,
+            "pointStyle": "star",
+            "showLine": False,
+        })
 
-    fig.update_layout(margin=dict(l=50, r=20, t=10, b=40))
-    return _clean_layout(fig, title="", height=250, showlegend=False)
+    y_lim = _val_limits(kdf["est_time_min"], pad_frac=0.05)
+
+    # Y-axis label: MM:SS for shorter, H:MM for longer
+    y_label = f"{label} Time (min)" if target_m <= 10_000 else f"{label} Time (min)"
+
+    cfg: dict[str, Any] = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg(label),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "type": "time", "time": {"unit": "month"},
+                    **_time_limits(kdf["date"]),
+                },
+                "y": {
+                    "reverse": True,
+                    "title": {"display": True, "text": y_label},
+                    **y_lim,
+                },
+            },
+        },
+        "_meta": {
+            "clickToScroll": True,
+            "dateStrings": date_strings,
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=280)
 
 
-# ---------------------------------------------------------------------------
-# Monthly volume
-# ---------------------------------------------------------------------------
+def race_predictions_chart(runs: pd.DataFrame, chart_id: str = "race-pred") -> html.Div:
+    """Tabbed race predictions — one Kalman-filtered chart per distance."""
+    if runs.empty:
+        return _empty_chart("No runs for race prediction")
 
-def monthly_volume_chart(df: pd.DataFrame) -> go.Figure:
-    """Monthly distance bar chart with activity count overlay."""
+    # Build all 4 charts (hidden by default, JS tabs switch visibility)
+    panels = []
+    tab_buttons = []
+    for i, (target_m, label) in enumerate(_RACE_DISTANCES):
+        sub_id = f"{chart_id}-{label.lower().replace(' ', '-')}"
+        is_default = (i == 0)
+        panels.append(html.Div(
+            _single_race_chart(runs, target_m, label, sub_id),
+            id=f"{chart_id}-panel-{i}",
+            className="race-tab-panel",
+            style={"display": "block" if is_default else "none"},
+        ))
+        tab_buttons.append(html.Button(
+            label,
+            className="race-tab-btn race-tab-active" if is_default else "race-tab-btn",
+            **{"data-tab-index": str(i), "data-chart-id": chart_id},
+        ))
+
+    tabs_bar = html.Div(tab_buttons, className="race-tabs-bar",
+                         style={"display": "flex", "gap": "0",
+                                "marginBottom": "12px"})
+
+    return html.Div([tabs_bar, *panels], id=f"{chart_id}-tabs")
+
+
+# ── monthly volume ────────────────────────────────────────────────────
+
+def monthly_volume_chart(df: pd.DataFrame, chart_id: str = "monthly-vol") -> html.Div:
+    """Dual-axis: monthly distance bars + activity count line."""
     if df.empty:
         return _empty_chart("No data for monthly volume")
 
     monthly = df.groupby(df["date"].dt.to_period("M")).agg(
         miles=("distance_mi", "sum"),
-        hours=("moving_time_s", lambda x: x.sum() / 3600),
         count=("activity_id", "count"),
     ).reset_index()
-    monthly["date"] = monthly["date"].astype(str)
+    monthly["label"] = monthly["date"].astype(str)
+    monthly = monthly.sort_values("date")
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=monthly["date"], y=monthly["miles"],
-        name="Miles", marker_color=STRAVA_ORANGE,
-        hovertemplate="%{y:.1f} mi<extra></extra>",
-    ))
-    fig.add_trace(go.Scatter(
-        x=monthly["date"], y=monthly["count"],
-        name="Activities", yaxis="y2",
-        mode="lines+markers",
-        line=dict(color=ACCENT_TEAL, width=2),
-        marker=dict(size=5),
-        hovertemplate="%{y} activities<extra></extra>",
-    ))
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": monthly["label"].tolist(),
+            "datasets": [
+                {
+                    "label": "Miles",
+                    "data": [round(v, 1) for v in monthly["miles"]],
+                    "backgroundColor": ACCENT,
+                    "borderRadius": 2,
+                    "yAxisID": "y",
+                    "order": 2,
+                },
+                {
+                    "label": "Activities",
+                    "data": monthly["count"].tolist(),
+                    "type": "line",
+                    "borderColor": ACCENT_SLATE,
+                    "backgroundColor": ACCENT_SLATE,
+                    "borderWidth": 2,
+                    "pointRadius": _PT_LINE,
+                    "yAxisID": "y1",
+                    "fill": False,
+                    "order": 1,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Monthly Volume"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45}},
+                "y": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Miles"},
+                    "position": "left",
+                    "max": round(float(monthly["miles"].max()) * 1.1, 1),
+                },
+                "y1": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Activities"},
+                    "position": "right",
+                    "grid": {"drawOnChartArea": False},
+                    "max": int(monthly["count"].max() + 2),
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
 
-    fig.update_xaxes(title="", tickangle=-45)
-    fig.update_yaxes(title="Miles")
-    _apply_range_limits(fig, y_min=0, y_max=monthly["miles"].max() * 1.1)
-    return _clean_layout(fig,
-        title="Monthly Volume", height=350,
-        yaxis2=dict(title="Activities", overlaying="y", side="right",
-                     gridcolor="rgba(0,0,0,0)"),
-    )
 
+# ── plan calendar (pure CSS grid) ────────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# Training plan calendar
-# ---------------------------------------------------------------------------
-
-def plan_calendar_chart(plan_rows: list[dict]) -> go.Figure:
-    """Calendar-style view of the training plan.
-
-    Handles multiple workouts on the same day by offsetting vertically.
-    """
+def plan_calendar_chart(plan_rows: list[dict]) -> html.Div:
+    """Calendar grid — pure HTML/CSS, no Chart.js."""
     if not plan_rows:
         return _empty_chart("No training plan data")
 
@@ -722,47 +1173,53 @@ def plan_calendar_chart(plan_rows: list[dict]) -> go.Figure:
     df["date"] = pd.to_datetime(df["date"])
     df["weekday"] = df["date"].dt.weekday
 
-    # Offset duplicate day entries so they don't overlap
-    # Group by (week, weekday) and add small vertical offset
-    df["day_key"] = df["week"].astype(str) + "_" + df["weekday"].astype(str)
-    df["offset"] = df.groupby("day_key").cumcount() * 0.4  # shift 2nd workout down
-    df["y_pos"] = df["weekday"] + df["offset"]
+    weeks = sorted(df["week"].unique())
+    n_weeks = len(weeks)
 
-    colors = [WORKOUT_TYPE_COLORS.get(t, TEXT_SECONDARY) for t in df["type"]]
+    type_letter = {"lift": "L", "run": "R", "rest": "-", "obstacle": "O", "mobility": "M"}
 
-    # Build labels: first letter of type, or "R+L" for double days
-    labels = []
-    for _, r in df.iterrows():
-        t = r["type"]
-        labels.append({"lift": "L", "run": "R", "rest": "-", "obstacle": "O",
-                        "mobility": "M"}.get(t, t[0].upper()))
+    header = [html.Div("", className="plan-calendar-header")]
+    for w in weeks:
+        header.append(html.Div(f"Wk {w}", className="plan-calendar-header"))
 
-    fig = go.Figure(go.Scatter(
-        x=df["week"],
-        y=df["y_pos"],
-        mode="markers+text",
-        marker=dict(size=26, color=colors, symbol="square",
-                     line=dict(width=1, color="rgba(255,255,255,0.15)")),
-        text=labels,
-        textfont=dict(color="white", size=10),
-        hovertext=df.apply(
-            lambda r: f"<b>{r['title']}</b><br>{r['day_name']}, {r['date'].strftime('%b %d')}<br>{r['intensity']}",
-            axis=1,
-        ),
-        hoverinfo="text",
-    ))
+    rows = [html.Div(header, style={
+        "display": "grid",
+        "gridTemplateColumns": f"40px repeat({n_weeks}, 32px)",
+        "gap": "4px",
+        "justifyContent": "center",
+    })]
 
-    fig.update_yaxes(
-        tickvals=[0, 1, 2, 3, 4, 5, 6],
-        ticktext=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-        autorange="reversed", title="",
-        range=[-0.5, 7.2],  # extra room for offset items
-    )
-    fig.update_xaxes(
-        title="Week", dtick=1,
-        autorangeoptions=dict(
-            minallowed=df["week"].min() - 0.5,
-            maxallowed=df["week"].max() + 0.5,
-        ),
-    )
-    return _clean_layout(fig, title="8-Week Training Plan", height=320, showlegend=False)
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    for day_idx, day_name in enumerate(day_names):
+        row_cells = [html.Div(day_name, className="plan-calendar-header",
+                              style={"lineHeight": "32px"})]
+        for w in weeks:
+            matches = df[(df["week"] == w) & (df["weekday"] == day_idx)]
+            if matches.empty:
+                row_cells.append(html.Div(style={"width": "32px", "height": "32px"}))
+            else:
+                first = matches.iloc[0]
+                wtype = first["type"]
+                color = WORKOUT_TYPE_COLORS.get(wtype, TEXT_MUTED)
+                letter = type_letter.get(wtype, wtype[0].upper() if wtype else "?")
+                title_text = f"{first['title']} — {first['day_name']}, {first['date'].strftime('%b %d')} — {first['intensity']}"
+
+                if len(matches) > 1:
+                    letter = "+".join(
+                        type_letter.get(r["type"], "?") for _, r in matches.iterrows()
+                    )
+
+                row_cells.append(html.Div(
+                    letter,
+                    className="plan-calendar-cell",
+                    title=title_text,
+                    style={"backgroundColor": color},
+                ))
+        rows.append(html.Div(row_cells, style={
+            "display": "grid",
+            "gridTemplateColumns": f"40px repeat({n_weeks}, 32px)",
+            "gap": "4px",
+            "justifyContent": "center",
+        }))
+
+    return html.Div(rows, style={"marginBottom": "8px"})

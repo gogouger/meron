@@ -14,8 +14,8 @@ from strava_analytics.web.components.layout import (
     numbered_card, cta_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_TEAL, ACCENT_GREEN, ACCENT_YELLOW, ACCENT_RED,
-    ACCENT_PURPLE, PHASE_COLORS, WORKOUT_TYPE_COLORS,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
+    PHASE_COLORS, WORKOUT_TYPE_COLORS,
     TEXT_SECONDARY, TEXT_MUTED, BG_CARD, BORDER,
 )
 from strava_analytics.training_plan import (
@@ -26,11 +26,6 @@ from strava_analytics.predictions import estimate_1rm
 
 dash.register_page(__name__, path="/plan", name="Training Plan")
 
-CHART_CONFIG = {
-    "displaylogo": False,
-    "scrollZoom": False,
-    "modeBarButtonsToRemove": ["select2d", "lasso2d", "toImage", "autoScale2d"],
-}
 
 
 def _get_current_1rms(df: pd.DataFrame) -> dict:
@@ -166,11 +161,11 @@ def layout(**_kwargs):
                 numbered_card(1, "Duration", "Apr 6 \u2014 May 31",
                               value="8 weeks", color=ACCENT),
                 numbered_card(2, "Lift Sessions", "",
-                              value=str(total_lift), color=ACCENT_YELLOW),
+                              value=str(total_lift), color=ACCENT_AMBER),
                 numbered_card(3, "Run Sessions", "",
-                              value=str(total_run), color=ACCENT_TEAL),
+                              value=str(total_run), color=ACCENT_SLATE),
                 numbered_card(4, "Rest Days", "",
-                              value=str(total_rest), color=ACCENT_GREEN),
+                              value=str(total_rest), color=ACCENT_SLATE),
             ], columns=4),
         ]),
 
@@ -183,9 +178,7 @@ def layout(**_kwargs):
 
         # Calendar
         page_section("CALENDAR", [
-            dcc.Graph(
-                figure=charts.plan_calendar_chart(flat), config=CHART_CONFIG,
-            ),
+            charts.plan_calendar_chart(flat),
             _legend(),
         ], alt_bg=True),
 
@@ -268,7 +261,7 @@ def _obstacle_prep_section():
         exercises = info["exercises"]
         freq = info.get("frequency", "")
         items.append(html.Div([
-            html.H6(label, style={"color": ACCENT_PURPLE, "marginBottom": "4px"}),
+            html.H6(label, style={"color": ACCENT_AMBER, "marginBottom": "4px"}),
             html.Ul([html.Li(ex, style={"fontSize": "0.85rem", "color": TEXT_SECONDARY})
                       for ex in exercises]),
             html.P(f"Frequency: {freq}",

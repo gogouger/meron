@@ -26,12 +26,12 @@
         }
     });
 
-    // Hide hover card when mouse leaves any plotly chart
+    // Hide hover card when mouse leaves any chart area
     document.addEventListener("mouseout", function (e) {
         var target = e.target;
-        if (target && target.closest && target.closest(".js-plotly-plot")) {
+        if (target && target.closest && target.closest(".cjs-chart-wrap")) {
             var related = e.relatedTarget;
-            if (!related || !related.closest || !related.closest(".js-plotly-plot")) {
+            if (!related || !related.closest || !related.closest(".cjs-chart-wrap")) {
                 var card = document.getElementById("run-hover-card");
                 if (card) card.style.display = "none";
             }
