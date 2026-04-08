@@ -438,10 +438,18 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                         p_min = min(avg_paces) - 0.3
                         p_max = max(avg_paces) + 0.3
 
+                        _max_visible = 20
                         x_cfg: dict = {
                             "type": "time", "time": {"unit": "month"},
                             "grid": {"display": True},
                         }
+                        # Window to last N points; store full range for pan limits
+                        x_data_min = chart_points[0]["x"]
+                        x_data_max = chart_points[-1]["x"]
+                        if len(chart_points) > _max_visible:
+                            x_cfg["min"] = chart_points[-_max_visible]["x"]
+                        x_cfg["_dataMin"] = x_data_min
+                        x_cfg["_dataMax"] = x_data_max
 
                         hist_cfg_obj = {
                             "type": "scatter",

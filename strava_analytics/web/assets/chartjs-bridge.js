@@ -229,12 +229,22 @@
 
             // panOnly meta flag: pan on x only, no zoom, clamp to data
             if (meta.panOnly) {
-                // Ensure all axes are clamped to original bounds
+                // Use _dataMin/_dataMax for full pan range, fallback to "original"
                 if (cfg.options.scales) {
                     Object.keys(cfg.options.scales).forEach(function (key) {
-                        if (!zoomLimits[key]) {
-                            zoomLimits[key] = { min: "original", max: "original", minRange: 0 };
+                        var s = cfg.options.scales[key];
+                        var lo = s._dataMin, hi = s._dataMax;
+                        delete s._dataMin;
+                        delete s._dataMax;
+                        if (s.type === "time") {
+                            if (typeof lo === "string") lo = new Date(lo).getTime();
+                            if (typeof hi === "string") hi = new Date(hi).getTime();
                         }
+                        zoomLimits[key] = {
+                            min: lo !== undefined ? lo : "original",
+                            max: hi !== undefined ? hi : "original",
+                            minRange: 0,
+                        };
                     });
                 }
                 cfg.options.plugins.zoom = {
