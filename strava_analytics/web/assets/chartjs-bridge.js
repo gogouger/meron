@@ -226,7 +226,8 @@
             var zoomMode = hasCategory ? "y" : "xy";
 
             // panOnly meta flag: pan on x only, no zoom
-            if (meta.panOnly) {
+            var cfgMeta = cfg._meta || {};
+            if (cfgMeta.panOnly) {
                 cfg.options.plugins.zoom = {
                     pan: { enabled: true, mode: "x" },
                     zoom: { wheel: { enabled: false }, pinch: { enabled: false }, drag: { enabled: false } },
