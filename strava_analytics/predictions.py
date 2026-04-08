@@ -436,7 +436,11 @@ def extract_1rm_progression(df: pd.DataFrame, lift: str = "bench") -> pd.DataFra
     for _, row in lifts.sort_values("date").iterrows():
         w = row[weight_col]
         vol = row.get(volume_col, 0) or 0
-        is_test = vol > 0 and abs(vol - w) < 1  # 1x1 test
+        actual_reps_raw = row.get(reps_col)
+        # Any single-rep set is a tested max (1x1, 3x1, etc.)
+        is_test = (pd.notna(actual_reps_raw) and int(actual_reps_raw) == 1) or (
+            vol > 0 and abs(vol - w) < 1
+        )
 
         if is_test:
             # Actual tested 1RM — use as ground truth

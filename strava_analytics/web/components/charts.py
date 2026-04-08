@@ -787,10 +787,18 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
         return _empty_chart("No training volume data")
 
     lifts_data = lifts_data.sort_values("date")
-    labels = [d.strftime("%b %d") for d in lifts_data["date"]]
+
+    # Filter out sessions with no primary lift volume (accessory-only days)
+    vol_cols = [f"{lift}_volume" for lift in LIFT_COLORS if f"{lift}_volume" in lifts_data.columns]
+    if vol_cols:
+        lifts_data = lifts_data[lifts_data[vol_cols].fillna(0).sum(axis=1) > 0]
+    if lifts_data.empty:
+        return _empty_chart("No training volume data")
+
+    dates = lifts_data["date"]
 
     datasets = []
-    all_vol = []
+    stacked_totals: list[float] = [0.0] * len(lifts_data)
     for lift, color in LIFT_COLORS.items():
         col = f"{lift}_volume"
         if col not in lifts_data.columns:
@@ -798,10 +806,14 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
         vals = lifts_data[col].fillna(0).tolist()
         if all(v == 0 for v in vals):
             continue
-        all_vol.extend(v for v in vals if v > 0)
+        for i, v in enumerate(vals):
+            stacked_totals[i] += v
         datasets.append({
             "label": lift.title(),
-            "data": [round(v, 0) for v in vals],
+            "data": [
+                {"x": _ts(d), "y": round(v, 0)}
+                for d, v in zip(dates, vals)
+            ],
             "backgroundColor": _hex_to_rgba(color, 0.8),
             "borderColor": color,
             "borderWidth": 1,
@@ -810,21 +822,31 @@ def volume_chart(df: pd.DataFrame, chart_id: str = "volume") -> html.Div:
     if not datasets:
         return _empty_chart("No volume data for primary lifts")
 
+    y_max = round(max(stacked_totals) * 1.05) if stacked_totals else None
+
     cfg: dict[str, Any] = {
         "type": "bar",
-        "data": {"labels": labels, "datasets": datasets},
+        "data": {"datasets": datasets},
         "options": {
             "plugins": {
                 "title": _title_cfg("Training Volume"),
-                "legend": {"position": "bottom"},
+                "legend": {
+                    "position": "bottom",
+                    "labels": {"boxWidth": 12, "padding": 10},
+                },
             },
             "scales": {
-                "x": {"stacked": True, "ticks": {"maxRotation": 45}},
+                "x": {
+                    "type": "time",
+                    "time": {"unit": "month"},
+                    "stacked": True,
+                    **_time_limits(dates, pad_days=3),
+                },
                 "y": {
                     "stacked": True,
                     "beginAtZero": True, "min": 0,
                     "title": {"display": True, "text": "Volume (sets x reps x weight)"},
-                    "max": round(max(all_vol) * 1.05) if all_vol else None,
+                    "max": y_max,
                 },
             },
         },
