@@ -344,7 +344,62 @@ def _blend_run_type(df: pd.DataFrame) -> pd.DataFrame:
 # Full enrichment pipeline
 # ---------------------------------------------------------------------------
 
-def enrich(df: pd.DataFrame, athlete_config: dict | None = None) -> pd.DataFrame:
+def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: list[int]) -> pd.DataFrame:
+    """Compute per-second time-in-zone from FIT HR streams.
+
+    Adds zone_1_s .. zone_5_s columns (seconds spent in each zone per activity).
+    """
+    from .routes import parse_hr_stream
+
+    boundaries = [max_hr * p / 100 for p in zone_pct]
+
+    for col in [f"zone_{z}_s" for z in range(1, 6)]:
+        df[col] = np.nan
+
+    if export_dir is None or "filename" not in df.columns:
+        return df
+
+    from pathlib import Path
+    export_dir = Path(export_dir)
+    processed = 0
+
+    for idx, row in df.iterrows():
+        fn = row.get("filename")
+        if not isinstance(fn, str) or not fn.strip():
+            continue
+
+        fit_path = export_dir / fn
+        points = parse_hr_stream(fit_path)
+        if len(points) < 2:
+            continue
+
+        zone_secs = [0.0] * 5  # Z1-Z5
+        for i in range(1, len(points)):
+            ts_prev, _ = points[i - 1]
+            ts_curr, hr = points[i]
+            dt = (ts_curr - ts_prev).total_seconds()
+            if dt <= 0 or dt > 300:  # skip gaps > 5 min (pauses)
+                continue
+            if hr < boundaries[0]:
+                zone_secs[0] += dt
+            elif hr < boundaries[1]:
+                zone_secs[1] += dt
+            elif hr < boundaries[2]:
+                zone_secs[2] += dt
+            elif hr < boundaries[3]:
+                zone_secs[3] += dt
+            else:
+                zone_secs[4] += dt
+
+        for z in range(5):
+            df.at[idx, f"zone_{z + 1}_s"] = zone_secs[z]
+        processed += 1
+
+    logger.info("Zone times: computed per-second HR zones for %d activities", processed)
+    return df
+
+
+def enrich(df: pd.DataFrame, athlete_config: dict | None = None, export_dir=None) -> pd.DataFrame:
     """Run all enrichment steps on the activity DataFrame."""
     logger.info("Starting enrichment pipeline on %d activities", len(df))
     df = df.copy()
@@ -412,6 +467,9 @@ def enrich(df: pd.DataFrame, athlete_config: dict | None = None) -> pd.DataFrame
     df = _compute_hr_zones(df, max_hr, zone_pct)
     has_zones = df["hr_zone"].notna().sum()
     logger.info("HR zones: %d activities zoned (max_hr=%d)", has_zones, max_hr)
+
+    # Per-second zone times from FIT HR streams
+    df = _compute_zone_times(df, export_dir, max_hr, zone_pct)
 
     # Blend keyword + HR zone for more accurate run type
     before = df[df["type"] == "Run"]["run_type"].value_counts().to_dict()

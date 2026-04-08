@@ -50,7 +50,7 @@ def init(export_dir: str | Path) -> None:
     _export_dir = Path(export_dir)
     _athlete_config = _load_athlete_config(_export_dir)
     raw = load_activities(_export_dir)
-    _df = enrich(raw, athlete_config=_athlete_config)
+    _df = enrich(raw, athlete_config=_athlete_config, export_dir=_export_dir)
     _profile = load_profile(_export_dir)
 
 

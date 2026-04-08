@@ -353,16 +353,18 @@ _HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 
 
 def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -> html.Div:
     """Horizontal bar chart of total time spent in each HR zone across all runs."""
-    if "hr_zone" not in runs.columns or "moving_time_s" not in runs.columns:
+    zone_cols = [f"zone_{z}_s" for z in range(1, 6)]
+    has_zone_times = all(c in runs.columns for c in zone_cols)
+
+    if not has_zone_times:
         return _empty_chart("No HR zone data")
 
-    df = runs[runs["hr_zone"].notna()].copy()
+    df = runs[runs[zone_cols[0]].notna()].copy()
     if df.empty:
         return _empty_chart("No HR zone data")
 
-    # Sum moving time per zone, convert to hours
-    zone_hours = df.groupby("hr_zone")["moving_time_s"].sum().reindex(range(1, 6), fill_value=0) / 3600
-    hours = [round(zone_hours.get(z, 0), 1) for z in range(1, 6)]
+    # Sum per-second zone times across all activities, convert to hours
+    hours = [round(df[col].sum() / 3600, 1) for col in zone_cols]
     colors = [_HR_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
 
     cfg: dict[str, Any] = {

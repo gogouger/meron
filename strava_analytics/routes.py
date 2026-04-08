@@ -121,6 +121,32 @@ def parse_activity(fit_gz_path: str | Path, max_points: int = 300) -> ActivitySt
     return stream
 
 
+def parse_hr_stream(fit_gz_path: str | Path) -> list[tuple]:
+    """Extract HR + timestamp stream at full resolution from a FIT.gz file.
+
+    Returns list of (timestamp, heart_rate) tuples — no downsampling.
+    Lightweight: skips GPS, speed, altitude, etc.
+    """
+    path = Path(fit_gz_path)
+    if not path.exists():
+        return []
+
+    points = []
+    try:
+        with gzip.open(path) as f:
+            fit = fitparse.FitFile(f)
+            for record in fit.get_messages("record"):
+                ts = record.get_value("timestamp")
+                hr = record.get_value("heart_rate")
+                if ts is not None and hr is not None and hr > 0:
+                    points.append((ts, int(hr)))
+    except Exception as e:
+        logger.warning("Failed to parse HR stream from %s: %s", path, e)
+        return []
+
+    return points
+
+
 def compute_splits(stream: ActivityStream, split_distance_m: float = 1609.34) -> list[dict]:
     """Compute per-mile (or per-split) pace, HR, and elevation from activity stream.
 
