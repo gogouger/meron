@@ -184,6 +184,7 @@ def pace_trend_chart(runs: pd.DataFrame, chart_id: str = "pace-trend", run_meta:
                 "y": {
                     "reverse": True,
                     "title": {"display": True, "text": "Pace (min/mi)"},
+                    "ticks": {"stepSize": 0.5},
                     **y_lim,
                 },
             },
@@ -325,6 +326,7 @@ def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -
                 "y": {
                     "reverse": True,
                     "title": {"display": True, "text": f"Pace @ {ref_hr} bpm (min/mi)"},
+                    "ticks": {"stepSize": 0.5},
                     **y_lim,
                 },
             },
@@ -544,6 +546,7 @@ def stroller_pace_chart(runs: pd.DataFrame, chart_id: str = "stroller-pace") -> 
                 "y": {
                     "reverse": True,
                     "title": {"display": True, "text": "Pace (min/mi)"},
+                    "ticks": {"stepSize": 0.5},
                     **y_lim,
                 },
             },
@@ -635,6 +638,7 @@ def heat_vs_pace_chart(runs: pd.DataFrame, chart_id: str = "heat-pace") -> html.
                 "y": {
                     "reverse": True,
                     "title": {"display": True, "text": "Pace (min/mi)"},
+                    "ticks": {"stepSize": 0.5},
                     **y_lim,
                 },
             },

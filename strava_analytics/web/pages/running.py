@@ -188,89 +188,91 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
     if "with_kid" not in runs.columns:
         return html.Div()
 
-    stroller = runs[runs["with_kid"] == True]
-    normal = runs[runs["with_kid"] == False]
+    stroller = runs[runs["with_kid"] == True].copy()
+    normal = runs[runs["with_kid"] == False].copy()
 
     if stroller.empty or len(stroller) < 3:
         return html.P("Not enough stroller runs for comparison.",
                       style={"color": TEXT_MUTED})
 
-    # Build comparison
-    def _compare_row(label, stroller_val, normal_val, unit="", lower_is_better=False):
-        diff = stroller_val - normal_val
-        if lower_is_better:
-            color = ACCENT_SLATE if diff < 0 else ACCENT_RED
-        else:
-            color = ACCENT_SLATE if diff > 0 else ACCENT_RED
-        sign = "+" if diff > 0 else ""
+    # Filter to valid pace range
+    stroller = stroller[stroller["pace_min_per_mi"].between(6, 15)]
+    normal = normal[normal["pace_min_per_mi"].between(6, 15)]
+
+    # Core averages
+    avg_solo_pace = normal["pace_min_per_mi"].mean()
+    avg_str_pace = stroller["pace_min_per_mi"].mean()
+    pace_overhead = avg_str_pace - avg_solo_pace
+
+    best_solo = normal["pace_min_per_mi"].min()
+    best_stroller = stroller["pace_min_per_mi"].min()
+
+    # HR comparison (effort at same exertion — use adjusted HR if available)
+    hr_col = "adjusted_hr" if "adjusted_hr" in stroller.columns else "avg_hr"
+    has_hr = (stroller[hr_col].notna().any() and normal[hr_col].notna().any())
+    avg_solo_hr = normal[hr_col].mean() if has_hr else None
+    avg_str_hr = stroller[hr_col].mean() if has_hr else None
+
+    # Effort-adjusted pace: what pace would stroller runs be at solo HR?
+    # If stroller HR is higher, you're working harder to run the same pace.
+    effort_note = None
+    if has_hr and avg_solo_hr and avg_str_hr and avg_str_hr > 0:
+        # Pace at equivalent HR = stroller_pace × (solo_hr / stroller_hr)
+        effort_adj = avg_str_pace * (avg_solo_hr / avg_str_hr)
+        effort_delta = effort_adj - avg_solo_pace
+        sign = "+" if effort_delta > 0 else ""
+        effort_note = f"At equivalent effort: {format_pace(effort_adj)} ({sign}{effort_delta:.1f} min/mi vs solo)"
+
+    def _stat(label, value, sub=None, color=None):
         return html.Div([
-            html.Div(label, style={"fontSize": "10px", "textTransform": "uppercase",
-                                    "letterSpacing": "0.1em", "color": TEXT_MUTED,
-                                    "gridColumn": "1 / -1", "marginBottom": "4px"}),
-            html.Div(f"{normal_val:.1f}{unit}", style={
-                "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "16px",
-                "fontWeight": "600", "color": TEXT_PRIMARY,
+            html.Div(label, style={
+                "fontSize": "10px", "textTransform": "uppercase",
+                "letterSpacing": "0.1em", "color": TEXT_MUTED, "marginBottom": "4px",
             }),
-            html.Div(f"{stroller_val:.1f}{unit}", style={
-                "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "16px",
-                "fontWeight": "600", "color": TEXT_PRIMARY,
+            html.Div(value, style={
+                "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "20px",
+                "fontWeight": "600", "color": color or TEXT_PRIMARY,
             }),
-            html.Div(f"{sign}{diff:.1f}{unit}", style={
-                "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "13px",
-                "fontWeight": "600", "color": color,
-            }),
-        ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
-                  "gap": "4px", "padding": "8px 0",
-                  "borderBottom": f"1px solid {BORDER}"})
+            *([] if sub is None else [html.Div(sub, style={
+                "fontSize": "11px", "color": TEXT_MUTED, "marginTop": "2px",
+            })]),
+        ], style={"padding": "12px 16px", "backgroundColor": BG_CARD,
+                  "border": f"1px solid {BORDER}"})
 
-    header = html.Div([
-        html.Div("", style={"fontWeight": "600"}),
-        html.Div("Solo", style={"fontSize": "11px", "fontWeight": "600",
-                                 "textTransform": "uppercase", "color": TEXT_MUTED}),
-        html.Div("Stroller", style={"fontSize": "11px", "fontWeight": "600",
-                                     "textTransform": "uppercase", "color": TEXT_MUTED}),
-        html.Div("Diff", style={"fontSize": "11px", "fontWeight": "600",
-                                 "textTransform": "uppercase", "color": TEXT_MUTED}),
-    ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr 1fr 1fr",
-              "gap": "4px", "padding": "8px 0",
-              "borderBottom": f"1px solid {BORDER}"})
+    pace_color = ACCENT_RED if pace_overhead > 0.5 else ACCENT_AMBER if pace_overhead > 0 else ACCENT_SLATE
+    sign = "+" if pace_overhead > 0 else ""
 
-    rows = [header]
-    rows.append(_compare_row("Avg Pace (min/mi)",
-                             stroller["pace_min_per_mi"].mean(),
-                             normal["pace_min_per_mi"].mean(),
-                             "", lower_is_better=True))
+    stat_grid = html.Div([
+        _stat("Avg Solo Pace", format_pace(avg_solo_pace), f"best: {format_pace(best_solo)}"),
+        _stat("Avg Stroller Pace", format_pace(avg_str_pace), f"best: {format_pace(best_stroller)}"),
+        _stat("Pace Overhead", f"{sign}{pace_overhead:.1f} min/mi",
+              "stroller vs solo", color=pace_color),
+        *([_stat("Avg HR (adjusted)", f"{avg_str_hr:.0f} bpm",
+                 f"solo: {avg_solo_hr:.0f} bpm (+{avg_str_hr - avg_solo_hr:.0f})"
+                 if avg_str_hr > avg_solo_hr else f"solo: {avg_solo_hr:.0f} bpm")]
+          if has_hr else []),
+    ], style={
+        "display": "grid",
+        "gridTemplateColumns": f"repeat({'4' if has_hr else '3'}, 1fr)",
+        "gap": "12px", "marginBottom": "16px",
+    })
 
-    if stroller["avg_hr"].notna().any() and normal["avg_hr"].notna().any():
-        rows.append(_compare_row("Avg HR (bpm)",
-                                 stroller["avg_hr"].mean(),
-                                 normal["avg_hr"].mean(),
-                                 "", lower_is_better=True))
-
-    rows.append(_compare_row("Avg Distance (mi)",
-                             stroller["distance_mi"].mean(),
-                             normal["distance_mi"].mean()))
-
-    rows.append(_compare_row("Avg Duration (min)",
-                             stroller["moving_time_s"].mean() / 60,
-                             normal["moving_time_s"].mean() / 60))
+    note_row = html.Div([
+        html.Span(f"{len(stroller)} stroller runs vs {len(normal)} solo runs", style={
+            "color": TEXT_MUTED, "fontSize": "12px",
+        }),
+        *([] if not effort_note else [
+            html.Span(" · ", style={"color": TEXT_MUTED, "fontSize": "12px"}),
+            html.Span(effort_note, style={"color": TEXT_SECONDARY, "fontSize": "12px"}),
+        ]),
+    ], style={"marginBottom": "20px"})
 
     return html.Div([
-        html.Div([
-            html.Span(f"{len(stroller)} stroller runs", style={
-                "color": TEXT_SECONDARY, "fontSize": "13px",
-            }),
-            html.Span(f" vs {len(normal)} solo runs", style={
-                "color": TEXT_MUTED, "fontSize": "13px",
-            }),
-        ], style={"marginBottom": "16px"}),
-        html.Div(rows, style={
-            "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-            "padding": "16px 20px",
-        }),
+        note_row,
+        stat_grid,
         html.Div(
             charts.stroller_pace_chart(runs, chart_id="stroller-pace"),
-            style={"marginTop": "24px"},
+            style={"marginTop": "8px"},
         ),
     ])
 
