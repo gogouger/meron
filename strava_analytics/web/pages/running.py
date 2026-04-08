@@ -183,77 +183,6 @@ def _run_card(run, idx):
     })
 
 
-def _split_shoes_by_gap(shoes: pd.DataFrame, gap_days: int = 90) -> pd.DataFrame:
-    """Split same-name shoes into separate pairs by temporal gap."""
-    results = []
-    for gear_name, group in shoes.groupby("gear"):
-        group = group.sort_values("date")
-        diffs = group["date"].diff()
-        splits = diffs > pd.Timedelta(days=gap_days)
-        pair_id = splits.cumsum()
-        for pid, sub in group.groupby(pair_id):
-            suffix = f" #{pid + 1}" if pair_id.max() > 0 else ""
-            results.append({
-                "gear": f"{gear_name}{suffix}",
-                "miles": sub["distance_mi"].sum(),
-                "runs": len(sub),
-                "first_used": sub["date"].min(),
-                "last_used": sub["date"].max(),
-            })
-    if not results:
-        return pd.DataFrame(columns=["gear", "miles", "runs", "first_used", "last_used"])
-    return pd.DataFrame(results).sort_values("miles", ascending=False).reset_index(drop=True)
-
-
-def _shoe_mileage_section(runs: pd.DataFrame) -> html.Div:
-    """Show cumulative miles per shoe with retirement warnings."""
-    if "gear" not in runs.columns:
-        return html.Div()
-
-    shoes = runs[runs["gear"].notna() & (runs["gear"] != "")].copy()
-    if shoes.empty:
-        return html.Div()
-
-    shoe_stats = _split_shoes_by_gap(shoes)
-
-    cards = []
-    for _, shoe in shoe_stats.iterrows():
-        miles = shoe["miles"]
-        warning = miles >= 400
-        first_dt = shoe["first_used"]
-        last_dt = shoe["last_used"]
-        date_range = f"{first_dt.strftime('%b %Y')} — {last_dt.strftime('%b %Y')}"
-        cards.append(html.Div([
-            html.Div([
-                html.Span(shoe["gear"], style={
-                    "fontWeight": "600", "fontSize": "14px", "color": TEXT_PRIMARY,
-                }),
-                html.Span(f"  {shoe['runs']} runs", style={
-                    "color": TEXT_MUTED, "fontSize": "12px",
-                }),
-                html.Span(f"  {date_range}", style={
-                    "color": TEXT_MUTED, "fontSize": "11px", "marginLeft": "8px",
-                }),
-            ]),
-            html.Div([
-                html.Span(f"{miles:.0f} mi", style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
-                    "fontSize": "18px", "fontWeight": "700",
-                    "color": ACCENT_RED if warning else ACCENT_SLATE,
-                }),
-                html.Span(" — consider retiring" if warning else "", style={
-                    "color": ACCENT_RED, "fontSize": "12px", "marginLeft": "8px",
-                }),
-            ], style={"marginTop": "4px"}),
-        ], style={
-            "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-            "padding": "16px 20px", "marginBottom": "8px",
-            "borderLeft": f"3px solid {ACCENT_RED if warning else ACCENT_SLATE}",
-        }))
-
-    return html.Div(cards)
-
-
 def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
     """Side-by-side comparison of stroller vs non-stroller runs."""
     if "with_kid" not in runs.columns:
@@ -537,12 +466,6 @@ def layout(**_kwargs):
             _adjusted_hr_section(runs),
         ], alt_bg=True),
 
-        # Shoe Mileage
-        page_section("SHOE MILEAGE", [
-            html.P("Track your miles. Retire shoes before they retire you.",
-                   style={"color": TEXT_SECONDARY, "fontSize": "0.9rem", "marginBottom": "20px"}),
-            _shoe_mileage_section(runs),
-        ], alt_bg=True),
 
         # Stroller Comparison
         page_section("STROLLER IMPACT", [
