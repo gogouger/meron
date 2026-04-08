@@ -781,6 +781,11 @@ main {
     font-family: var(--font-mono) !important;
     font-size: 13px !important;
 }
+/* Focus outline — use muted accent instead of default purple */
+.dash-datepicker:focus-within {
+    outline-color: #c4323e !important;
+    border-color: #c4323e !important;
+}
 .dash-datepicker svg {
     fill: var(--subtle) !important;
 }
@@ -813,6 +818,13 @@ main {
     letter-spacing: 0.04em;
     padding: 4px 0;
 }
+/* Day-of-week headers (Su, Mo, Tu...) */
+.dash-datepicker-calendar thead th,
+.dash-datepicker-calendar thead th span {
+    color: var(--text-muted) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
 /* Day cells */
 .dash-datepicker-calendar-date-inside {
     color: var(--foreground) !important;
@@ -824,12 +836,18 @@ main {
 .dash-datepicker-calendar-date-inside:hover {
     background: var(--elevated) !important;
 }
-/* Selected day — red circle like Apple Calendar accent */
-.dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside,
-.dash-datepicker-calendar-date-highlighted .dash-datepicker-calendar-date-inside {
-    background: var(--accent) !important;
+/* Selected day — solid muted-red circle */
+.dash-datepicker-calendar-date-inside.dash-datepicker-calendar-date-selected {
+    background: #c4323e !important;
     color: white !important;
     font-weight: 600;
+}
+/* Highlighted range — outlined circles */
+.dash-datepicker-calendar-date-inside.dash-datepicker-calendar-date-highlighted:not(.dash-datepicker-calendar-date-selected) {
+    background: transparent !important;
+    color: var(--foreground) !important;
+    outline: 1.5px solid rgba(196, 50, 62, 0.5) !important;
+    outline-offset: -1.5px;
 }
 /* Today indicator */
 .dash-datepicker-calendar-padding {
