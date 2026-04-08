@@ -1,14 +1,18 @@
-"""GPS route matching via sampled-point geohash fingerprinting.
+"""GPS route matching via rasterized grid cell overlap.
 
-Matches runs that follow the same physical route regardless of direction,
-name, or slight GPS drift.  Fingerprints are cached to ``route_index.json``
-in the export directory for fast incremental updates.
+Each route is projected onto a ~20 m grid and buffered by one cell in
+every direction (~60 m corridor).  Two routes match when ≥ 80 % of the
+shorter route's cells appear in the longer route's cell set **and**
+they are within 30 % of each other's total distance.
+
+Fingerprints are cached to ``route_index.json`` for incremental updates.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -16,39 +20,24 @@ import pandas as pd
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Geohash encoding (no external dependency)
+# Grid projection — local (lat, lon) → integer (cx, cy)
 # ---------------------------------------------------------------------------
 
-_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz"
+_CELL_M = 20  # metres per grid cell
+
+# Approximate metres-per-degree at mid-latitudes
+_M_PER_DEG_LAT = 111_320.0
 
 
-def _geohash(lat: float, lon: float, precision: int = 7) -> str:
-    """Encode (lat, lon) as a geohash string.  Precision 7 ≈ 150 m × 150 m."""
-    lat_range, lon_range = [-90.0, 90.0], [-180.0, 180.0]
-    bits = [16, 8, 4, 2, 1]
-    ch, bit, is_lon = 0, 0, True
-    result: list[str] = []
-    while len(result) < precision:
-        if is_lon:
-            mid = (lon_range[0] + lon_range[1]) / 2
-            if lon >= mid:
-                ch |= bits[bit]
-                lon_range[0] = mid
-            else:
-                lon_range[1] = mid
-        else:
-            mid = (lat_range[0] + lat_range[1]) / 2
-            if lat >= mid:
-                ch |= bits[bit]
-                lat_range[0] = mid
-            else:
-                lat_range[1] = mid
-        is_lon = not is_lon
-        bit += 1
-        if bit == 5:
-            result.append(_BASE32[ch])
-            ch, bit = 0, 0
-    return "".join(result)
+def _m_per_deg_lon(lat_deg: float) -> float:
+    return 111_320.0 * math.cos(math.radians(lat_deg))
+
+
+def _to_cell(lat: float, lon: float, origin_lat: float, origin_lon: float,
+             mpdlon: float) -> tuple[int, int]:
+    cx = int((lon - origin_lon) * mpdlon / _CELL_M)
+    cy = int((lat - origin_lat) * _M_PER_DEG_LAT / _CELL_M)
+    return (cx, cy)
 
 
 # ---------------------------------------------------------------------------
@@ -57,83 +46,48 @@ def _geohash(lat: float, lon: float, precision: int = 7) -> str:
 
 def fingerprint_route(
     coords: list[tuple[float, float]],
-    distance_m: list[float] | None = None,
-    n_samples: int = 40,
-) -> list[str]:
-    """Sample *n_samples* evenly-spaced points and return ordered geohash cells.
+    origin_lat: float,
+    origin_lon: float,
+) -> set[tuple[int, int]]:
+    """Rasterise a route into buffered grid cells.
 
-    Returns an **ordered list** so sequence-based matching can distinguish
-    routes through the same neighborhood but in different patterns.
-    Consecutive duplicate cells are collapsed to keep the sequence concise.
+    *coords* — list of (lat, lon).
+    Returns a **set** of (cx, cy) integer cell indices.
     """
     if not coords or len(coords) < 3:
-        return []
+        return set()
 
-    raw: list[str] = []
-    if distance_m and len(distance_m) == len(coords):
-        total = distance_m[-1]
-        if total <= 0:
-            return []
-        step = total / n_samples
-        di = 0
-        for s in range(n_samples):
-            target = step * (s + 0.5)
-            while di < len(distance_m) - 1 and distance_m[di] < target:
-                di += 1
-            raw.append(_geohash(coords[di][0], coords[di][1]))
-    else:
-        step = max(1, len(coords) // n_samples)
-        raw = [_geohash(c[0], c[1]) for c in coords[::step]]
+    mpdlon = _m_per_deg_lon(origin_lat)
+    cells: set[tuple[int, int]] = set()
 
-    # Collapse consecutive duplicates
-    collapsed: list[str] = []
-    for c in raw:
-        if not collapsed or c != collapsed[-1]:
-            collapsed.append(c)
-    return collapsed
+    for lat, lon in coords:
+        cx, cy = _to_cell(lat, lon, origin_lat, origin_lon, mpdlon)
+        # Buffer: mark cell + 8 neighbours
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                cells.add((cx + dx, cy + dy))
 
-
-def _lcs_length(a: list[str], b: list[str]) -> int:
-    """Length of longest common subsequence (O(n*m) DP, bounded by sample count)."""
-    n, m = len(a), len(b)
-    if n == 0 or m == 0:
-        return 0
-    # Space-optimized: two rows
-    prev = [0] * (m + 1)
-    curr = [0] * (m + 1)
-    for i in range(1, n + 1):
-        for j in range(1, m + 1):
-            if a[i - 1] == b[j - 1]:
-                curr[j] = prev[j - 1] + 1
-            else:
-                curr[j] = max(prev[j], curr[j - 1])
-        prev, curr = curr, [0] * (m + 1)
-    return max(prev)
+    return cells
 
 
 def match_routes(
-    fp_a: list[str],
-    fp_b: list[str],
+    cells_a: set[tuple[int, int]],
+    cells_b: set[tuple[int, int]],
     dist_a: float = 0,
     dist_b: float = 0,
     threshold: float = 0.80,
 ) -> bool:
-    """True if routes match by ordered subsequence overlap and similar distance."""
-    if not fp_a or not fp_b:
+    """True if routes overlap spatially by ≥ *threshold* and have similar length."""
+    if not cells_a or not cells_b:
         return False
-    # Distance check: routes must be within 30% of each other
+    # Distance pre-filter
     if dist_a > 0 and dist_b > 0:
         ratio = min(dist_a, dist_b) / max(dist_a, dist_b)
         if ratio < 0.7:
             return False
-    shorter = min(len(fp_a), len(fp_b))
-    if shorter < 3:
-        return False
-    # Check forward and reverse (handles running route in opposite direction)
-    lcs_fwd = _lcs_length(fp_a, fp_b)
-    lcs_rev = _lcs_length(fp_a, fp_b[::-1])
-    best = max(lcs_fwd, lcs_rev)
-    return best / shorter >= threshold
+    smaller, larger = (cells_a, cells_b) if len(cells_a) <= len(cells_b) else (cells_b, cells_a)
+    overlap = len(smaller & larger)
+    return overlap / len(smaller) >= threshold
 
 
 # ---------------------------------------------------------------------------
@@ -142,57 +96,79 @@ def match_routes(
 
 _INDEX_FILE = "route_index.json"
 _index: dict | None = None
+_origin: tuple[float, float] | None = None
+
+
+def _cells_to_json(cells: set[tuple[int, int]]) -> list[list[int]]:
+    return [list(c) for c in cells]
+
+
+def _cells_from_json(raw: list) -> set[tuple[int, int]]:
+    return {(c[0], c[1]) for c in raw}
 
 
 def build_route_index(df: pd.DataFrame, export_dir: Path) -> dict:
-    """Build or update the route fingerprint index.
-
-    Returns ``{filename: {"cells": [...], "distance_m": float}}``.
-    """
-    global _index
+    """Build or update the route fingerprint index."""
+    global _index, _origin
     index_path = export_dir / _INDEX_FILE
 
-    # Load existing index
     saved: dict = {}
     if index_path.exists():
         try:
             saved = json.loads(index_path.read_text())
-            if saved.get("version") != 5:
+            if saved.get("version") != 6:
                 saved = {}
         except (json.JSONDecodeError, KeyError):
             saved = {}
 
     fingerprints: dict = saved.get("fingerprints", {})
+    origin = saved.get("origin")
 
     from strava_analytics.routes import parse_activity
 
     run_mask = df["type"].isin(["Run", "Walk", "Hike"])
     runs = df[run_mask & df["filename"].notna()]
+
+    # Determine grid origin from first route if not set
+    if origin is None and not fingerprints:
+        for fn in runs["filename"].unique():
+            try:
+                stream = parse_activity(export_dir / fn, max_points=50)
+            except Exception:
+                continue
+            if stream.coords and len(stream.coords) >= 3:
+                origin = [stream.coords[0][0], stream.coords[0][1]]
+                break
+    if origin is None:
+        _index = {}
+        _origin = (0, 0)
+        return {}
+
+    _origin = (origin[0], origin[1])
     new_count = 0
 
     for fn in runs["filename"].unique():
         if fn in fingerprints:
             continue
         try:
-            stream = parse_activity(export_dir / fn, max_points=100)
+            stream = parse_activity(export_dir / fn, max_points=200)
         except Exception:
             log.debug("route_matching: failed to parse %s", fn)
             continue
         if not stream.coords or len(stream.coords) < 5:
             continue
-        fp = fingerprint_route(stream.coords, stream.distance_m)
-        if fp:
+        cells = fingerprint_route(stream.coords, origin[0], origin[1])
+        if cells:
             fingerprints[fn] = {
-                "cells": fp,
+                "cells": _cells_to_json(cells),
                 "distance_m": stream.distance_m[-1] if stream.distance_m else 0,
             }
             new_count += 1
 
     if new_count > 0:
-        # Persist
         try:
             index_path.write_text(json.dumps(
-                {"version": 5, "fingerprints": fingerprints},
+                {"version": 6, "origin": origin, "fingerprints": fingerprints},
                 indent=None, separators=(",", ":"),
             ))
         except OSError:
@@ -214,12 +190,14 @@ def get_route_matches(filename: str, df: pd.DataFrame, export_dir: Path) -> list
     if not entry:
         return []
 
-    fp = entry["cells"]
+    fp = _cells_from_json(entry["cells"])
     dist = entry.get("distance_m", 0)
     matches: list[str] = []
     for fn, other in _index.items():
         if fn == filename:
             continue
-        if match_routes(fp, other["cells"], dist, other.get("distance_m", 0)):
+        other_fp = _cells_from_json(other["cells"])
+        other_dist = other.get("distance_m", 0)
+        if match_routes(fp, other_fp, dist, other_dist):
             matches.append(fn)
     return matches
