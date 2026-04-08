@@ -55,7 +55,7 @@ def _hover_card(activities_list, date_str: str):
         return None
     cards = []
     for act in activities_list:
-        color = ACTIVITY_TYPE_COLORS.get(act["type"], TEXT_MUTED)
+        color = ACTIVITY_TYPE_COLORS.get(act["type"], "var(--text-muted)")
         dist = act.get("distance_mi", 0)
         pace = act.get("pace_min_per_mi", None)
         time_s = act.get("moving_time_s", 0)
@@ -90,13 +90,13 @@ def _hover_card(activities_list, date_str: str):
                     "marginRight": "6px", "flexShrink": "0",
                 }),
                 html.Span(act.get("name", act["type"]), style={
-                    "fontSize": "11px", "fontWeight": "600", "color": TEXT_PRIMARY,
+                    "fontSize": "11px", "fontWeight": "600", "color": "var(--text-primary)",
                     "overflow": "hidden", "textOverflow": "ellipsis",
                     "whiteSpace": "nowrap",
                 }),
             ], style={"display": "flex", "alignItems": "center"}),
             html.Div(" \u00b7 ".join(stats), style={
-                "fontSize": "10px", "color": TEXT_MUTED, "marginTop": "2px",
+                "fontSize": "10px", "color": "var(--text-muted)", "marginTop": "2px",
                 "paddingLeft": "14px",
             }) if stats else None,
         ], className="cal-activity-link",
@@ -113,7 +113,7 @@ def _hover_card(activities_list, date_str: str):
         "zIndex": "100",
         "padding": "8px 10px",
         "borderRadius": "6px",
-        "border": f"1px solid {BORDER}",
+        "border": "1px solid var(--border)",
         "minWidth": "180px", "maxWidth": "240px",
     })
 
@@ -212,12 +212,12 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
                 })
             elif activities:
                 week_activity_count += len(activities)
-                primary_color = ACTIVITY_TYPE_COLORS.get(activities[0]["type"], TEXT_MUTED)
+                primary_color = ACTIVITY_TYPE_COLORS.get(activities[0]["type"], "var(--text-muted)")
 
                 # Dot indicators per unique activity type
                 seen = []
                 for act in activities:
-                    c = ACTIVITY_TYPE_COLORS.get(act["type"], TEXT_MUTED)
+                    c = ACTIVITY_TYPE_COLORS.get(act["type"], "var(--text-muted)")
                     if c not in seen:
                         seen.append(c)
                 dots_row = html.Div(
