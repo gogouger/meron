@@ -304,6 +304,40 @@
         var canvas = document.createElement("canvas");
         box.appendChild(canvas);
 
+        // Race marker vertical lines plugin (drawn from _meta.raceMarkers)
+        if (meta.raceMarkers && meta.raceMarkers.length) {
+            if (!cfg.plugins) cfg.plugins = [];
+            cfg.plugins.push({
+                id: "raceMarkers",
+                afterDraw: function (chart) {
+                    var xScale = chart.scales.x;
+                    if (!xScale) return;
+                    var ctx = chart.ctx;
+                    var yTop = chart.chartArea.top;
+                    var yBottom = chart.chartArea.bottom;
+                    meta.raceMarkers.forEach(function (marker) {
+                        var x = xScale.getPixelForValue(new Date(marker.date));
+                        if (x < chart.chartArea.left || x > chart.chartArea.right) return;
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.setLineDash([6, 4]);
+                        ctx.strokeStyle = cssVar("--text-muted") || "#a8a29e";
+                        ctx.lineWidth = 1.5;
+                        ctx.moveTo(x, yTop);
+                        ctx.lineTo(x, yBottom);
+                        ctx.stroke();
+                        // Race flag emoji at top
+                        ctx.setLineDash([]);
+                        ctx.font = "12px Inter, sans-serif";
+                        ctx.fillStyle = cssVar("--text-secondary") || "#57534e";
+                        ctx.textAlign = "center";
+                        ctx.fillText("\uD83C\uDFC1", x, yTop - 4);
+                        ctx.restore();
+                    });
+                }
+            });
+        }
+
         var chart;
         try {
             chart = new Chart(canvas.getContext("2d"), cfg);

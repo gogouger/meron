@@ -21,6 +21,7 @@ _DEFAULT_CONFIG = {
     "max_hr": 200,
     "hr_zones_pct": [60, 70, 80, 90],  # boundaries as % of max HR
     "zone_names": ["Recovery", "Easy", "Moderate", "Threshold", "Max"],
+    "openai_api_key": "",  # OpenAI API key for ChatGPT chat widget
 }
 
 

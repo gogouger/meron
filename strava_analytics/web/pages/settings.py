@@ -119,6 +119,38 @@ def layout(**_kwargs):
             _hr_zones_section(),
         ], alt_bg=True),
 
+        page_section("CHATGPT INTEGRATION", [
+            html.P(
+                "Enter your OpenAI API key to enable the chat widget. "
+                "Get one at platform.openai.com (included with ChatGPT Pro).",
+                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                       "marginBottom": "16px"},
+            ),
+            html.Div([
+                html.Label("OpenAI API Key", style={
+                    "fontSize": "12px", "fontWeight": "600",
+                    "color": TEXT_SECONDARY, "marginBottom": "4px",
+                    "display": "block",
+                }),
+                dcc.Input(
+                    id="openai-key-input",
+                    type="password",
+                    value=data.get_athlete_config().get("openai_api_key", ""),
+                    placeholder="sk-...",
+                    style={"width": "320px", "fontFamily": "'IBM Plex Mono', monospace",
+                           "fontSize": "13px"},
+                ),
+            ], style={"marginBottom": "12px"}),
+            html.Div([
+                html.Button("Save API Key", id="save-openai-key-btn", n_clicks=0,
+                            className="btn-accent",
+                            style={"padding": "8px 20px", "fontSize": "13px"}),
+                html.Span(id="openai-key-save-status", style={
+                    "marginLeft": "12px", "fontSize": "13px", "color": TEXT_MUTED,
+                }),
+            ]),
+        ]),
+
         page_section("ABOUT", [
             html.Div([
                 html.P("Strava Analytics", style={
@@ -229,3 +261,18 @@ def save_hr_settings(zone_pct_str, max_hr, current_version):
     # Re-enrich data with new zones so charts update immediately
     data.reload()
     return "Saved and applied.", (current_version or 0) + 1
+
+
+@callback(
+    Output("openai-key-save-status", "children"),
+    Input("save-openai-key-btn", "n_clicks"),
+    State("openai-key-input", "value"),
+    prevent_initial_call=True,
+)
+def save_openai_key(n_clicks, api_key):
+    if not n_clicks:
+        return ""
+    cfg = data.get_athlete_config()
+    cfg["openai_api_key"] = (api_key or "").strip()
+    data.save_athlete_config(cfg)
+    return "Saved." if api_key else "Cleared."

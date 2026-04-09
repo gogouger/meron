@@ -1,6 +1,6 @@
-"""Training plan page — ozniai.com subpage pattern."""
+"""Training plan page — data-driven layout with fitness charts."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import dash
 import dash_bootstrap_components as dbc
@@ -9,6 +9,13 @@ import pandas as pd
 
 from strava_analytics.web import data
 from strava_analytics.web.components import charts
+from strava_analytics.web.components.charts import (
+    fitness_freshness_chart,
+    mileage_progression_chart,
+    strength_progression_chart,
+    compliance_bar,
+    enhanced_plan_calendar,
+)
 from strava_analytics.web.components.layout import (
     hero_section, page_section, statement_section, feature_grid,
     numbered_card, cta_section, footer,
@@ -23,9 +30,18 @@ from strava_analytics.training_plan import (
     SPARTAN_OBSTACLE_PREP,
 )
 from strava_analytics.predictions import estimate_1rm
+from strava_analytics.web.plan_data import (
+    get_fitness_timeseries, get_current_fitness,
+    get_mileage_progression, get_1rm_trends,
+    get_projected_fitness, get_race_readiness, get_compliance,
+)
 
 dash.register_page(__name__, path="/plan", name="Training Plan")
 
+# Plan constants
+_START_DATE = date(2026, 4, 6)
+_RACE1_DATE = date(2026, 5, 25)
+_RACE2_DATE = date(2026, 5, 31)
 
 
 def _get_current_1rms(df: pd.DataFrame) -> dict:
@@ -77,7 +93,6 @@ def _get_current_weekly_miles(df: pd.DataFrame) -> float:
 
 
 def _generate_ics(plan_rows: list[dict]) -> str:
-    """Generate an ICS calendar string from the training plan."""
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -89,7 +104,6 @@ def _generate_ics(plan_rows: list[dict]) -> str:
         title = row["title"]
         intensity = row.get("intensity", "")
         workout_type = row.get("type", "")
-
         date_str = dt.strftime("%Y%m%d")
         lines.extend([
             "BEGIN:VEVENT",
@@ -103,6 +117,39 @@ def _generate_ics(plan_rows: list[dict]) -> str:
     return "\r\n".join(lines)
 
 
+def _readiness_badge(readiness: dict) -> html.Div:
+    """Compact race readiness badge."""
+    label = readiness["readiness_label"]
+    tsb = readiness["tsb"]
+    color_map = {
+        "Peak Form": ACCENT_SLATE,
+        "Good Form": ACCENT_AMBER,
+        "Neutral": TEXT_MUTED,
+        "Fatigued": ACCENT_RED,
+    }
+    color = color_map.get(label, TEXT_MUTED)
+    rd = readiness["race_date"]
+
+    return html.Div([
+        html.Div(rd.strftime("%b %d"), style={
+            "fontSize": "12px", "color": TEXT_MUTED, "marginBottom": "4px",
+        }),
+        html.Div(label, style={
+            "fontSize": "14px", "fontWeight": "600", "color": color,
+        }),
+        html.Div(f"CTL {readiness['ctl']} / ATL {readiness['atl']} / TSB {tsb:+.0f}", style={
+            "fontSize": "11px", "color": TEXT_SECONDARY, "marginTop": "4px",
+        }),
+    ], style={
+        "padding": "12px 16px",
+        "border": f"1px solid {BORDER}",
+        "borderLeft": f"3px solid {color}",
+        "backgroundColor": BG_CARD,
+        "flex": "1",
+        "minWidth": "180px",
+    })
+
+
 def layout(**_kwargs):
     df = data.get_df()
 
@@ -110,9 +157,9 @@ def layout(**_kwargs):
     current_miles = _get_current_weekly_miles(df)
 
     plan = generate_training_plan(
-        start_date=date(2026, 4, 6),
-        race1_date=date(2026, 5, 25),
-        race2_date=date(2026, 5, 31),
+        start_date=_START_DATE,
+        race1_date=_RACE1_DATE,
+        race2_date=_RACE2_DATE,
         current_1rms=current_1rms,
         current_weekly_miles=current_miles,
     )
@@ -123,8 +170,17 @@ def layout(**_kwargs):
     total_run = sum(1 for r in flat if r["type"] == "run")
     total_rest = sum(1 for r in flat if r["type"] in ("rest", "mobility"))
 
-    # Pre-generate ICS content so the callback can access it
     ics_content = _generate_ics(flat)
+
+    # Data computations
+    fitness = get_current_fitness(df)
+    projected = get_projected_fitness(df, plan)
+    mileage = get_mileage_progression(df, plan)
+    strength_trends = get_1rm_trends(df)
+    race_readiness = get_race_readiness(df, plan, [_RACE1_DATE, _RACE2_DATE])
+    compliance_data = get_compliance(df, flat)
+
+    today = date.today()
 
     return html.Div([
         # Hero
@@ -155,7 +211,34 @@ def layout(**_kwargs):
             style={"textAlign": "center", "marginBottom": "24px"},
         ),
 
-        # The Numbers
+        # ── FITNESS STATE ──
+        page_section("CURRENT FITNESS", [
+            feature_grid([
+                numbered_card(1, "Fitness (CTL)", "",
+                              value=f"{fitness['ctl']:.0f}", color=ACCENT_SLATE),
+                numbered_card(2, "Fatigue (ATL)", "",
+                              value=f"{fitness['atl']:.0f}", color=ACCENT),
+                numbered_card(3, "Form (TSB)", "",
+                              value=f"{fitness['tsb']:+.0f}", color=ACCENT_AMBER),
+                numbered_card(4, "Status", "",
+                              value=fitness["label"], color=ACCENT_SLATE),
+            ], columns=4),
+            fitness_freshness_chart(projected, race_dates=[_RACE1_DATE, _RACE2_DATE]),
+        ]),
+
+        # ── RACE READINESS ──
+        page_section("RACE READINESS", [
+            html.P("Projected fitness at race dates based on planned training load.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "16px"}),
+            html.Div(
+                [_readiness_badge(r) for r in race_readiness] if race_readiness else [
+                    html.P("Insufficient data for projections.", style={"color": TEXT_MUTED})
+                ],
+                style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+            ),
+        ], alt_bg=True),
+
+        # ── THE NUMBERS ──
         page_section("THE NUMBERS", [
             feature_grid([
                 numbered_card(1, "Duration", "Apr 6 \u2014 May 31",
@@ -176,26 +259,59 @@ def layout(**_kwargs):
             f"{current_1rms['squat']}lb squat. Let\u2019s see what 8 weeks can do.",
         ),
 
-        # Calendar
-        page_section("CALENDAR", [
-            charts.plan_calendar_chart(flat),
-            _legend(),
+        # ── MILEAGE PROGRESSION ──
+        page_section("MILEAGE PROGRESSION", [
+            mileage_progression_chart(mileage),
         ], alt_bg=True),
 
-        # Week by Week
-        page_section("WEEK BY WEEK", [
-            *[_phase_section(week) for week in plan],
+        # ── STRENGTH TRENDS ──
+        page_section("STRENGTH TRENDS", [
+            html.Div([
+                html.Div([
+                    strength_progression_chart(lift, prog_df),
+                ], style={"flex": "1", "minWidth": "300px"})
+                for lift, prog_df in strength_trends.items()
+            ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap"})
+            if strength_trends else
+            html.P("No lifting data available for strength trends.",
+                   style={"color": TEXT_MUTED}),
         ]),
+
+        # ── COMPLIANCE ──
+        *(
+            [page_section("PLAN COMPLIANCE", [
+                compliance_bar(compliance_data["pct"]),
+                html.Div([
+                    html.Span(f"{compliance_data['total_completed']}", style={
+                        "fontWeight": "700", "color": ACCENT_SLATE,
+                    }),
+                    html.Span(f" of {compliance_data['total_planned']} planned sessions completed",
+                              style={"color": TEXT_SECONDARY, "fontSize": "13px"}),
+                ], style={"marginBottom": "16px"}),
+            ], alt_bg=True)]
+            if compliance_data["total_planned"] > 0 else []
+        ),
+
+        # ── CALENDAR ──
+        page_section("CALENDAR", [
+            enhanced_plan_calendar(flat, compliance_data),
+            _legend(),
+        ]),
+
+        # ── WEEK BY WEEK ──
+        page_section("WEEK BY WEEK", [
+            *[_phase_section(week, today) for week in plan],
+        ], alt_bg=True),
 
         # Obstacle Prep
         page_section("SPARTAN BEAST OBSTACLE PREPARATION", [
             _obstacle_prep_section(),
-        ], alt_bg=True),
+        ]),
 
         # Science
         page_section("THE SCIENCE", [
             _science_section(),
-        ]),
+        ], alt_bg=True),
 
         # CTA
         cta_section("Now stop reading and go train."),
@@ -212,11 +328,19 @@ def _legend():
             html.Span("\u25a0 ", style={"color": color, "fontSize": "1.1rem"}),
             html.Span(wtype.title(), style={"marginRight": "16px", "fontSize": "0.85rem"}),
         ]))
+    items.append(html.Span([
+        html.Span("\u25a0 ", style={"color": "rgba(34,197,94,0.7)", "fontSize": "1.1rem"}),
+        html.Span("Completed", style={"marginRight": "16px", "fontSize": "0.85rem"}),
+    ]))
     return html.Div(items, style={"marginTop": "16px"})
 
 
-def _phase_section(week):
+def _phase_section(week, today: date):
     phase_color = PHASE_COLORS.get(week.phase, ACCENT)
+
+    week_end = week.start_date + timedelta(days=6)
+    is_past = week_end < today
+    is_current = week.start_date <= today <= week_end
 
     workout_cards = []
     for w in week.workouts:
@@ -240,18 +364,23 @@ def _phase_section(week):
         ], className="workout-card",
            style={"borderLeftColor": color}))
 
-    return html.Div([
-        html.H6([
-            html.Span(f"Week {week.week_num}",
-                      style={"color": phase_color, "fontWeight": "700"}),
-            html.Span(f" \u2014 {week.phase_label}",
-                      style={"color": TEXT_SECONDARY, "fontWeight": "400"}),
-            html.Span(f" | {week.target_miles:.0f} mi target" if week.target_miles else "",
-                      style={"color": TEXT_SECONDARY, "fontSize": "0.8rem",
-                              "marginLeft": "8px"}),
-        ], style={"marginBottom": "12px"}),
-        *workout_cards,
-    ], style={"marginBottom": "24px"})
+    summary = html.H6([
+        html.Span(f"Week {week.week_num}",
+                  style={"color": phase_color, "fontWeight": "700"}),
+        html.Span(f" \u2014 {week.phase_label}",
+                  style={"color": TEXT_SECONDARY, "fontWeight": "400"}),
+        html.Span(f" | {week.target_miles:.0f} mi target" if week.target_miles else "",
+                  style={"color": TEXT_SECONDARY, "fontSize": "0.8rem",
+                          "marginLeft": "8px"}),
+        html.Span(" \u2190 THIS WEEK" if is_current else "",
+                  style={"color": ACCENT, "fontSize": "0.75rem",
+                          "marginLeft": "8px", "fontWeight": "600"}),
+    ], style={"marginBottom": "12px"})
+
+    return html.Details([
+        html.Summary(summary, style={"cursor": "pointer", "listStyle": "none"}),
+        html.Div(workout_cards, style={"paddingLeft": "8px"}),
+    ], open=not is_past, style={"marginBottom": "24px"})
 
 
 def _obstacle_prep_section():

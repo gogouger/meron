@@ -1372,3 +1372,462 @@ def year_monthly_chart(summary: dict, chart_id: str = "year-monthly") -> html.Di
         },
     }
     return _chart_wrap(chart_id, cfg, height=300)
+
+
+# ── plan page charts ─────────────────────────────────────────────────
+
+def fitness_freshness_chart(fitness_df: pd.DataFrame,
+                             race_dates: list | None = None,
+                             chart_id: str = "fitness-freshness") -> html.Div:
+    """CTL/ATL/TSB line chart with optional race date vertical markers."""
+    if fitness_df.empty:
+        return _empty_chart("No fitness data available")
+
+    projected_mask = fitness_df.get("projected", pd.Series(False, index=fitness_df.index))
+
+    # Historical data
+    hist = fitness_df[~projected_mask]
+    proj = fitness_df[projected_mask]
+
+    datasets = []
+
+    # CTL (Fitness) — solid line
+    if not hist.empty:
+        datasets.append({
+            "label": "Fitness (CTL)",
+            "data": [{"x": _ts(r["date"]), "y": round(r["ctl"], 1)} for _, r in hist.iterrows()],
+            "borderColor": ACCENT_SLATE,
+            "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.1),
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+
+    # ATL (Fatigue) — solid line
+    if not hist.empty:
+        datasets.append({
+            "label": "Fatigue (ATL)",
+            "data": [{"x": _ts(r["date"]), "y": round(r["atl"], 1)} for _, r in hist.iterrows()],
+            "borderColor": ACCENT,
+            "backgroundColor": _hex_to_rgba(ACCENT, 0.1),
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+
+    # TSB (Form) — filled area
+    if not hist.empty:
+        datasets.append({
+            "label": "Form (TSB)",
+            "data": [{"x": _ts(r["date"]), "y": round(r["tsb"], 1)} for _, r in hist.iterrows()],
+            "borderColor": ACCENT_AMBER,
+            "backgroundColor": _hex_to_rgba(ACCENT_AMBER, 0.15),
+            "borderWidth": 1.5,
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": True,
+            "tension": 0.3,
+        })
+
+    # Projected lines (dashed)
+    if not proj.empty:
+        datasets.append({
+            "label": "Projected CTL",
+            "data": [{"x": _ts(r["date"]), "y": round(r["ctl"], 1)} for _, r in proj.iterrows()],
+            "borderColor": ACCENT_SLATE,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+        datasets.append({
+            "label": "Projected ATL",
+            "data": [{"x": _ts(r["date"]), "y": round(r["atl"], 1)} for _, r in proj.iterrows()],
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+        datasets.append({
+            "label": "Projected TSB",
+            "data": [{"x": _ts(r["date"]), "y": round(r["tsb"], 1)} for _, r in proj.iterrows()],
+            "borderColor": ACCENT_AMBER,
+            "borderWidth": 1.5,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+
+    # Race date markers stored in _meta for JS to draw as vertical lines
+    race_markers = []
+    if race_dates:
+        race_markers = [{"date": _ts(d), "label": ""} for d in race_dates]
+
+    cfg = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Fitness / Freshness"),
+                "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            },
+            "scales": {
+                "x": {"type": "time", "time": {"unit": "week"}},
+                "y": {"title": {"display": True, "text": "Load / Form"}},
+            },
+        },
+        "_meta": {"raceMarkers": race_markers},
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
+
+
+def mileage_progression_chart(mileage_df: pd.DataFrame,
+                               chart_id: str = "mileage-progression") -> html.Div:
+    """Bar chart of actual vs planned weekly miles."""
+    if mileage_df.empty:
+        return _empty_chart("No mileage data")
+
+    labels = [f"Wk {r['week_num']}" for _, r in mileage_df.iterrows()]
+
+    cfg = {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Planned",
+                    "data": mileage_df["planned_miles"].tolist(),
+                    "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.3),
+                    "borderColor": ACCENT_SLATE,
+                    "borderWidth": 1,
+                    "order": 2,
+                },
+                {
+                    "label": "Actual",
+                    "data": mileage_df["actual_miles"].tolist(),
+                    "backgroundColor": ACCENT_SLATE,
+                    "borderColor": ACCENT_SLATE,
+                    "borderWidth": 1,
+                    "order": 1,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Weekly Mileage: Planned vs Actual"),
+                "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            },
+            "scales": {
+                "x": {},
+                "y": {
+                    "beginAtZero": True,
+                    "title": {"display": True, "text": "Miles"},
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=300)
+
+
+def strength_progression_chart(lift_name: str,
+                                progression_df: pd.DataFrame,
+                                chart_id: str | None = None) -> html.Div:
+    """1RM trend line for a single lift."""
+    if progression_df.empty:
+        return _empty_chart(f"No {lift_name} data")
+
+    cid = chart_id or f"strength-{lift_name}"
+    color = {
+        "bench": ACCENT, "squat": ACCENT_SLATE,
+        "deadlift": ACCENT_AMBER, "ohp": SLATE_60,
+    }.get(lift_name, ACCENT)
+
+    # Tested maxes as larger dots
+    tested = progression_df[progression_df["is_test"]]
+    estimated = progression_df[~progression_df["is_test"]]
+
+    datasets = [
+        {
+            "label": f"Estimated 1RM",
+            "data": [
+                {"x": _ts(r["date"]), "y": round(r["estimated_1rm"], 1)}
+                for _, r in progression_df.iterrows()
+            ],
+            "borderColor": color,
+            "backgroundColor": _hex_to_rgba(color, 0.1),
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": True,
+            "tension": 0.3,
+        },
+    ]
+
+    if not tested.empty:
+        datasets.append({
+            "label": "Tested Max",
+            "data": [
+                {"x": _ts(r["date"]), "y": round(r["estimated_1rm"], 1)}
+                for _, r in tested.iterrows()
+            ],
+            "backgroundColor": color,
+            "borderColor": color,
+            "pointRadius": 6,
+            "pointHoverRadius": 8,
+            "showLine": False,
+            "pointStyle": "triangle",
+        })
+
+    cfg = {
+        "type": "scatter",
+        "data": {"datasets": datasets},
+        "options": {
+            "plugins": {
+                "title": _title_cfg(f"{lift_name.title()} — Estimated 1RM"),
+                "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
+            },
+            "scales": {
+                "x": {"type": "time", "time": {"unit": "week"}},
+                "y": {
+                    "title": {"display": True, "text": "lbs"},
+                    "beginAtZero": False,
+                },
+            },
+        },
+    }
+    return _chart_wrap(cid, cfg, height=280)
+
+
+def compliance_bar(pct: float, chart_id: str = "compliance-bar") -> html.Div:
+    """Simple compliance progress bar (pure HTML/CSS)."""
+    fill_color = ACCENT_SLATE if pct >= 70 else ACCENT_AMBER if pct >= 40 else ACCENT
+    return html.Div([
+        html.Div(f"{pct:.0f}% Complete", style={
+            "fontSize": "13px", "fontWeight": "600",
+            "marginBottom": "6px", "color": TEXT_SECONDARY,
+        }),
+        html.Div(
+            html.Div(style={
+                "width": f"{min(pct, 100):.1f}%",
+                "height": "100%",
+                "backgroundColor": fill_color,
+                "borderRadius": "4px",
+                "transition": "width 0.5s ease",
+            }),
+            style={
+                "width": "100%", "height": "8px",
+                "backgroundColor": _hex_to_rgba(TEXT_MUTED, 0.2),
+                "borderRadius": "4px", "overflow": "hidden",
+            },
+        ),
+    ], style={"marginBottom": "16px"})
+
+
+def enhanced_plan_calendar(plan_rows: list[dict],
+                            compliance_data: dict | None = None) -> html.Div:
+    """Month-view calendar with workout cards, phase strips, and compliance."""
+    if not plan_rows:
+        return _empty_chart("No training plan data")
+
+    from datetime import date as date_type, timedelta
+    from calendar import monthrange
+    from strava_analytics.web.theme import PHASE_COLORS, BORDER as _BORDER
+
+    df = pd.DataFrame(plan_rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df["weekday"] = df["date"].dt.weekday
+
+    compliance_map = {}
+    if compliance_data and compliance_data.get("by_date"):
+        for entry in compliance_data["by_date"]:
+            d = entry["date"]
+            key = d.isoformat() if hasattr(d, "isoformat") else str(d)
+            compliance_map[key] = entry["completed"]
+
+    today = date_type.today()
+    day_names = ["M", "T", "W", "T", "F", "S", "S"]
+
+    # Get unique months in plan
+    df["month_key"] = df["date"].dt.to_period("M")
+    months = sorted(df["month_key"].unique())
+
+    month_views = []
+    for month in months:
+        month_df = df[df["month_key"] == month]
+        year = month.year
+        mo = month.month
+        month_label = month_df["date"].iloc[0].strftime("%B %Y")
+        _, days_in_month = monthrange(year, mo)
+
+        # Find the weekday of the 1st (0=Mon)
+        first_weekday = date_type(year, mo, 1).weekday()
+
+        # Header
+        header = html.Div([
+            html.Div(day_names[i], style={
+                "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
+                "color": TEXT_MUTED, "padding": "6px 0",
+                "letterSpacing": "0.08em",
+            }) for i in range(7)
+        ], style={
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "3px",
+        })
+
+        # Build grid of day cells
+        cells = []
+        # Empty leading cells
+        for _ in range(first_weekday):
+            cells.append(html.Div(style={"minHeight": "72px"}))
+
+        for day in range(1, days_in_month + 1):
+            d = date_type(year, mo, day)
+            d_ts = pd.Timestamp(d)
+            day_workouts = month_df[month_df["date"].dt.date == d]
+            is_today = d == today
+            is_plan_day = not day_workouts.empty
+
+            # Cell content
+            children = []
+
+            if is_plan_day:
+                for _, row in day_workouts.iterrows():
+                    wtype = row["type"]
+                    color = WORKOUT_TYPE_COLORS.get(wtype, TEXT_MUTED)
+                    date_str = d.isoformat()
+                    is_past = d <= today
+                    is_completed = compliance_map.get(date_str, False)
+
+                    intensity = row.get("intensity", "")
+
+                    # Type abbreviation (small, muted)
+                    type_abbr = {
+                        "run": "RUN", "lift": "LIFT", "rest": "REST",
+                        "obstacle": "OBS", "mobility": "MOB",
+                    }.get(wtype, "")
+
+                    # Build a short, scannable label
+                    title = row["title"]
+                    # Extract the key info: workout name + distance/weight
+                    if wtype == "run":
+                        # "Easy Run — 2.0 mi" → "Easy 2.0mi"
+                        # "RACE: Boulder Bolder 10K" → "RACE 10K"
+                        if title.startswith("RACE:"):
+                            short = title.replace("RACE: ", "")
+                        elif " — " in title:
+                            parts = title.split(" — ")
+                            name_part = parts[0].replace(" Run", "")
+                            dist_part = parts[1].replace(" mi", "mi") if len(parts) > 1 else ""
+                            short = f"{name_part} {dist_part}".strip()
+                        else:
+                            short = title
+                    elif wtype == "lift":
+                        # "Upper Body" / "Lower Body + Carries" / "Full Body + Obstacle Prep"
+                        short = title.replace(" Body", "").replace("Maintenance ", "Maint. ")
+                        if "(Light)" in short:
+                            short = short.replace(" (Light)", " Lt")
+                    elif wtype in ("rest", "mobility"):
+                        short = title.split(" +")[0]  # "Rest + Spartan Prep" → "Rest"
+                    else:
+                        short = title
+
+                    opacity = "1"
+                    if is_past and not is_completed and wtype not in ("rest", "mobility"):
+                        opacity = "0.4"
+
+                    check = ""
+                    if is_past and is_completed and wtype not in ("rest", "mobility"):
+                        check = " \u2713"
+
+                    children.append(html.Div([
+                        html.Span(short, style={
+                            "fontSize": "10px",
+                            "color": "var(--text-primary, #fafaf9)",
+                            "fontWeight": "500",
+                        }),
+                        html.Span(check, style={
+                            "fontSize": "9px", "color": "rgba(34,197,94,0.9)",
+                        }) if check else None,
+                    ], style={
+                        "whiteSpace": "nowrap",
+                        "overflow": "hidden",
+                        "textOverflow": "ellipsis",
+                        "borderLeft": f"2px solid {color}",
+                        "paddingLeft": "4px",
+                        "marginBottom": "2px",
+                        "opacity": opacity,
+                        "lineHeight": "1.5",
+                    }))
+
+            # Determine dominant intensity for bottom strip
+            intensities = [r.get("intensity", "") for _, r in day_workouts.iterrows()] if is_plan_day else []
+            intensity_priority = {"race": 4, "hard": 3, "moderate": 2, "easy": 1}
+            dominant_intensity = max(intensities, key=lambda x: intensity_priority.get(x, 0)) if intensities else ""
+            strip_color = {
+                "easy": ACCENT_SLATE, "moderate": ACCENT_AMBER,
+                "hard": ACCENT, "race": ACCENT_RED,
+            }.get(dominant_intensity, "transparent")
+
+            cell_style = {
+                "minHeight": "72px",
+                "padding": "4px 5px 0 5px",
+                "borderRadius": "4px",
+                "backgroundColor": "var(--bg-card, #1c1917)" if is_plan_day else "transparent",
+                "border": f"1px solid {_BORDER}" if is_plan_day else "1px solid transparent",
+                "display": "flex", "flexDirection": "column",
+            }
+            if is_today:
+                cell_style["border"] = f"2px solid {ACCENT}"
+
+            date_color = ACCENT if is_today else (TEXT_MUTED if not is_plan_day else "var(--text-secondary, #a8a29e)")
+
+            # Intensity strip at bottom
+            strip = html.Div(style={
+                "height": "3px", "borderRadius": "0 0 3px 3px",
+                "backgroundColor": strip_color,
+                "marginTop": "auto",
+                "margin": "auto -5px 0 -5px",
+            }) if is_plan_day and strip_color != "transparent" else None
+
+            cells.append(html.Div([
+                html.Div(str(day), style={
+                    "fontSize": "11px", "fontWeight": "600" if is_today else "400",
+                    "color": date_color, "marginBottom": "2px",
+                }),
+                *children,
+                strip,
+            ], style=cell_style))
+
+        # Trailing empty cells
+        total_cells = first_weekday + days_in_month
+        trailing = (7 - total_cells % 7) % 7
+        for _ in range(trailing):
+            cells.append(html.Div(style={"minHeight": "72px"}))
+
+        grid = html.Div(cells, style={
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "3px",
+        })
+
+        month_views.append(html.Div([
+            html.H6(month_label, style={
+                "fontSize": "14px", "fontWeight": "600",
+                "color": "var(--text-primary, #fafaf9)",
+                "marginBottom": "8px", "letterSpacing": "0.02em",
+            }),
+            header,
+            grid,
+        ], style={"marginBottom": "24px"}))
+
+    return html.Div(month_views, style={"marginBottom": "12px"})
