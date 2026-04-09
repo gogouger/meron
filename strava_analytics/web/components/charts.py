@@ -1001,30 +1001,31 @@ def _single_race_chart(
 
     edf = pd.DataFrame(rows)
 
-    type_colors = {
+    # All runs as a single scatter layer, colored by type
+    type_color_map = {
         "race": ACCENT, "hard_effort": ACCENT_AMBER,
-        "long": ACCENT_SLATE, "moderate": _hex_to_rgba(ACCENT_AMBER, 0.5),
+        "long": ACCENT_SLATE, "moderate": _hex_to_rgba(ACCENT_AMBER, 0.4),
         "easy": SLATE_60,
     }
+    type_size_map = {"race": 5, "hard_effort": 4, "long": 3, "moderate": 2, "easy": 2}
 
-    datasets = []
-    for rtype, color in type_colors.items():
-        subset = edf[edf["run_type"] == rtype]
-        if subset.empty:
-            continue
-        is_key = rtype in ("race", "hard_effort")
-        datasets.append({
-            "label": rtype.replace("_", " ").title(),
-            "data": [
-                {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
-                for _, row in subset.iterrows()
-            ],
-            "backgroundColor": color,
-            "borderColor": color,
-            "pointRadius": 4 if is_key else 2,
-            "pointHoverRadius": 6 if is_key else 4,
-            "showLine": False,
-        })
+    datasets = [{
+        "label": "Runs",
+        "data": [
+            {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
+            for _, row in edf.iterrows()
+        ],
+        "backgroundColor": [
+            type_color_map.get(row["run_type"], SLATE_60)
+            for _, row in edf.iterrows()
+        ],
+        "pointRadius": [
+            type_size_map.get(row["run_type"], 2)
+            for _, row in edf.iterrows()
+        ],
+        "pointHoverRadius": 5,
+        "showLine": False,
+    }]
 
     # Rolling best-effort trend: 60-day rolling minimum of race/hard_effort estimates
     # Shows how race-equivalent fitness evolves over time
