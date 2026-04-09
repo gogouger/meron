@@ -36,18 +36,19 @@ from strava_analytics.vo2max import (
 _GROUND_TRUTH_R = -1.0  # sentinel: override state entirely
 
 # Detraining constants (derived from literature)
-_HICKSON_THRESHOLD = 0.70    # CTL ratio below which detraining penalty applies
-_Q_DETRAINING_MULT = 3.0    # process noise multiplier during detraining
+# Detraining threshold is relative to a BASELINE (90-day avg CTL), not peak.
+# Using peak causes drift on 88%+ of history for athletes whose peak was a spike.
+_DETRAINING_THRESHOLD = 0.85  # CTL ratio vs baseline below which drift applies
+_Q_DETRAINING_MULT = 2.0     # process noise multiplier during detraining
+_MAX_DRIFT_PCT = 0.15         # cap: state can't drift more than 15% from anchor
 
 # Race time drift: 2.5%/week VO2max loss → for a 25-min 5K, ~5.4 sec/day
-# at full detraining. Scaled by (threshold - ctl_ratio) so partial training
-# gets proportional penalty. 0.09 min/day per 0.1 CTL-ratio below threshold.
-_DRIFT_RATE_RACE = 0.09     # min/day per 0.1 CTL-ratio below threshold
+# at full detraining. Scaled by deficit so partial detraining is proportional.
+_DRIFT_RATE_RACE = 0.06      # min/day per 0.1 deficit below threshold
 
 # 1RM drift: 2%/week after 3-week grace (McMaster 2013).
-# For a 300lb squat: ~6 lbs/week = ~0.86 lbs/day at full detraining.
-_DRIFT_RATE_1RM = 0.3       # lbs/day per 0.1 CTL-ratio below threshold
-_1RM_GRACE_DAYS = 21        # Ogasawara (2013): no loss for 3 weeks
+_DRIFT_RATE_1RM = 0.2        # lbs/day per 0.1 deficit below threshold
+_1RM_GRACE_DAYS = 21         # Ogasawara (2013): no loss for 3 weeks
 
 
 def _kalman_1d(
@@ -58,7 +59,7 @@ def _kalman_1d(
     initial_state: float | None = None,
     initial_covariance: float = 25.0,
     ctl_series: dict | None = None,
-    ctl_peak: float | None = None,
+    ctl_baseline: float | None = None,
     higher_is_better: bool = False,
     grace_days: int = 0,
 ) -> tuple[list[float], list[float], list[float]]:
@@ -74,7 +75,9 @@ def _kalman_1d(
         initial_state: starting estimate (defaults to first observation)
         initial_covariance: starting uncertainty (P0)
         ctl_series: {date → CTL value} for detraining drift. Optional.
-        ctl_peak: peak CTL value for ratio calculation. Optional.
+        ctl_baseline: 90-day rolling avg CTL for ratio calculation. Optional.
+                      Using baseline (not peak) prevents drift when athlete is
+                      simply at their normal training level.
         higher_is_better: True for 1RM (drift down = worse),
                           False for race times (drift up = worse).
         grace_days: days below threshold before drift begins (e.g. 21 for 1RM).
@@ -90,9 +93,11 @@ def _kalman_1d(
     P = initial_covariance
 
     # Detraining tracking
-    use_ctl = ctl_series is not None and ctl_peak is not None and ctl_peak > 0
+    use_ctl = (ctl_series is not None and ctl_baseline is not None
+               and ctl_baseline > 0)
     days_below_threshold = 0
     drift_rate = _DRIFT_RATE_1RM if higher_is_better else _DRIFT_RATE_RACE
+    anchor = x  # drift cap reference point (updated on ground truth)
 
     states = []
     uppers = []
@@ -110,21 +115,23 @@ def _kalman_1d(
                 d = dates[i]
                 d_key = d.date() if hasattr(d, "date") and callable(d.date) else d
                 ctl_now = ctl_series.get(d_key, 0)
-                ctl_ratio = ctl_now / ctl_peak
+                ctl_ratio = ctl_now / ctl_baseline
 
-                deficit = max(0.0, _HICKSON_THRESHOLD - ctl_ratio)
+                deficit = max(0.0, _DETRAINING_THRESHOLD - ctl_ratio)
                 if deficit > 0:
                     days_below_threshold += dt
                     # Adaptive Q: increase process noise during detraining
                     Q *= (1.0 + _Q_DETRAINING_MULT * deficit)
 
-                    # Drift: only after grace period
+                    # Drift: only after grace period, capped at 15% from anchor
                     if days_below_threshold > grace_days:
-                        drift = drift_rate * deficit * 10.0 * dt  # per 0.1 unit
+                        drift = drift_rate * deficit * 10.0 * dt
                         if higher_is_better:
-                            x -= drift  # 1RM decreases
+                            cap = anchor * (1 - _MAX_DRIFT_PCT)
+                            x = max(x - drift, cap)
                         else:
-                            x += drift  # race time increases (slower)
+                            cap = anchor * (1 + _MAX_DRIFT_PCT)
+                            x = min(x + drift, cap)
                 else:
                     days_below_threshold = 0  # reset grace counter
 
@@ -136,8 +143,9 @@ def _kalman_1d(
         if R == _GROUND_TRUTH_R:
             # Ground truth: snap state to observation, collapse uncertainty
             x = z
-            P = 0.5  # small residual uncertainty (measurement isn't infinitely precise)
-            days_below_threshold = 0  # reset on ground truth
+            P = 0.5
+            days_below_threshold = 0
+            anchor = x  # update drift cap reference
         else:
             # Standard Kalman update
             K = P / (P + R)
@@ -165,6 +173,23 @@ _RACE_RANGES = {
 }
 
 
+def _ctl_baseline_90d(ctl_series: dict) -> float:
+    """Compute the 90-day rolling average CTL as a stable baseline.
+
+    Using baseline instead of peak prevents false detraining detection
+    when an athlete's peak CTL was a brief spike above their normal level.
+    """
+    if not ctl_series:
+        return 0.0
+    sorted_dates = sorted(ctl_series.keys())
+    if not sorted_dates:
+        return 0.0
+    latest = sorted_dates[-1]
+    cutoff = latest - timedelta(days=90)
+    recent = [v for d, v in ctl_series.items() if d >= cutoff]
+    return sum(recent) / len(recent) if recent else 0.0
+
+
 def kalman_race(
     runs: pd.DataFrame,
     target_m: int = 5_000,
@@ -182,7 +207,7 @@ def kalman_race(
         runs: DataFrame of runs (enriched, with run_type)
         target_m: target race distance in meters (5000, 10000, 21097, 42195)
         ctl_series: {date → CTL} for detraining drift. Optional.
-        ctl_peak: peak CTL for ratio calculation. Optional.
+        ctl_peak: ignored (kept for backward compat). Baseline computed internally.
 
     Returns:
         DataFrame with: date, est_time_min, kalman_min, kalman_upper,
@@ -286,6 +311,8 @@ def kalman_race(
 
     obs_df = pd.DataFrame(rows)
 
+    baseline = _ctl_baseline_90d(ctl_series) if ctl_series else None
+
     states, uppers, lowers = _kalman_1d(
         obs_df["date"].tolist(),
         obs_df["est_time_min"].tolist(),
@@ -293,7 +320,7 @@ def kalman_race(
         q_per_day=0.002,
         initial_covariance=25.0,
         ctl_series=ctl_series,
-        ctl_peak=ctl_peak,
+        ctl_baseline=baseline,
         higher_is_better=False,  # lower race time = better
     )
 
@@ -343,12 +370,14 @@ def kalman_1rm(
         else:
             noise.append(25.0)  # Formula estimate
 
+    baseline = _ctl_baseline_90d(ctl_series) if ctl_series else None
+
     states, uppers, lowers = _kalman_1d(
         dates, observations, noise,
         q_per_day=1.5,  # ~10 lbs drift per week — tracks progressive overload
         initial_covariance=200.0,
         ctl_series=ctl_series,
-        ctl_peak=ctl_peak,
+        ctl_baseline=baseline,
         higher_is_better=True,   # higher 1RM = better
         grace_days=_1RM_GRACE_DAYS,  # Ogasawara (2013): 3-week grace period
     )

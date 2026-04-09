@@ -50,6 +50,7 @@ def layout(**_kwargs):
     recent_cutoff = now - pd.Timedelta(days=180)
 
     # Build CTL series for detraining-aware predictions
+    # Use 90-day avg as baseline (not peak) to avoid false detraining detection
     ctl_by_date = {}
     ctl_peak = 0.0
     if "chronic_load_28d" in df.columns:
@@ -57,7 +58,16 @@ def layout(**_kwargs):
             d = row["date"].date() if hasattr(row["date"], "date") else row["date"]
             ctl_by_date[d] = float(row["chronic_load_28d"])
         ctl_peak = max(ctl_by_date.values()) if ctl_by_date else 0.0
-    ctl_ratio = (ctl_by_date.get(now.date(), 0) / ctl_peak) if ctl_peak > 0 else None
+
+    # 90-day baseline for detraining ratio
+    from datetime import timedelta as _td
+    if ctl_by_date:
+        _cutoff = now.date() - _td(days=90)
+        _recent = [v for d, v in ctl_by_date.items() if d >= _cutoff]
+        ctl_baseline = sum(_recent) / len(_recent) if _recent else 0.0
+    else:
+        ctl_baseline = 0.0
+    ctl_ratio = (ctl_by_date.get(now.date(), 0) / ctl_baseline) if ctl_baseline > 0 else None
 
     vdot = compute_athlete_vdot(df, ctl_ratio=ctl_ratio)
     all_efforts = extract_race_efforts(df)

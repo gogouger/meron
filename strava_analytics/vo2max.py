@@ -258,7 +258,7 @@ def compute_training_elevation(df: pd.DataFrame) -> dict:
 _VDOT_DECAY_RATE_PER_WEEK = 0.08   # exponential decay constant
 _VDOT_DECAY_ONSET_DAYS = 14        # no decay for first 2 weeks (Mujika)
 _VDOT_DECAY_FLOOR = 0.85           # Coyle (1984): plateaus at ~85%
-_VDOT_CTL_SAFE_RATIO = 0.70        # Hickson (1985): no decay if CTL > 70% of peak
+_VDOT_CTL_SAFE_RATIO = 0.85        # no decay if CTL > 85% of 90-day baseline
 
 
 def compute_athlete_vdot(df: pd.DataFrame, n_best: int = 5,
@@ -274,8 +274,8 @@ def compute_athlete_vdot(df: pd.DataFrame, n_best: int = 5,
         df: Enriched activity DataFrame.
         n_best: Number of top efforts to consider.
         recent_weight: Weight multiplier for recency (applied linearly).
-        ctl_ratio: current CTL / peak CTL. When > 0.70, no staleness
-                   discount is applied (Hickson 1985).
+        ctl_ratio: current CTL / 90-day avg CTL. When > 0.85, no staleness
+                   discount is applied (athlete at normal training level).
 
     Returns:
         Weighted average VDOT.

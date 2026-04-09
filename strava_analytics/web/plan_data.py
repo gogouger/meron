@@ -330,27 +330,32 @@ def fit_banister_params(df: pd.DataFrame) -> dict:
             perf_data.append({"time_min": equiv_5k_min, "ctl": ctl, "atl": atl})
 
     n = len(perf_data)
-    if n < 3:
-        # Not enough data to fit — use defaults with baseline from best effort
+    if n < 5:
+        # Not enough data to fit reliably — use defaults
         p0 = perf_data[0]["time_min"] if perf_data else 0
         return {"p0": p0, "k1": _DEFAULT_K1, "k2": _DEFAULT_K2,
-                "n_races": n, "fitted": False}
+                "n_races": n, "fitted": False,
+                "ctl_mean": 1.0, "atl_mean": 1.0}
 
-    # Least squares: time_min = p0 + k1 * CTL - k2 * ATL
-    # For race times, better fitness (higher CTL) → lower time, so k1 is negative.
-    # Reframe: time_min = p0 - k1 * CTL + k2 * ATL (k1, k2 > 0 by convention)
+    # Normalize CTL/ATL to 0-1 range so fitted k1/k2 are in units of minutes
+    ctl_mean = np.mean([d["ctl"] for d in perf_data]) or 1.0
+    atl_mean = np.mean([d["atl"] for d in perf_data]) or 1.0
+
+    # Least squares: time_min = p0 - k1 * (CTL/ctl_mean) + k2 * (ATL/atl_mean)
     from numpy.linalg import lstsq
-    A = np.array([[-d["ctl"], d["atl"], 1.0] for d in perf_data])
+    A = np.array([[-d["ctl"] / ctl_mean, d["atl"] / atl_mean, 1.0]
+                  for d in perf_data])
     b = np.array([d["time_min"] for d in perf_data])
     result, _, _, _ = lstsq(A, b, rcond=None)
     k1_fit, k2_fit, p0_fit = result
 
     # Sanity check: k1, k2 should be positive (fitness helps, fatigue hurts)
-    k1_fit = max(0.01, k1_fit)
-    k2_fit = max(0.01, k2_fit)
+    k1_fit = max(0.1, k1_fit)
+    k2_fit = max(0.1, k2_fit)
 
     return {"p0": round(p0_fit, 2), "k1": round(k1_fit, 4), "k2": round(k2_fit, 4),
-            "n_races": n, "fitted": True}
+            "n_races": n, "fitted": True,
+            "ctl_mean": round(ctl_mean, 2), "atl_mean": round(atl_mean, 2)}
 
 
 # ---------------------------------------------------------------------------
@@ -439,22 +444,28 @@ def project_race_outcomes(
         current_time = vdot_to_race_time(current_vdot, dist_m)
 
         if params["fitted"]:
-            # Fitted model: Δtime = -k1*(CTL_proj - CTL_now) + k2*(ATL_proj - ATL_now)
-            delta_time = (-params["k1"] * (projected_ctl - current_ctl)
-                          + params["k2"] * (projected_atl - current_atl))
+            # Fitted model with normalized CTL/ATL:
+            # Δtime = -k1*(ΔCTL/ctl_mean) + k2*(ΔATL/atl_mean)
+            ctl_mean = params.get("ctl_mean", 1.0)
+            atl_mean = params.get("atl_mean", 1.0)
+            delta_time = (-params["k1"] * (projected_ctl - current_ctl) / ctl_mean
+                          + params["k2"] * (projected_atl - current_atl) / atl_mean)
             projected_time = current_time + delta_time
             method = f"Banister model (fitted from {params['n_races']} races)"
         else:
-            # Default: estimate improvement from CTL increase
-            # Heuristic: each unit CTL increase ≈ 0.1% improvement in race time
-            ctl_change_pct = (projected_ctl - current_ctl) / max(current_ctl, 1) * 100
-            # Taper effect: if ATL drops more than CTL (TSB increases), expect ~2-3% boost
+            # Evidence-based fallback heuristic:
+            # 1. Taper effect: Mujika & Padilla (2003): 2-3% improvement from taper
             tsb_now = current_ctl - current_atl
             tsb_proj = projected_ctl - projected_atl
-            taper_bonus_pct = min(3.0, max(0, (tsb_proj - tsb_now) * 0.15))
-            improvement_pct = min(8.0, ctl_change_pct * 0.1 + taper_bonus_pct)
+            taper_bonus_pct = min(3.0, max(0, (tsb_proj - tsb_now) * 0.2))
+
+            # 2. CTL building: ~0.5% improvement per 10% CTL increase
+            ctl_change_pct = (projected_ctl - current_ctl) / max(current_ctl, 1) * 100
+            build_bonus_pct = ctl_change_pct * 0.05
+
+            improvement_pct = min(6.0, taper_bonus_pct + build_bonus_pct)
             projected_time = current_time * (1 - improvement_pct / 100)
-            method = "Population defaults (add race results for personalized model)"
+            method = "Population defaults (add 5+ race results for personalized model)"
 
         delta_pct = (projected_time - current_time) / current_time * 100
 
