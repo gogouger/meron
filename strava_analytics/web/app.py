@@ -18,7 +18,7 @@ from strava_analytics.web.theme import (
 from strava_analytics.metrics import format_pace
 from strava_analytics.web.components.cards import stat_cell, duration_str, activity_type_badge
 from strava_analytics.web.components.routes import build_route_charts
-from strava_analytics.web.components.chat_widget import chat_widget
+from strava_analytics.web.api import register_api
 
 
 def create_app() -> dash.Dash:
@@ -98,9 +98,10 @@ def create_app() -> dash.Dash:
         ]),
         # Activity modal overlay — rendered by server callback
         html.Div(id="activity-modal-container"),
-        # Chat widget (appears on all pages)
-        chat_widget(),
     ])
+
+    # Register REST API endpoints on the underlying Flask server
+    register_api(app.server)
 
     # Dynamic page title based on current URL
     clientside_callback(
@@ -312,67 +313,6 @@ def render_activity_modal(modal_data):
             ]),
         ], id="modal-content"),
     ], id="activity-modal-overlay")
-
-
-# ── Chat callback ──────────────────────────────────────────────────────
-
-@callback(
-    Output("chat-messages", "children"),
-    Output("chat-history-store", "data"),
-    Output("chat-input", "value"),
-    Input("chat-send-btn", "n_clicks"),
-    Input("chat-input", "n_submit"),
-    State("chat-input", "value"),
-    State("chat-history-store", "data"),
-    prevent_initial_call=True,
-)
-def handle_chat_message(n_clicks, n_submit, question, history):
-    """Process a chat message: send to OpenAI, return response."""
-    from dash import html as _html
-    from strava_analytics.web.chat import build_system_prompt, get_data_context, ask_chatgpt
-
-    if not question or not question.strip():
-        return _render_chat_messages(history or []), history or [], ""
-
-    question = question.strip()
-    if history is None:
-        history = []
-
-    # Add user message
-    history.append({"role": "user", "content": question})
-
-    # Build context and query
-    df = data.get_df()
-    system_prompt = build_system_prompt(df)
-    extra_context = get_data_context(df, question)
-    response = ask_chatgpt(question, history[:-1], system_prompt, extra_context)
-
-    # Add assistant response
-    history.append({"role": "assistant", "content": response})
-
-    return _render_chat_messages(history), history, ""
-
-
-def _render_chat_messages(history: list[dict]):
-    """Convert chat history to Dash components."""
-    if not history:
-        return [html.Div(
-            "Ask me anything about your training data — runs, lifts, fitness, PRs, or your plan.",
-            className="chat-welcome",
-        )]
-
-    messages = []
-    for msg in history:
-        role = msg["role"]
-        content = msg["content"]
-        if role == "user":
-            messages.append(html.Div(content, className="chat-msg chat-msg-user"))
-        elif role == "assistant":
-            cls = "chat-msg chat-msg-assistant"
-            if content.startswith("Error") or content.startswith("No OpenAI"):
-                cls = "chat-msg chat-msg-error"
-            messages.append(html.Div(content, className=cls))
-    return messages
 
 
 def main() -> None:

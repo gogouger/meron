@@ -1,0 +1,319 @@
+openapi: "3.1.0"
+info:
+  title: Strava Analytics API
+  description: >
+    Personal training data API for a runner and lifter.
+    Provides fitness metrics, activity history, strength data,
+    personal records, and weekly mileage trends.
+    All distances in miles, weights in lbs, elevations in feet.
+  version: "1.0.0"
+servers:
+  - url: https://your-domain.ngrok.app
+    description: Replace with your tunnel or public URL
+paths:
+  /api/fitness:
+    get:
+      operationId: getFitness
+      summary: Current fitness snapshot
+      description: Returns CTL (fitness), ATL (fatigue), TSB (form), and status label.
+      responses:
+        "200":
+          description: Fitness metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ctl:
+                    type: number
+                    description: Chronic Training Load (fitness, 28-day)
+                  atl:
+                    type: number
+                    description: Acute Training Load (fatigue, 7-day)
+                  tsb:
+                    type: number
+                    description: Training Stress Balance (form = CTL - ATL)
+                  label:
+                    type: string
+                    description: "Status label: Fresh, Neutral, Fatigued, etc."
+                  date:
+                    type: string
+                    description: Today's date (ISO 8601)
+
+  /api/stats:
+    get:
+      operationId: getStats
+      summary: Lifetime activity statistics
+      description: Total counts, mileage, and date range of all activities.
+      responses:
+        "200":
+          description: Lifetime stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_activities:
+                    type: integer
+                  total_runs:
+                    type: integer
+                  total_lifts:
+                    type: integer
+                  total_miles:
+                    type: number
+                  date_from:
+                    type: string
+                  date_to:
+                    type: string
+
+  /api/activities:
+    get:
+      operationId: getRecentActivities
+      summary: Recent activities
+      description: Returns recent activities with key metrics (distance, pace, HR, etc).
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 14
+          description: Number of days to look back
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Max activities to return
+      responses:
+        "200":
+          description: List of activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    type:
+                      type: string
+                    name:
+                      type: string
+                    distance_mi:
+                      type: number
+                    pace:
+                      type: string
+                      description: "MM:SS per mile"
+                    pace_decimal:
+                      type: number
+                    avg_hr:
+                      type: number
+                    duration_s:
+                      type: number
+                    elevation_ft:
+                      type: number
+                    run_type:
+                      type: string
+
+  /api/mileage:
+    get:
+      operationId: getWeeklyMileage
+      summary: Weekly running mileage
+      description: Running mileage totals per week.
+      parameters:
+        - name: weeks
+          in: query
+          schema:
+            type: integer
+            default: 8
+          description: Number of weeks to return
+      responses:
+        "200":
+          description: Weekly mileage list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    week_of:
+                      type: string
+                    miles:
+                      type: number
+
+  /api/records:
+    get:
+      operationId: getPersonalRecords
+      summary: Personal records
+      description: Best efforts across standard distances (1mi, 5K, 10K, half, marathon).
+      responses:
+        "200":
+          description: PR list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    distance:
+                      type: string
+                    best_time:
+                      type: string
+                    best_pace:
+                      type: string
+                    best_date:
+                      type: string
+
+  /api/strength:
+    get:
+      operationId: getStrength
+      summary: Current 1RM estimates
+      description: Latest estimated one-rep max for bench, squat, deadlift, and OHP in lbs.
+      responses:
+        "200":
+          description: 1RM values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bench:
+                    type: number
+                  squat:
+                    type: number
+                  deadlift:
+                    type: number
+                  ohp:
+                    type: number
+
+  /api/runs:
+    get:
+      operationId: getDetailedRuns
+      summary: Detailed run history
+      description: Recent runs with full metrics including pace, HR, elevation, run type.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+          description: Max runs to return
+      responses:
+        "200":
+          description: Run list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    name:
+                      type: string
+                    distance_mi:
+                      type: number
+                    pace:
+                      type: string
+                    pace_decimal:
+                      type: number
+                    avg_hr:
+                      type: number
+                    max_hr:
+                      type: number
+                    elevation_ft:
+                      type: number
+                    duration_s:
+                      type: number
+                    run_type:
+                      type: string
+                    calories:
+                      type: number
+
+  /api/lifts:
+    get:
+      operationId: getDetailedLifts
+      summary: Detailed lift session history
+      description: Recent weight training sessions with lift weights.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Max sessions to return
+      responses:
+        "200":
+          description: Lift session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    name:
+                      type: string
+                    bench_lbs:
+                      type: number
+                    squat_lbs:
+                      type: number
+                    deadlift_lbs:
+                      type: number
+                    ohp_lbs:
+                      type: number
+                    duration_s:
+                      type: number
+
+  /api/summary:
+    get:
+      operationId: getAthleteSummary
+      summary: Complete athlete data overview
+      description: >
+        Combined endpoint returning fitness, stats, recent activities,
+        weekly mileage, strength, and personal records in one call.
+        Use this as the primary endpoint to get all context at once.
+      responses:
+        "200":
+          description: Full athlete summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fitness:
+                    type: object
+                  stats:
+                    type: object
+                  recent_activities:
+                    type: array
+                    items:
+                      type: object
+                  weekly_mileage:
+                    type: array
+                    items:
+                      type: object
+                  strength:
+                    type: object
+                  personal_records:
+                    type: array
+                    items:
+                      type: object
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Optional API key set in athlete_config.json
+
+security:
+  - ApiKeyAuth: []
+  - {}

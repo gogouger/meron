@@ -13,11 +13,13 @@ dependencies = [
     "plotly>=5.24",
     "fitparse>=0.6",
     "openai>=1.0",
+    "mcp>=1.0",
 ]
 
 [project.scripts]
 strava = "strava_analytics.cli:main"
 strava-web = "strava_analytics.web.app:main"
+strava-mcp = "strava_analytics.web.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=68.0"]
