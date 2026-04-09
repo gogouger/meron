@@ -75,7 +75,6 @@ def create_app() -> dash.Dash:
                     dcc.Link("Running", href="/running", className="ozni-nav-link"),
                     dcc.Link("Lifting", href="/lifting", className="ozni-nav-link"),
                     dcc.Link("Activities", href="/activities", className="ozni-nav-link"),
-                    dcc.Link("Predictions", href="/races", className="ozni-nav-link"),
                     dcc.Link("Plan", href="/plan", className="ozni-nav-link"),
                     dcc.Link("\u2699", href="/settings", className="ozni-nav-link",
                              style={"fontSize": "18px", "opacity": "0.6"},

@@ -15,7 +15,7 @@ from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     BG_CARD, BORDER, ACTIVITY_TYPE_COLORS, LIFT_COLORS,
-    HR_ZONE_COLORS, HR_ZONE_LABELS,
+    HR_ZONE_COLORS, HR_ZONE_LABELS, FONT_MONO,
 )
 from strava_analytics.metrics import format_pace
 
@@ -106,7 +106,7 @@ _PAGE_SIZE = 50
 
 # ── Card builders ─────────────────────────────────────────────────────
 
-def _activity_card(row, idx: int) -> html.Details:
+def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
     """Build a single expandable activity card. Dispatches by type."""
     act_type = row.get("type", "")
     color = ACTIVITY_TYPE_COLORS.get(act_type, TEXT_MUTED)
@@ -243,7 +243,7 @@ def _activity_card(row, idx: int) -> html.Details:
                         "color": TEXT_SECONDARY,
                     }),
                     html.Div(f"{wt:.0f} lbs", style={
-                        "fontFamily": "'IBM Plex Mono', monospace",
+                        "fontFamily": FONT_MONO,
                         "fontSize": "16px", "fontWeight": "700",
                         "color": TEXT_PRIMARY,
                     }),
@@ -356,6 +356,7 @@ def _activity_card(row, idx: int) -> html.Details:
             "padding": "12px 0 0 0",
         }) if detail_content else None,
     ], id=f"activity-card-{date_id}-{idx}",
+       open=default_open,
        style={
         "backgroundColor": BG_CARD,
         "border": f"1px solid {BORDER}",
@@ -379,7 +380,7 @@ def layout(**_kwargs):
     cards = []
     filenames_dict = {}
     for idx, (_, row) in enumerate(sorted_df.iterrows()):
-        cards.append(_activity_card(row, idx))
+        cards.append(_activity_card(row, idx, default_open=(idx < 3)))
         fn = row.get("filename", "")
         if fn:
             date_id = row["date"].strftime("%Y-%m-%d")

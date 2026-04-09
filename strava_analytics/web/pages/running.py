@@ -17,9 +17,10 @@ from strava_analytics.web.components.layout import (
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    BG_CARD, BORDER, RUN_TYPE_COLORS,
+    BG_CARD, BG_SURFACE, BORDER, RUN_TYPE_COLORS, FONT_MONO,
 )
 from strava_analytics.metrics import format_pace
+from strava_analytics.critical_speed import fit_critical_speed, predict_race_times, cs_to_vdot
 
 dash.register_page(__name__, path="/running", name="Running")
 
@@ -220,7 +221,7 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
                 "letterSpacing": "0.1em", "color": TEXT_MUTED, "marginBottom": "4px",
             }),
             html.Div(value, style={
-                "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "20px",
+                "fontFamily": FONT_MONO, "fontSize": "20px",
                 "fontWeight": "600", "color": color or TEXT_PRIMARY,
             }),
             *([] if sub is None else [html.Div(sub, style={
@@ -314,12 +315,106 @@ def _heat_pace_section(runs: pd.DataFrame) -> html.Div:
     if heat_cost_text:
         children.append(html.P(heat_cost_text, style={
             "color": TEXT_SECONDARY, "fontSize": "0.9rem",
-            "fontFamily": "'IBM Plex Mono', monospace",
+            "fontFamily": FONT_MONO,
             "marginBottom": "16px",
         }))
     children.append(charts.heat_vs_pace_chart(runs, chart_id="heat-pace"))
 
     return html.Div(children)
+
+
+def _format_race_time(seconds: float) -> str:
+    """Format race time as H:MM:SS or M:SS."""
+    if seconds <= 0:
+        return "--"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+def _race_predictions_section(runs: pd.DataFrame) -> html.Div:
+    """Build a Race Predictions section using the Critical Speed model."""
+    best_efforts = data.get_best_efforts()
+    if best_efforts is None or best_efforts.empty:
+        return html.Div()
+
+    # Compute weekly volume for Tanda marathon blend
+    weekly_km = 0.0
+    avg_pace_sec_per_km = 0.0
+    if not runs.empty:
+        recent = runs[runs["date"] >= runs["date"].max() - pd.Timedelta(weeks=8)]
+        if not recent.empty:
+            weeks = max((recent["date"].max() - recent["date"].min()).days / 7.0, 1.0)
+            weekly_km = recent["distance_mi"].sum() * 1.60934 / weeks
+            avg_pace_sec_per_km = recent["pace_min_per_mi"].mean() * 60 / 1.60934
+
+    predictions = predict_race_times(best_efforts, weekly_km, avg_pace_sec_per_km)
+    cs_params = predictions.pop("_cs_params", {})
+
+    if cs_params.get("cs_m_per_s", 0) <= 0:
+        return html.Div()
+
+    cs_vdot = cs_to_vdot(cs_params["cs_m_per_s"])
+
+    # Summary cards
+    summary = feature_grid([
+        numbered_card(1, "Critical Speed", f"R\u00b2={cs_params['r_squared']:.3f}",
+                      value=f"{cs_params['cs_min_per_mi']:.1f} /mi", color=ACCENT),
+        numbered_card(2, "VDOT", "from Critical Speed model",
+                      value=f"{cs_vdot:.1f}", color=ACCENT_SLATE),
+        numbered_card(3, "D\u2032", "anaerobic distance reserve",
+                      value=f"{cs_params['d_prime_m']:.0f} m", color=ACCENT_AMBER),
+        numbered_card(4, "Data Points", f"{cs_params['n_points']} best efforts",
+                      value=str(cs_params["n_points"]), color=ACCENT_SLATE),
+    ], columns=4)
+
+    # Prediction table
+    table_rows = []
+    for dist_label in ["5K", "10K", "Half Marathon", "Marathon"]:
+        pred = predictions.get(dist_label, {})
+        time_s = pred.get("time_s", 0)
+        pace = pred.get("pace_min_per_mi", 0)
+        method = pred.get("method", "")
+        confidence = pred.get("confidence", "")
+        conf_color = ACCENT_SLATE if confidence == "high" else ACCENT_AMBER
+        table_rows.append(html.Tr([
+            html.Td(dist_label, style={"fontWeight": "600", "padding": "10px 16px"}),
+            html.Td(_format_race_time(time_s), style={
+                "fontFamily": FONT_MONO, "padding": "10px 16px",
+            }),
+            html.Td(f"{format_pace(pace)} /mi" if pace else "--", style={
+                "fontFamily": FONT_MONO, "color": TEXT_SECONDARY,
+                "padding": "10px 16px",
+            }),
+            html.Td(method, style={"color": TEXT_MUTED, "fontSize": "12px",
+                                    "padding": "10px 16px"}),
+            html.Td(confidence, style={"color": conf_color, "fontSize": "12px",
+                                        "fontWeight": "600", "padding": "10px 16px"}),
+        ]))
+
+    pred_table = html.Table([
+        html.Thead(html.Tr([
+            html.Th(h, style={
+                "textAlign": "left", "padding": "8px 16px",
+                "fontSize": "10px", "textTransform": "uppercase",
+                "letterSpacing": "0.1em", "color": TEXT_MUTED,
+                "borderBottom": f"1px solid {BORDER}",
+            }) for h in ["Distance", "Time", "Pace", "Method", "Confidence"]
+        ])),
+        html.Tbody(table_rows),
+    ], style={
+        "width": "100%", "borderCollapse": "collapse",
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "fontSize": "14px", "color": TEXT_PRIMARY,
+    })
+
+    return page_section("RACE PREDICTIONS", [
+        summary,
+        html.Div(pred_table, style={"marginTop": "24px"}),
+    ], alt_bg=True)
 
 
 def layout(**_kwargs):
@@ -386,23 +481,27 @@ def layout(**_kwargs):
             ], columns=4),
         ]),
 
-        # Filters
-        page_section("FILTER YOUR RUNS", [
-            dbc.Row([
-                dbc.Col([
+        # Filters — compact inline bar
+        html.Div([
+            html.Div([
+                html.Div([
                     html.Label("Run Type",
-                               style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
+                               style={"fontSize": "11px", "color": TEXT_MUTED,
+                                      "textTransform": "uppercase", "letterSpacing": "0.08em",
+                                      "marginRight": "8px", "whiteSpace": "nowrap"}),
                     dcc.Dropdown(
                         id="run-type-filter",
                         options=[{"label": t, "value": t} for t in run_types],
                         multi=True,
                         placeholder="All types",
+                        style={"minWidth": "180px"},
                     ),
-                ], md=4),
-                dbc.Col([
-                    html.Label("Time Range",
-                               style={"fontSize": "0.8rem", "color": TEXT_SECONDARY,
-                                      "marginBottom": "6px", "display": "block"}),
+                ], style={"display": "flex", "alignItems": "center", "gap": "4px"}),
+                html.Div([
+                    html.Label("Range",
+                               style={"fontSize": "11px", "color": TEXT_MUTED,
+                                      "textTransform": "uppercase", "letterSpacing": "0.08em",
+                                      "marginRight": "8px"}),
                     html.Div([
                         html.Button("3M", id="range-3m", n_clicks=0,
                                     className="range-pill"),
@@ -414,9 +513,16 @@ def layout(**_kwargs):
                                     className="range-pill range-pill-active"),
                     ], className="range-pill-bar"),
                     dcc.Store(id="run-time-range", data="all"),
-                ], md=6),
-            ]),
-        ], alt_bg=True),
+                ], style={"display": "flex", "alignItems": "center", "gap": "4px"}),
+            ], style={
+                "display": "flex", "gap": "24px", "alignItems": "center",
+                "flexWrap": "wrap",
+            }),
+        ], style={
+            "backgroundColor": BG_SURFACE, "border": f"1px solid {BORDER}",
+            "padding": "12px 24px", "margin": "0 auto",
+            "maxWidth": "1200px",
+        }),
 
         # Run metadata for hover tooltips
         dcc.Store(id="run-meta-store", data=run_meta),
@@ -443,11 +549,11 @@ def layout(**_kwargs):
             }),
         ]),
 
-        # Race Fitness
-        page_section("RACE PREDICTIONS", [
-            html.P("Estimated race times across four distances. Click a point for details.",
-                   style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
-                          "marginBottom": "20px"}),
+        # Race Predictions — Critical Speed model
+        _race_predictions_section(runs),
+
+        # Race chart (callback-driven, filter-aware)
+        page_section("RACE FITNESS TREND", [
             html.Div(id="race-pred-container"),
         ], alt_bg=True),
 

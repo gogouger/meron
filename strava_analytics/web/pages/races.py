@@ -19,7 +19,7 @@ from strava_analytics.vo2max import (
     compute_athlete_vdot, extract_race_efforts, compute_training_elevation,
 )
 
-dash.register_page(__name__, path="/races", name="Race Predictions")
+# dash.register_page(__name__, path="/races", name="Race Predictions")
 
 
 def _fmt(seconds: float) -> str:

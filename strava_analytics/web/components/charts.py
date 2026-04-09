@@ -122,8 +122,9 @@ def pace_trend_chart(runs: pd.DataFrame, chart_id: str = "pace-trend", run_meta:
                     {"x": _ts(row["date"]), "y": round(row["pace_min_per_mi"], 2)}
                     for _, row in subset.iterrows()
                 ],
-                "backgroundColor": color,
+                "backgroundColor": _hex_to_rgba(color, 0.4),
                 "borderColor": color,
+                "borderWidth": 1,
                 "pointRadius": _PT,
                 "pointHoverRadius": _PT_HOVER,
                 "showLine": False,
@@ -136,8 +137,9 @@ def pace_trend_chart(runs: pd.DataFrame, chart_id: str = "pace-trend", run_meta:
                 {"x": _ts(row["date"]), "y": round(row["pace_min_per_mi"], 2)}
                 for _, row in df.iterrows()
             ],
-            "backgroundColor": ACCENT,
+            "backgroundColor": _hex_to_rgba(ACCENT, 0.4),
             "borderColor": ACCENT,
+            "borderWidth": 1,
             "pointRadius": _PT,
             "pointHoverRadius": _PT_HOVER,
             "showLine": False,
@@ -282,8 +284,9 @@ def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -
             {"x": _ts(row["date"]), "y": round(row["efficiency"], 2)}
             for _, row in df.iterrows()
         ],
-        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.5),
+        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.4),
         "borderColor": ACCENT_SLATE,
+        "borderWidth": 1,
         "pointRadius": _PT,
         "pointHoverRadius": _PT_HOVER,
         "showLine": False,
@@ -411,6 +414,7 @@ def hr_over_time_chart(runs: pd.DataFrame, chart_id: str = "hr-trend") -> html.D
         ],
         "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.4),
         "borderColor": ACCENT_SLATE,
+        "borderWidth": 1,
         "pointRadius": _PT,
         "pointHoverRadius": _PT_HOVER,
         "showLine": False,
@@ -479,19 +483,21 @@ def stroller_pace_chart(runs: pd.DataFrame, chart_id: str = "stroller-pace") -> 
         {
             "label": "Solo",
             "data": [{"x": _ts(r["date"]), "y": round(r["pace_min_per_mi"], 2)} for _, r in solo.iterrows()],
-            "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.25),
+            "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.4),
             "borderColor": ACCENT_SLATE,
-            "pointRadius": 2,
-            "pointHoverRadius": 4,
+            "borderWidth": 1,
+            "pointRadius": _PT,
+            "pointHoverRadius": _PT_HOVER,
             "showLine": False,
         },
         {
             "label": "Stroller",
             "data": [{"x": _ts(r["date"]), "y": round(r["pace_min_per_mi"], 2)} for _, r in stroller.iterrows()],
-            "backgroundColor": ACCENT,
+            "backgroundColor": _hex_to_rgba(ACCENT, 0.4),
             "borderColor": ACCENT,
-            "pointRadius": 4,
-            "pointHoverRadius": 6,
+            "borderWidth": 1,
+            "pointRadius": _PT,
+            "pointHoverRadius": _PT_HOVER,
             "showLine": False,
         },
     ]
@@ -576,8 +582,9 @@ def heat_vs_pace_chart(runs: pd.DataFrame, chart_id: str = "heat-pace") -> html.
                     {"x": round(r["weather_temp_f"], 1), "y": round(r["pace_min_per_mi"], 2)}
                     for _, r in subset.iterrows()
                 ],
-                "backgroundColor": color,
+                "backgroundColor": _hex_to_rgba(color, 0.4),
                 "borderColor": color,
+                "borderWidth": 1,
                 "pointRadius": _PT,
                 "pointHoverRadius": _PT_HOVER,
                 "showLine": False,
@@ -589,8 +596,9 @@ def heat_vs_pace_chart(runs: pd.DataFrame, chart_id: str = "heat-pace") -> html.
                 {"x": round(r["weather_temp_f"], 1), "y": round(r["pace_min_per_mi"], 2)}
                 for _, r in df.iterrows()
             ],
-            "backgroundColor": ACCENT,
+            "backgroundColor": _hex_to_rgba(ACCENT, 0.4),
             "borderColor": ACCENT,
+            "borderWidth": 1,
             "pointRadius": _PT,
             "pointHoverRadius": _PT_HOVER,
             "showLine": False,
@@ -1017,10 +1025,11 @@ def _single_race_chart(
             {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
             for _, row in edf.iterrows()
         ],
-        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.35),
-        "borderColor": "transparent",
-        "pointRadius": 2,
-        "pointHoverRadius": 5,
+        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.4),
+        "borderColor": ACCENT_SLATE,
+        "borderWidth": 1,
+        "pointRadius": _PT,
+        "pointHoverRadius": _PT_HOVER,
         "showLine": False,
     }]
 

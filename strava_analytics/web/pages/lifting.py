@@ -15,13 +15,63 @@ from strava_analytics.web.components.layout import (
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, LIFT_COLORS,
-    BG_CARD, BORDER,
+    BG_CARD, BORDER, FONT_MONO,
 )
 from strava_analytics.predictions import extract_1rm_progression
 from strava_analytics.lifting_program import BASELINE, END_PRS
+from strava_analytics.strength_model import fit_all_lifts, project_1rm, compute_interference
 
 dash.register_page(__name__, path="/lifting", name="Lifting")
 
+
+
+def _strength_projections_section(df: pd.DataFrame) -> html.Div:
+    """Build a Strength Projections section using the log-curve model."""
+    fits = fit_all_lifts(df)
+    if not fits or all(f.get("current_1rm", 0) <= 0 for f in fits.values()):
+        return html.Div()
+
+    # Compute weekly run miles for interference
+    runs = df[df["type"] == "Run"].copy()
+    weekly_run_miles = 0.0
+    if not runs.empty:
+        recent = runs[runs["date"] >= runs["date"].max() - pd.Timedelta(weeks=8)]
+        if not recent.empty:
+            weeks = max((recent["date"].max() - recent["date"].min()).days / 7.0, 1.0)
+            weekly_run_miles = recent["distance_mi"].sum() / weeks
+
+    interference = compute_interference(weekly_run_miles)
+    weeks_ahead = 8
+
+    projection_cards = []
+    for i, (lift, params) in enumerate(fits.items(), 1):
+        current = params.get("current_1rm", 0)
+        if current <= 0:
+            continue
+        projected = project_1rm(params, weeks_ahead, interference)
+        delta = projected - current
+        delta_pct = (delta / current) * 100 if current > 0 else 0
+        sign = "+" if delta >= 0 else ""
+        color_map = {"bench": ACCENT, "squat": ACCENT_SLATE,
+                     "deadlift": ACCENT_AMBER, "ohp": ACCENT_SLATE}
+        projection_cards.append(numbered_card(
+            i, lift.title(),
+            f"{current:.0f} \u2192 {projected:.0f} lbs ({sign}{delta_pct:.1f}%)",
+            value=f"{projected:.0f} lbs",
+            color=color_map.get(lift, ACCENT),
+        ))
+
+    interference_note = html.P(
+        f"Interference factor: {interference:.2f} "
+        f"(~{weekly_run_miles:.0f} mi/week running). "
+        f"Projecting {weeks_ahead} weeks ahead.",
+        style={"color": TEXT_MUTED, "fontSize": "12px", "marginTop": "16px"},
+    )
+
+    return page_section("STRENGTH PROJECTIONS", [
+        feature_grid(projection_cards, columns=min(len(projection_cards), 4)),
+        interference_note,
+    ])
 
 
 def layout(**_kwargs):
@@ -122,6 +172,9 @@ def layout(**_kwargs):
         page_section("TRAINING VOLUME", [
             charts.volume_chart(df),
         ]),
+
+        # Strength Projections
+        _strength_projections_section(df),
 
         # CTA
         cta_section(
@@ -245,7 +298,7 @@ def _lift_card(session, idx):
             icon_div,
             html.Div([
                 html.Div(f"{val:.0f}", style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontFamily": FONT_MONO,
                     "fontSize": "15px", "fontWeight": "700",
                     "color": TEXT_PRIMARY, "lineHeight": "1",
                 }),
@@ -282,7 +335,7 @@ def _lift_card(session, idx):
         html.Div([
             html.Div([
                 html.Span(date_str, style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontFamily": FONT_MONO,
                     "fontSize": "14px", "fontWeight": "600",
                     "color": TEXT_PRIMARY,
                 }),
@@ -420,12 +473,12 @@ def _build_program_table(lifts):
         },
         style_data_conditional=[{
             "if": {"column_id": "Day"},
-            "fontFamily": "'IBM Plex Mono', monospace",
+            "fontFamily": FONT_MONO,
             "fontWeight": "600",
             "width": "50px",
         }, {
             "if": {"column_id": "Date"},
-            "fontFamily": "'IBM Plex Mono', monospace",
+            "fontFamily": FONT_MONO,
             "width": "80px",
             "color": TEXT_MUTED,
         }],

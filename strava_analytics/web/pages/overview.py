@@ -17,7 +17,7 @@ from strava_analytics.web.components.layout import (
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, BG_CARD, BORDER,
-    ACTIVITY_TYPE_COLORS,
+    ACTIVITY_TYPE_COLORS, FONT_MONO,
 )
 from strava_analytics.metrics import format_pace
 from strava_analytics.vo2max import compute_athlete_vdot
@@ -120,16 +120,15 @@ def _hover_card(activities_list, date_str: str):
     })
 
 
-def _week_flame(count: int) -> html.Div:
-    """Line-art flame icon sized & coloured by weekly activity count.
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert a hex color to rgba() string."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
 
-    Uses an inline CSS clip-path flame shape on a div — no emoji, no SVG tags.
-    1-2 = small teal, 3-4 = medium orange, 5+ = large red. Stroke-style outline.
-    """
-    t = min(count, 7) / 7  # 0..1
-    h = int(14 + t * 10)   # 14..24px
-    w = int(10 + t * 6)    # 10..16px
 
+def _week_badge(count: int) -> html.Div:
+    """Simple pill badge coloured by weekly activity count."""
     if count <= 2:
         color = ACCENT_SLATE
     elif count <= 4:
@@ -137,43 +136,13 @@ def _week_flame(count: int) -> html.Div:
     else:
         color = ACCENT
 
-    # Flame shape via clip-path — a stylised teardrop/flame silhouette
-    flame_clip = (
-        "polygon(50% 0%, 65% 20%, 80% 45%, 85% 65%, "
-        "80% 80%, 65% 95%, 50% 100%, 35% 95%, 20% 80%, "
-        "15% 65%, 20% 45%, 35% 20%)"
-    )
-
-    return html.Div([
-        # Outer flame (border effect via slightly larger shape)
-        html.Div(
-            # Inner cutout (transparent center = outline effect)
-            html.Div(style={
-                "width": f"{w - 3}px", "height": f"{h - 3}px",
-                "clipPath": flame_clip,
-                "background": "var(--bg)",
-                "margin": "auto",
-            }),
-            style={
-                "width": f"{w}px", "height": f"{h}px",
-                "clipPath": flame_clip,
-                "background": color,
-                "display": "flex", "alignItems": "center",
-                "justifyContent": "center",
-            },
-        ),
-        html.Span(str(count), style={
-            "fontSize": "9px", "fontWeight": "700",
-            "color": color,
-            "fontFamily": "'IBM Plex Mono', monospace",
-            "lineHeight": "1", "marginTop": "1px",
-        }),
-    ], style={
-        "display": "flex", "flexDirection": "column",
-        "alignItems": "center", "justifyContent": "center",
-        "gap": "1px",
-        "width": "40px", "height": "32px",
-        "margin": "0 auto",
+    return html.Div(str(count), style={
+        "fontSize": "10px", "fontWeight": "700",
+        "color": color,
+        "backgroundColor": _hex_to_rgba(color, 0.12),
+        "borderRadius": "8px", "padding": "2px 6px",
+        "textAlign": "center", "lineHeight": "1.2",
+        "fontFamily": FONT_MONO,
     })
 
 
@@ -256,7 +225,7 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
 
         # Weekly meta column — flame icon that heats up with activity count
         if week_activity_count > 0:
-            meta = _week_flame(week_activity_count)
+            meta = _week_badge(week_activity_count)
         else:
             meta = html.Div(style={"width": "40px", "height": "28px"})
         cells.append(meta)
@@ -347,7 +316,7 @@ def _trends_section(df: pd.DataFrame) -> html.Div:
                 "color": TEXT_MUTED, "marginBottom": "4px",
             }),
             html.Div(f"{t['recent']}", style={
-                "fontFamily": "'IBM Plex Mono', monospace",
+                "fontFamily": FONT_MONO,
                 "fontSize": "20px", "fontWeight": "600",
                 "color": TEXT_PRIMARY,
             }),
@@ -407,7 +376,7 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                     "color": TEXT_MUTED, "fontSize": "11px",
                 }),
                 html.Span(yr_val, style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontFamily": FONT_MONO,
                     "fontSize": "12px", "fontWeight": "600",
                 }),
                 html.Span(f" — {yb['date']}", style={
@@ -427,11 +396,12 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                     "minWidth": "40px", "display": "inline-block",
                 }),
                 html.Span(eff_val, style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontFamily": FONT_MONO,
                     "fontSize": "12px",
                 }),
-                html.Span(f"  {eff['name']}", style={
-                    "color": TEXT_MUTED, "fontSize": "11px",
+                html.A(eff["name"], href="/activities", style={
+                    "color": ACCENT, "fontSize": "11px",
+                    "textDecoration": "none", "marginLeft": "4px",
                 }),
                 html.Span(f"  {eff['date']}", style={
                     "color": TEXT_MUTED, "fontSize": "11px",
@@ -455,13 +425,13 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                         "minWidth": "120px", "display": "inline-block",
                     }),
                     html.Span(display_val, style={
-                        "fontFamily": "'IBM Plex Mono', monospace",
+                        "fontFamily": FONT_MONO,
                         "fontSize": "16px", "fontWeight": "600",
                         "color": ACCENT,
                     }),
-                    html.Span(f"  {pr['best_name']}", style={
-                        "color": TEXT_MUTED, "fontSize": "12px",
-                        "marginLeft": "12px",
+                    html.A(pr["best_name"], href="/activities", style={
+                        "color": ACCENT, "fontSize": "12px",
+                        "textDecoration": "none", "marginLeft": "12px",
                     }),
                     html.Span(f"  {pr['best_date']}", style={
                         "color": TEXT_MUTED, "fontSize": "12px",
@@ -510,6 +480,20 @@ def _year_section(df: pd.DataFrame) -> html.Div:
     if "longest_run" in summary:
         stat_items.append(("Longest Run", f"{summary['longest_run']} mi"))
 
+    # Best 1RMs for the year (from weight training data)
+    year = summary["year"]
+    lifts_df = df[(df["date"].dt.year == year) & (df["type"] == "Weight Training")]
+    for col, label in [
+        ("bench_weight", "Best Bench"),
+        ("squat_weight", "Best Squat"),
+        ("deadlift_weight", "Best Deadlift"),
+        ("ohp_weight", "Best OHP"),
+    ]:
+        if col in lifts_df.columns:
+            val = lifts_df[col].max()
+            if pd.notna(val) and val > 0:
+                stat_items.append((label, f"{int(val)} lb"))
+
     stat_cells = []
     for label, val in stat_items:
         stat_cells.append(html.Div([
@@ -519,7 +503,7 @@ def _year_section(df: pd.DataFrame) -> html.Div:
                 "color": TEXT_MUTED, "marginBottom": "4px",
             }),
             html.Div(val, style={
-                "fontFamily": "'IBM Plex Mono', monospace",
+                "fontFamily": FONT_MONO,
                 "fontSize": "18px", "fontWeight": "600",
                 "color": TEXT_PRIMARY,
             }),

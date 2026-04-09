@@ -9,7 +9,7 @@ from strava_analytics.web.components.layout import (
 )
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
-    BG_CARD, BG_SURFACE, BORDER,
+    BG_CARD, BG_SURFACE, BORDER, FONT_MONO,
 )
 
 dash.register_page(__name__, path="/settings", name="Settings")
@@ -68,7 +68,7 @@ def _hr_zones_section() -> html.Div:
             type="number",
             value=max_hr,
             min=140, max=230, step=1,
-            style={"width": "100px", "fontFamily": "'IBM Plex Mono', monospace",
+            style={"width": "100px", "fontFamily": FONT_MONO,
                    "fontSize": "16px", "fontWeight": "700"},
         ),
         html.Span(" bpm", style={"color": TEXT_MUTED, "marginLeft": "8px"}),
@@ -137,7 +137,7 @@ def layout(**_kwargs):
                     type="password",
                     value=data.get_athlete_config().get("openai_api_key", ""),
                     placeholder="sk-...",
-                    style={"width": "320px", "fontFamily": "'IBM Plex Mono', monospace",
+                    style={"width": "320px", "fontFamily": FONT_MONO,
                            "fontSize": "13px"},
                 ),
             ], style={"marginBottom": "12px"}),

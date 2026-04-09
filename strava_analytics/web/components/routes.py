@@ -13,7 +13,7 @@ from strava_analytics.web import data
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_MUTED, BORDER,
-    HR_ZONE_COLORS, HR_ZONE_LABELS,
+    HR_ZONE_COLORS, HR_ZONE_LABELS, FONT_MONO,
 )
 from strava_analytics.metrics import format_pace
 
@@ -96,7 +96,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
     if splits:
         fastest = min(s["pace_min_per_mi"] for s in splits)
         avg_pace = sum(s["pace_min_per_mi"] for s in splits) / len(splits)
-        _mono = "'IBM Plex Mono', monospace"
+        _mono = FONT_MONO
         _hdr_s = {"fontSize": "9px", "fontWeight": "600", "textTransform": "uppercase",
                   "letterSpacing": "0.06em", "color": TEXT_MUTED}
 
@@ -456,7 +456,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
 
                 _route_map_counter += 1
                 hist_id = f"route-hist-{_route_map_counter}"
-                _mono = "'IBM Plex Mono', monospace"
+                _mono = FONT_MONO
                 dot_color = ACCENT_SLATE
 
                 # Find fastest run for highlighting
