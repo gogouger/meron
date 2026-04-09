@@ -204,19 +204,25 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
 
             _route_map_counter_local = _route_map_counter
             stream_id = f"stream-{_route_map_counter_local}"
-            x_labels = [round(x, 2) for x in px_vals[:len(pv)]]
+            x_vals = [round(x, 3) for x in px_vals[:len(pv)]]
+            n_pts = len(x_vals)
+
+            def _xy(yvals, n=n_pts):
+                return [{"x": x_vals[i], "y": round(yvals[i], 2) if yvals[i] else None}
+                        for i in range(min(len(yvals), n))]
+
             datasets = []
 
             if elev_ft and dist_mi:
                 elev_smooth = _smooth(elev_ft, window=7)
                 datasets.append({
-                    "label": "_Elevation", "data": [round(e, 0) for e in elev_smooth[:len(x_labels)]],
+                    "label": "_Elevation", "data": _xy(elev_smooth),
                     "borderColor": "transparent", "backgroundColor": "rgba(150,150,150,0.08)",
                     "fill": True, "pointRadius": 0, "yAxisID": "y1", "tension": 0.3, "order": 3,
                 })
 
             datasets.append({
-                "label": "Pace", "data": [round(v, 2) if v else None for v in pv],
+                "label": "Pace", "data": _xy(pv),
                 "borderColor": ACCENT_SLATE, "backgroundColor": "rgba(91,155,213,0.12)",
                 "borderWidth": 2.5, "fill": True, "pointRadius": 0,
                 "yAxisID": "y", "tension": 0.3, "spanGaps": True, "order": 2,
@@ -224,7 +230,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
 
             if gap:
                 datasets.append({
-                    "label": "GAP", "data": [round(v, 2) if v else None for v in gap[:len(x_labels)]],
+                    "label": "GAP", "data": _xy(gap),
                     "borderColor": ACCENT_AMBER, "borderWidth": 1.5, "borderDash": [4, 4],
                     "fill": False, "pointRadius": 0, "yAxisID": "y", "tension": 0.3,
                     "spanGaps": True, "order": 1,
@@ -232,17 +238,20 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
 
             if has_hr and hr_smooth:
                 datasets.append({
-                    "label": "HR", "data": [round(v, 0) if v else None for v in hr_smooth[:len(x_labels)]],
+                    "label": "HR", "data": _xy(hr_smooth),
                     "borderColor": ACCENT_RED, "borderWidth": 2, "fill": False,
                     "pointRadius": 0, "yAxisID": "y2", "tension": 0.3, "spanGaps": True, "order": 0,
                 })
 
             pace_min_val = min(vp) - 0.5
             pace_max_val = max(vp) + 0.5
+            max_dist = x_vals[-1] if x_vals else 1
             hr_vals = [h for h in (stream.heart_rate or []) if h and h > 0]
 
             scales = {
                 "x": {
+                    "type": "linear",
+                    "min": 0, "max": max_dist,
                     "title": {"display": True, "text": "mi"},
                     "ticks": {"stepSize": 0.25},
                     "grid": {"display": True},
@@ -262,7 +271,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
 
             stream_cfg = json.dumps({
                 "type": "line",
-                "data": {"labels": x_labels, "datasets": datasets},
+                "data": {"datasets": datasets},
                 "options": {
                     "responsive": True, "maintainAspectRatio": False,
                     "interaction": {"mode": "index", "intersect": False},
@@ -288,7 +297,7 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
     if stream.heart_rate and stream.timestamps and len(stream.heart_rate) > 10:
         cfg = data.get_athlete_config()
         max_hr = cfg.get("max_hr", 200)
-        zone_pct = cfg.get("zones_pct", [60, 70, 80, 90])
+        zone_pct = cfg.get("hr_zones_pct", [60, 70, 80, 90])
         boundaries = [int(max_hr * p / 100) for p in zone_pct]
 
         zone_secs = [0.0] * 5
