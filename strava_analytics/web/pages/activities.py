@@ -260,11 +260,10 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             }))
 
         if _lift_grid_items:
-            detail_content.append(html.Div(_lift_grid_items, style={
+            primary.append(html.Div(_lift_grid_items, style={
                 "display": "grid",
                 "gridTemplateColumns": "repeat(auto-fill, minmax(160px, 1fr))",
-                "gap": "8px", "marginTop": "12px", "paddingTop": "12px",
-                "borderTop": f"1px solid {BORDER}",
+                "gap": "8px", "marginTop": "12px",
             }))
 
         # Additional exercises (non-primary)
@@ -380,7 +379,7 @@ def layout(**_kwargs):
     cards = []
     filenames_dict = {}
     for idx, (_, row) in enumerate(sorted_df.iterrows()):
-        cards.append(_activity_card(row, idx, default_open=(idx < 3)))
+        cards.append(_activity_card(row, idx, default_open=False))
         fn = row.get("filename", "")
         if fn:
             date_id = row["date"].strftime("%Y-%m-%d")

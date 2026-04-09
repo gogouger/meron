@@ -399,16 +399,20 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                     "fontFamily": FONT_MONO,
                     "fontSize": "12px",
                 }),
-                html.A(eff["name"], href="/activities", style={
+                html.Span(eff["name"], style={
                     "color": ACCENT, "fontSize": "11px",
-                    "textDecoration": "none", "marginLeft": "4px",
+                    "marginLeft": "4px",
                 }),
                 html.Span(f"  {eff['date']}", style={
                     "color": TEXT_MUTED, "fontSize": "11px",
                 }),
             ], style={"padding": "3px 0"}))
 
-        detail_children = []
+        detail_children = [
+            html.A("View run \u2192", href="/activities", style={
+                "color": ACCENT, "fontSize": "11px", "textDecoration": "none",
+            }),
+        ]
         if year_row:
             detail_children.append(year_row)
         if top3_rows:
@@ -429,9 +433,9 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                         "fontSize": "16px", "fontWeight": "600",
                         "color": ACCENT,
                     }),
-                    html.A(pr["best_name"], href="/activities", style={
+                    html.Span(pr["best_name"], style={
                         "color": ACCENT, "fontSize": "12px",
-                        "textDecoration": "none", "marginLeft": "12px",
+                        "marginLeft": "12px",
                     }),
                     html.Span(f"  {pr['best_date']}", style={
                         "color": TEXT_MUTED, "fontSize": "12px",

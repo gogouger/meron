@@ -381,18 +381,14 @@ def _race_predictions_section(runs: pd.DataFrame) -> html.Div:
         confidence = pred.get("confidence", "")
         conf_color = ACCENT_SLATE if confidence == "high" else ACCENT_AMBER
         table_rows.append(html.Tr([
-            html.Td(dist_label, style={"fontWeight": "600", "padding": "10px 16px"}),
-            html.Td(_format_race_time(time_s), style={
-                "fontFamily": FONT_MONO, "padding": "10px 16px",
-            }),
+            html.Td(dist_label, style={"fontWeight": "600"}),
+            html.Td(_format_race_time(time_s), style={"fontFamily": FONT_MONO}),
             html.Td(f"{format_pace(pace)} /mi" if pace else "--", style={
-                "fontFamily": FONT_MONO, "color": TEXT_SECONDARY,
-                "padding": "10px 16px",
+                "fontFamily": FONT_MONO, "color": "var(--text-secondary)",
             }),
-            html.Td(method, style={"color": TEXT_MUTED, "fontSize": "12px",
-                                    "padding": "10px 16px"}),
+            html.Td(method, style={"color": "var(--text-muted)", "fontSize": "12px"}),
             html.Td(confidence, style={"color": conf_color, "fontSize": "12px",
-                                        "fontWeight": "600", "padding": "10px 16px"}),
+                                        "fontWeight": "600"}),
         ]))
 
     pred_table = html.Table([
@@ -400,15 +396,13 @@ def _race_predictions_section(runs: pd.DataFrame) -> html.Div:
             html.Th(h, style={
                 "textAlign": "left", "padding": "8px 16px",
                 "fontSize": "10px", "textTransform": "uppercase",
-                "letterSpacing": "0.1em", "color": TEXT_MUTED,
-                "borderBottom": f"1px solid {BORDER}",
+                "letterSpacing": "0.1em",
             }) for h in ["Distance", "Time", "Pace", "Method", "Confidence"]
         ])),
         html.Tbody(table_rows),
-    ], style={
+    ], className="table", style={
         "width": "100%", "borderCollapse": "collapse",
-        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-        "fontSize": "14px", "color": TEXT_PRIMARY,
+        "fontSize": "14px",
     })
 
     return page_section("RACE PREDICTIONS", [
@@ -728,7 +722,7 @@ def update_charts(run_types, time_range, _data_version, run_meta):
     return (
         pace_chart,
         charts.weekly_mileage_chart(runs, chart_id="weekly-miles"),
-        charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace"),
+        charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace", run_meta=run_meta),
         charts.race_predictions_chart(runs, chart_id="race-pred",
                                       best_efforts=data.get_best_efforts()),
         _adjusted_hr_section(runs),

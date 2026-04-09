@@ -230,7 +230,7 @@ def weekly_mileage_chart(runs: pd.DataFrame, chart_id: str = "weekly-miles") -> 
                 "legend": {"display": False},
             },
             "scales": {
-                "x": {"ticks": {"maxRotation": 45}},
+                "x": {"ticks": {"maxRotation": 0}},
                 "y": {
                     "beginAtZero": True, "min": 0,
                     "title": {"display": True, "text": "Miles"},
@@ -242,7 +242,8 @@ def weekly_mileage_chart(runs: pd.DataFrame, chart_id: str = "weekly-miles") -> 
     return _chart_wrap(chart_id, cfg, height=320)
 
 
-def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -> html.Div:
+def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace",
+                              run_meta: dict | None = None) -> html.Div:
     """Aerobic efficiency: estimated pace at a fixed reference HR over time.
 
     For each run, computes what pace you'd hold at 140 bpm (Z2 ceiling for
@@ -337,6 +338,8 @@ def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -
         "_meta": {
             "clickToScroll": True,
             "dateStrings": date_strings,
+            "runHoverCard": True,
+            "runMeta": run_meta or {},
         },
     }
     return _chart_wrap(chart_id, cfg, height=320)
@@ -1164,7 +1167,7 @@ def monthly_volume_chart(df: pd.DataFrame, chart_id: str = "monthly-vol") -> htm
                 "legend": {"position": "bottom"},
             },
             "scales": {
-                "x": {"ticks": {"maxRotation": 45}},
+                "x": {"ticks": {"maxRotation": 0}},
                 "y": {
                     "beginAtZero": True, "min": 0,
                     "title": {"display": True, "text": "Miles"},
@@ -1260,16 +1263,10 @@ def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") 
     # Show quarter labels only (Jan, Apr, Jul, Oct) for clean x-axis
     labels = []
     for w in weekly["week"]:
-        s = str(w)
-        try:
-            from datetime import datetime
-            dt = datetime.strptime(s + "-1", "%G-W%V-%u")
-            # Show label on first week of Jan, Apr, Jul, Oct
-            if dt.day <= 7 and dt.month in (1, 4, 7, 10):
-                labels.append(dt.strftime("%b '%y"))
-            else:
-                labels.append("")
-        except (ValueError, AttributeError):
+        dt = w.start_time
+        if dt.month in (1, 4, 7, 10) and dt.day <= 7:
+            labels.append(dt.strftime("%b '%y"))
+        else:
             labels.append("")
 
     cfg: dict[str, Any] = {
