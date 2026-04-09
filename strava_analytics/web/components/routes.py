@@ -12,34 +12,10 @@ from dash import html, dcc
 from strava_analytics.web import data
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
-    TEXT_PRIMARY, TEXT_MUTED, BORDER, SLATE_60,
+    TEXT_PRIMARY, TEXT_MUTED, BORDER,
+    HRHR_ZONE_COLORS, HRHR_ZONE_LABELS,
 )
 from strava_analytics.metrics import format_pace
-
-_ZONE_COLORS = {1: SLATE_60, 2: ACCENT_SLATE, 3: ACCENT_AMBER, 4: ACCENT, 5: ACCENT_RED}
-_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
-
-# Effort color gradient: blue (low) → gold (mid) → red (high)
-_EFFORT_STOPS = [
-    (0.0, (91, 155, 213)),    # ACCENT_SLATE  — low effort
-    (0.5, (212, 168, 75)),    # ACCENT_AMBER  — mid effort
-    (1.0, (239, 60, 74)),     # ACCENT        — high effort
-]
-
-
-def _effort_color(t: float) -> str:
-    """Return an rgba color for normalized effort *t* (0–1)."""
-    t = max(0.0, min(1.0, t))
-    for i in range(len(_EFFORT_STOPS) - 1):
-        t0, c0 = _EFFORT_STOPS[i]
-        t1, c1 = _EFFORT_STOPS[i + 1]
-        if t <= t1:
-            f = (t - t0) / (t1 - t0) if t1 != t0 else 0
-            r = int(c0[0] + (c1[0] - c0[0]) * f)
-            g = int(c0[1] + (c1[1] - c0[1]) * f)
-            b = int(c0[2] + (c1[2] - c0[2]) * f)
-            return f"rgb({r},{g},{b})"
-    return f"rgb{_EFFORT_STOPS[-1][1]}"
 
 
 _route_cache: dict = {}
@@ -332,17 +308,21 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
         if max(zone_mins) > 0:
             _route_map_counter += 1
             zone_id = f"run-zones-{_route_map_counter}"
-            colors = [_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
+            colors = [HR_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
             zone_cfg = json.dumps({
                 "type": "bar",
                 "data": {
-                    "labels": _ZONE_LABELS,
+                    "labels": HR_ZONE_LABELS,
                     "datasets": [{"label": "Minutes", "data": zone_mins,
                                   "backgroundColor": colors, "borderRadius": 2}],
                 },
                 "options": {
                     "indexAxis": "y",
-                    "plugins": {"legend": {"display": False}},
+                    "plugins": {
+                        "legend": {"display": False},
+                        "title": {"display": True, "text": "HR Zones",
+                                  "font": {"size": 13, "weight": "500"}},
+                    },
                     "scales": {
                         "x": {"beginAtZero": True, "min": 0,
                                "title": {"display": True, "text": "Minutes"},

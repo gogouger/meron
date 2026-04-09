@@ -341,14 +341,8 @@ def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace") -
 
 # ── HR analysis charts ───────────────────────────────────────────────
 
-_HR_ZONE_COLORS = {
-    1: SLATE_60,        # Recovery
-    2: ACCENT_SLATE,    # Easy
-    3: ACCENT_AMBER,    # Moderate
-    4: ACCENT,          # Threshold
-    5: ACCENT_RED,      # Max
-}
-_HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
+from strava_analytics.web.theme import HR_ZONE_COLORS as _HR_ZONE_COLORS
+from strava_analytics.web.theme import HR_ZONE_LABELS as _HR_ZONE_LABELS
 
 
 def hr_zone_distribution_chart(runs: pd.DataFrame, chart_id: str = "hr-zones") -> html.Div:
@@ -900,7 +894,7 @@ def onerm_progression_chart(
         },
         # Confidence band (upper)
         {
-            "label": "Upper",
+            "label": "_Upper",
             "data": [round(float(v), 1) for v in kdf["kalman_upper"]],
             "borderColor": "transparent",
             "backgroundColor": _hex_to_rgba(color, 0.12),
@@ -931,7 +925,7 @@ def onerm_progression_chart(
             datasets.append({
                 "label": "Tested max",
                 "data": test_data,
-                "backgroundColor": "#ffffff",
+                "backgroundColor": BG_CARD,
                 "borderColor": color,
                 "borderWidth": 2,
                 "pointRadius": 6,
@@ -951,11 +945,10 @@ def onerm_progression_chart(
                 "title": _title_cfg(f"{lift_name} — Estimated 1RM"),
                 "legend": {
                     "display": True,
+                    "position": "bottom",
                     "labels": {
-                        "filter": "item => !item.text.startsWith('_') && item.text !== 'Upper'",
+                        "boxWidth": 12, "padding": 8,
                         "usePointStyle": True,
-                        "color": "#aaa",
-                        "font": {"size": 11},
                     },
                 },
             },
@@ -995,7 +988,7 @@ def _single_race_chart(
         return _empty_chart(f"Not enough data for {label}", height=280)
 
     type_colors = {
-        "race": ACCENT, "hard_effort": "#f97316",
+        "race": ACCENT, "hard_effort": ACCENT_AMBER,
         "long": ACCENT_SLATE, "moderate": ACCENT_AMBER, "easy": SLATE_60,
     }
 
@@ -1061,7 +1054,7 @@ def _single_race_chart(
             "data": [{"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
                      for _, row in gt.iterrows()],
             "backgroundColor": ACCENT_SLATE,
-            "borderColor": "#ffffff",
+            "borderColor": BG_CARD,
             "borderWidth": 1,
             "pointRadius": 6,
             "pointHoverRadius": 8,
@@ -1072,7 +1065,7 @@ def _single_race_chart(
     y_lim = _val_limits(kdf["est_time_min"], pad_frac=0.05)
 
     # Y-axis label: MM:SS for shorter, H:MM for longer
-    y_label = f"{label} Time (min)" if target_m <= 10_000 else f"{label} Time (min)"
+    y_label = f"{label} Time (min:sec)" if target_m <= 10_000 else f"{label} Time (hr:min)"
 
     cfg: dict[str, Any] = {
         "type": "scatter",

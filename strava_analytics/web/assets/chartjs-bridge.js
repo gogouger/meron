@@ -176,6 +176,21 @@
                 if (s.ticks.color === undefined) s.ticks.color = tickColor;
                 if (s.ticks.font === undefined) s.ticks.font = { family: fontMono, size: 10 };
                 if (s.border.color === undefined) s.border.color = borderColor;
+
+                // Auto-format pace axes (MM:SS) and time axes (H:MM or MM:SS)
+                var titleText = (s.title && s.title.text) ? s.title.text.toLowerCase() : "";
+                if (titleText.indexOf("pace") >= 0 && !s.ticks.callback) {
+                    s.ticks.callback = function (v) { return _fmtMinSec(v); };
+                } else if (titleText.indexOf("time") >= 0 && !s.ticks.callback) {
+                    s.ticks.callback = function (v) {
+                        if (v >= 60) {
+                            var h = Math.floor(v / 60);
+                            var m = Math.round(v % 60);
+                            return h + ":" + (m < 10 ? "0" : "") + m;
+                        }
+                        return _fmtMinSec(v);
+                    };
+                }
             });
         }
 

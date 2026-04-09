@@ -13,7 +13,7 @@ from strava_analytics.web.components.layout import (
     numbered_card, cta_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_SLATE, ACCENT_AMBER,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, LIFT_COLORS,
     BG_CARD, BORDER,
 )
@@ -168,30 +168,19 @@ def _current_grid(baseline: dict, end_prs: dict) -> html.Div:
 
     for label, val, key in pr_metrics:
         delta = _delta(key, val)
-        color = ACCENT_SLATE if delta.startswith("+") else ACCENT_SLATE
+        color = ACCENT_SLATE if delta.startswith("+") else ACCENT_RED
         cells.append(metric_cell(label, f"{val} lbs" if val else "\u2014",
                                   delta, color))
 
-    cells.append(metric_cell("Max Pull-ups", "15",
-                              _delta("max_pullups", 15), ACCENT_SLATE))
+    pullup_val = end_prs.get("max_pullups", "")
+    cells.append(metric_cell("Max Pull-ups", str(pullup_val) if pullup_val else "\u2014",
+                              _delta("max_pullups", pullup_val) if pullup_val else "",
+                              ACCENT_SLATE))
 
     return metric_grid(cells)
 
 
-def _stat_cell(label, val):
-    """Small stat cell for lift card summaries."""
-    return html.Div([
-        html.Div(label, style={
-            "fontSize": "10px", "fontWeight": "500",
-            "textTransform": "uppercase", "letterSpacing": "0.1em",
-            "color": TEXT_MUTED,
-        }),
-        html.Div(val, style={
-            "fontFamily": "'IBM Plex Mono', monospace",
-            "fontSize": "14px", "fontWeight": "600",
-            "color": TEXT_PRIMARY,
-        }),
-    ], style={"minWidth": "80px"})
+from strava_analytics.web.components.cards import stat_cell as _stat_cell
 
 
 def _dominant_lift_color(session):

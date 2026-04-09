@@ -28,6 +28,7 @@ END_PRS = {
     "bench_1rm": 225,
     "squat_1rm": 305,
     "deadlift_1rm": 405,
+    "max_pullups": 15,
 }
 
 # Each entry: (day_num, day_type, exercises)

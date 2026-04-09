@@ -69,12 +69,12 @@ def stat_cell(label: str, val: str) -> html.Div:
         html.Div(label, style={
             "fontSize": "10px", "fontWeight": "500",
             "textTransform": "uppercase", "letterSpacing": "0.1em",
-            "color": TEXT_MUTED,
+            "color": "var(--text-muted)",
         }),
         html.Div(val, style={
-            "fontFamily": "'IBM Plex Mono', monospace",
+            "fontFamily": "var(--font-mono)",
             "fontSize": "14px", "fontWeight": "600",
-            "color": TEXT_PRIMARY,
+            "color": "var(--text-primary)",
         }),
     ], style={"minWidth": "80px"})
 

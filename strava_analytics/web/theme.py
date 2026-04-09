@@ -102,6 +102,15 @@ WORKOUT_TYPE_COLORS = {
     "mobility": SLATE_60,
 }
 
+HR_ZONE_COLORS = {
+    1: SLATE_60,        # Recovery
+    2: ACCENT_SLATE,    # Easy
+    3: ACCENT_AMBER,    # Moderate
+    4: ACCENT,          # Threshold
+    5: ACCENT_RED,      # Max
+}
+HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
+
 ACTIVITY_TYPE_COLORS = {
     "Run": ACCENT,
     "Weight Training": ACCENT_AMBER,

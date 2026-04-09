@@ -9,6 +9,7 @@ import pandas as pd
 
 from strava_analytics.web import data
 from strava_analytics.web.components import charts
+from strava_analytics.web.components.cards import stat_cell as _stat_cell
 from strava_analytics.web.components.layout import (
     hero_section, page_section, feature_grid, numbered_card,
     cta_section, footer,
@@ -44,20 +45,6 @@ def _duration_str(seconds):
 _route_cache = {}  # filename -> children; bounded to 32 entries
 _ROUTE_CACHE_MAX = 32
 
-
-def _stat_cell(label, val):
-    return html.Div([
-        html.Div(label, style={
-            "fontSize": "10px", "fontWeight": "500",
-            "textTransform": "uppercase", "letterSpacing": "0.1em",
-            "color": TEXT_MUTED,
-        }),
-        html.Div(val, style={
-            "fontFamily": "'IBM Plex Mono', monospace",
-            "fontSize": "14px", "fontWeight": "600",
-            "color": TEXT_PRIMARY,
-        }),
-    ], style={"minWidth": "80px"})
 
 
 def _run_card(run, idx):
