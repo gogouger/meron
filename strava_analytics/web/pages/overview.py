@@ -21,6 +21,7 @@ from strava_analytics.web.theme import (
 )
 from strava_analytics.metrics import format_pace
 from strava_analytics.vo2max import compute_athlete_vdot
+from strava_analytics.critical_speed import fit_critical_speed, cs_to_vdot
 from strava_analytics.lifting_program import END_PRS
 from strava_analytics.fitness import compute_trends, detect_prs, year_summary
 
@@ -559,9 +560,11 @@ def layout(**_kwargs):
         if not recent_fatigue.empty:
             fatigue_now = recent_fatigue.iloc[0]["fatigue_level"]
 
-    # VDOT
+    # VDOT — prefer Critical Speed model, fall back to effort-based VDOT
     try:
-        vdot = compute_athlete_vdot(df)
+        best_efforts_df = data.get_best_efforts()
+        cs = fit_critical_speed(best_efforts_df)
+        vdot = cs_to_vdot(cs["cs_m_per_s"]) if cs["cs_m_per_s"] > 0 else compute_athlete_vdot(df)
     except Exception:
         vdot = 0
 

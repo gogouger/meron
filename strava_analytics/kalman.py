@@ -190,11 +190,23 @@ def _ctl_baseline_90d(ctl_series: dict) -> float:
     return sum(recent) / len(recent) if recent else 0.0
 
 
+# Best effort noise levels (lower = stronger signal)
+_BEST_EFFORT_R_TARGET = 3.0    # best effort at target distance (strong signal)
+_BEST_EFFORT_R_OTHER = 8.0     # best effort at other distance (moderate signal)
+
+# Distance label → meters mapping for best efforts
+_EFFORT_DIST_M = {
+    "1 Mile": 1609.344, "5K": 5000, "10K": 10000,
+    "Half Marathon": 21097, "Marathon": 42195,
+}
+
+
 def kalman_race(
     runs: pd.DataFrame,
     target_m: int = 5_000,
     ctl_series: dict | None = None,
     ctl_peak: float | None = None,
+    best_efforts: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Smooth race time estimates for a target distance using a Kalman filter.
 
@@ -203,11 +215,17 @@ def kalman_race(
     truth. Races at other distances provide moderate signal. Training runs
     are high-noise observations.
 
+    Best efforts from FIT segment data (sliding window within runs) are
+    injected as low-noise observations, giving the filter access to
+    segment-level performance that full-activity averages miss.
+
     Args:
         runs: DataFrame of runs (enriched, with run_type)
         target_m: target race distance in meters (5000, 10000, 21097, 42195)
         ctl_series: {date → CTL} for detraining drift. Optional.
         ctl_peak: ignored (kept for backward compat). Baseline computed internally.
+        best_efforts: DataFrame from compute_best_efforts() with columns:
+            distance_label, time_s, pace_min_mi, date, rank. Optional.
 
     Returns:
         DataFrame with: date, est_time_min, kalman_min, kalman_upper,
@@ -279,22 +297,18 @@ def kalman_race(
                 R = 40.0    # Easy long run
         elif run_type == "moderate":
             if has_hr and hz >= 4:
-                R = 20.0    # Tempo-like moderate run
+                R = 25.0    # Tempo-like moderate run
             elif has_hr and hz == 3:
-                R = 35.0    # Solid moderate effort
-            elif has_hr and hz == 2:
-                R = 60.0    # Light moderate — still useful
+                R = 50.0    # Solid moderate effort
             else:
-                R = 100.0   # Z1 moderate — weakest but included
+                R = 200.0   # Z1-Z2 moderate — very weak signal for race fitness
         elif run_type == "easy":
             if has_hr and hz >= 3:
-                R = 40.0    # Misclassified easy — real effort
-            elif has_hr and hz == 2:
-                R = 80.0    # Z2 aerobic base — useful signal
+                R = 50.0    # Misclassified easy — real effort
             else:
-                R = 120.0   # True recovery — weak but included
+                R = 500.0   # Easy run — near-zero influence on race prediction
         else:
-            R = 100.0   # Unknown type — include with moderate noise
+            R = 200.0   # Unknown type — minimal influence
 
         rows.append({
             "date": r["date"],
@@ -306,10 +320,43 @@ def kalman_race(
             "date_str": r["date"].strftime("%Y-%m-%d"),
         })
 
+    # Inject best efforts from FIT segment data (sliding window within runs).
+    # These capture peak performance within longer runs that full-activity
+    # averages miss. E.g., a 7:06/mi 5K segment within a 9:00/mi long run.
+    if best_efforts is not None and not best_efforts.empty:
+        gt_lo, gt_hi = _RACE_RANGES.get(target_m, (target_m * 0.9, target_m * 1.1))
+        for _, eff in best_efforts.iterrows():
+            if eff.get("rank", 99) > 3:  # only top-3 per distance
+                continue
+            label = eff.get("distance_label", "")
+            eff_dist_m = _EFFORT_DIST_M.get(label, 0)
+            if eff_dist_m <= 0 or eff["time_s"] <= 0:
+                continue
+
+            time_min = eff["time_s"] / 60.0
+            vdot = daniels_vdot(eff_dist_m, time_min)
+            est_time = vdot_to_race_time(vdot, target_m)
+
+            # Determine noise level
+            is_target = gt_lo <= eff_dist_m <= gt_hi
+            R = _BEST_EFFORT_R_TARGET if is_target else _BEST_EFFORT_R_OTHER
+
+            rows.append({
+                "date": eff["date"],
+                "est_time_min": round(est_time, 2),
+                "R": R,
+                "run_type": "best_effort",
+                "name": f"Best {label} segment",
+                "distance_mi": eff_dist_m / 1609.344,
+                "date_str": eff["date"].strftime("%Y-%m-%d")
+                            if hasattr(eff["date"], "strftime") else str(eff["date"]),
+            })
+
     if not rows:
         return pd.DataFrame(columns=empty_cols)
 
-    obs_df = pd.DataFrame(rows)
+    # Sort by date so Kalman processes chronologically (best efforts may be interspersed)
+    obs_df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
 
     baseline = _ctl_baseline_90d(ctl_series) if ctl_series else None
 

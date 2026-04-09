@@ -15,12 +15,14 @@ import math
 import numpy as np
 import pandas as pd
 
-from strava_analytics.kalman import _kalman_1d, _GROUND_TRUTH_R
-from strava_analytics.predictions import estimate_1rm, extract_1rm_progression
-from strava_analytics.training_plan import generate_training_plan, plan_to_flat_list
-from strava_analytics.vo2max import (
-    daniels_vdot, vdot_to_race_time, compute_athlete_vdot, extract_race_efforts,
+from strava_analytics.critical_speed import (
+    fit_critical_speed, predict_time_cs, predict_race_times, tanda_marathon,
 )
+from strava_analytics.predictions import estimate_1rm, extract_1rm_progression
+from strava_analytics.strength_model import (
+    fit_all_lifts, project_1rm, compute_interference,
+)
+from strava_analytics.training_plan import generate_training_plan, plan_to_flat_list
 
 logger = logging.getLogger(__name__)
 
@@ -294,11 +296,8 @@ def get_compliance(df: pd.DataFrame, plan_rows: list[dict]) -> dict:
 #   k1 = 1.0, k2 = 2.0, tau1 = 42, tau2 = 7
 # When we have >= 3 race results with CTL/ATL data, fit k1/k2 via least squares.
 
-_DEFAULT_K1 = 1.0
-_DEFAULT_K2 = 2.0
-
-
 def fit_banister_params(df: pd.DataFrame) -> dict:
+    """Legacy — kept for backward compatibility but no longer used for projections."""
     """Fit Banister performance model parameters from race history.
 
     Returns: {p0, k1, k2, n_races, fitted: bool}
@@ -375,105 +374,52 @@ _PLAN_STRESS_MAP = {
 def project_race_outcomes(
     df: pd.DataFrame,
     plan_weeks: list,
-    target_distances: dict[str, int] | None = None,
-    tau_ctl: float = 42.0,
-    tau_atl: float = 7.0,
+    best_efforts_df: pd.DataFrame | None = None,
 ) -> dict:
     """Project race time outcomes through the training plan.
 
-    Uses the Banister model (fitted or default) to convert projected CTL/ATL
-    into race time estimates at each target distance.
+    Uses Critical Speed model for current predictions, then applies
+    evidence-based taper improvement (Mujika 2003: 2-3%).
 
     Returns: {distance_label: {current_min, projected_min, delta_pct, method}}
     """
-    if target_distances is None:
-        target_distances = {"5K": 5000, "10K": 10000, "Half Marathon": 21097}
-
-    if df.empty or "chronic_load_28d" not in df.columns:
+    if best_efforts_df is None or best_efforts_df.empty:
         return {}
 
-    # Current state
-    latest = df.sort_values("date").iloc[-1]
-    current_ctl = float(latest.get("chronic_load_28d", 0) or 0)
-    current_atl = float(latest.get("acute_load_7d", 0) or 0)
-    today = latest["date"].date() if hasattr(latest["date"], "date") else latest["date"]
+    # Current predictions from CS model
+    runs = df[df["type"] == "Run"] if not df.empty else pd.DataFrame()
+    recent_8w = runs[runs["date"] >= runs["date"].max() - pd.Timedelta(weeks=8)] if not runs.empty else pd.DataFrame()
+    weekly_km = recent_8w["distance_mi"].sum() / 8 * 1.60934 if not recent_8w.empty else 0
+    avg_pace_spk = recent_8w["pace_min_per_mi"].mean() * 60 / 1.60934 if not recent_8w.empty else 0
 
-    # Fit Banister model
-    params = fit_banister_params(df)
+    cs_preds = predict_race_times(best_efforts_df, weekly_km=weekly_km,
+                                   avg_pace_sec_per_km=avg_pace_spk)
 
-    # Current VDOT and race times
-    ctl_peak = 0.0
-    if "chronic_load_28d" in df.columns:
-        ctl_peak = float(df["chronic_load_28d"].max())
-    ctl_ratio = (current_ctl / ctl_peak) if ctl_peak > 0 else None
-    current_vdot = compute_athlete_vdot(df, ctl_ratio=ctl_ratio)
+    # Taper improvement: Mujika & Padilla (2003): 2-3% from proper taper
+    # Count taper + race weeks in the plan
+    taper_weeks = sum(1 for w in plan_weeks if w.phase in ("taper", "race"))
+    taper_bonus_pct = min(3.0, taper_weeks * 1.0) if taper_weeks > 0 else 0
 
-    if current_vdot <= 0:
-        return {}
+    # Build phase mileage increase → modest fitness gain
+    build_weeks = sum(1 for w in plan_weeks if w.phase.startswith("build"))
+    build_bonus_pct = min(2.0, build_weeks * 0.3)
 
-    # Build daily stress from plan
-    flat = plan_to_flat_list(plan_weeks)
-    stress_by_date = {}
-    for row in flat:
-        d = row["date"]
-        if hasattr(d, "date") and callable(d.date):
-            d = d.date()
-        stress = _PLAN_STRESS_MAP.get(row.get("intensity", "easy"), 40)
-        if row.get("type") in ("rest", "mobility"):
-            stress = 5
-        stress_by_date[d] = stress_by_date.get(d, 0) + stress
+    improvement_pct = taper_bonus_pct + build_bonus_pct
 
-    # Project CTL/ATL forward
-    ctl = current_ctl
-    atl = current_atl
-    last_plan_date = max(stress_by_date.keys()) if stress_by_date else today
-
-    d = today + timedelta(days=1)
-    while d <= last_plan_date:
-        daily_stress = stress_by_date.get(d, 0)
-        ctl = ctl + (daily_stress - ctl) / tau_ctl
-        atl = atl + (daily_stress - atl) / tau_atl
-        d += timedelta(days=1)
-
-    projected_ctl = ctl
-    projected_atl = atl
-
-    # Convert CTL/ATL change to performance change via Banister model
     results = {}
-    for label, dist_m in target_distances.items():
-        current_time = vdot_to_race_time(current_vdot, dist_m)
-
-        if params["fitted"]:
-            # Fitted model with normalized CTL/ATL:
-            # Δtime = -k1*(ΔCTL/ctl_mean) + k2*(ΔATL/atl_mean)
-            ctl_mean = params.get("ctl_mean", 1.0)
-            atl_mean = params.get("atl_mean", 1.0)
-            delta_time = (-params["k1"] * (projected_ctl - current_ctl) / ctl_mean
-                          + params["k2"] * (projected_atl - current_atl) / atl_mean)
-            projected_time = current_time + delta_time
-            method = f"Banister model (fitted from {params['n_races']} races)"
-        else:
-            # Evidence-based fallback heuristic:
-            # 1. Taper effect: Mujika & Padilla (2003): 2-3% improvement from taper
-            tsb_now = current_ctl - current_atl
-            tsb_proj = projected_ctl - projected_atl
-            taper_bonus_pct = min(3.0, max(0, (tsb_proj - tsb_now) * 0.2))
-
-            # 2. CTL building: ~0.5% improvement per 10% CTL increase
-            ctl_change_pct = (projected_ctl - current_ctl) / max(current_ctl, 1) * 100
-            build_bonus_pct = ctl_change_pct * 0.05
-
-            improvement_pct = min(6.0, taper_bonus_pct + build_bonus_pct)
-            projected_time = current_time * (1 - improvement_pct / 100)
-            method = "Population defaults (add 5+ race results for personalized model)"
-
-        delta_pct = (projected_time - current_time) / current_time * 100
+    for label, pred in cs_preds.items():
+        if label.startswith("_"):
+            continue
+        if pred["time_s"] <= 0:
+            continue
+        current_min = pred["time_s"] / 60.0
+        projected_min = current_min * (1 - improvement_pct / 100)
 
         results[label] = {
-            "current_min": round(current_time, 2),
-            "projected_min": round(projected_time, 2),
-            "delta_pct": round(delta_pct, 1),
-            "method": method,
+            "current_min": round(current_min, 2),
+            "projected_min": round(projected_min, 2),
+            "delta_pct": round(-improvement_pct, 1),
+            "method": f"Critical Speed + {taper_bonus_pct:.0f}% taper + {build_bonus_pct:.1f}% build",
         }
 
     return results
@@ -484,38 +430,47 @@ def project_1rm_outcomes(
     plan_weeks: list,
     current_1rms: dict,
 ) -> dict:
-    """Project 1RM outcomes through the training plan.
+    """Project 1RM outcomes using log-curve fit with interference.
 
-    Uses phase-specific progression rates:
-    - Build 1: +2%/week (Rhea et al. 2003 meta-analysis: 1-2%/week for trained)
-    - Build 2: +0% (maintain)
-    - Taper: +0% (Ogasawara 2013: no loss during 3-week detraining)
-    - Race: +0%
-
-    Returns: {lift: {current, projected, delta_pct}}
+    Uses the strength_model log-curve for progression rate, discounted
+    by concurrent training interference from planned running volume.
     """
     if not current_1rms:
         return {}
 
-    # Count weeks per phase
-    phase_weeks = {}
-    for week in plan_weeks:
-        phase_weeks[week.phase] = phase_weeks.get(week.phase, 0) + 1
+    # Fit log-curves from historical data
+    lift_fits = fit_all_lifts(df)
 
-    build1_weeks = phase_weeks.get("build1", 0)
-    # build2, taper, race: maintenance (no gain, no loss per Ogasawara/McMaster)
+    # Compute interference from planned running
+    build_weeks = [w for w in plan_weeks if w.phase.startswith("build")]
+    avg_planned_miles = (sum(w.target_miles for w in build_weeks) / len(build_weeks)
+                         if build_weeks else 17.0)
+    interference = compute_interference(avg_planned_miles)
+
+    # Count build weeks (where active lifting happens)
+    n_build = sum(1 for w in plan_weeks if w.phase.startswith("build"))
 
     results = {}
     for lift, current in current_1rms.items():
-        # +2% per build1 week, compounded
-        projected = current * (1.02 ** build1_weeks)
-        delta_pct = (projected - current) / current * 100
-
-        results[lift] = {
-            "current": round(current),
-            "projected": round(projected),
-            "delta_pct": round(delta_pct, 1),
-        }
+        fit = lift_fits.get(lift)
+        if fit and fit["n_points"] >= 3:
+            projected = project_1rm(fit, weeks_ahead=n_build,
+                                     interference_factor=interference)
+            delta_pct = (projected - fit["current_1rm"]) / fit["current_1rm"] * 100
+            results[lift] = {
+                "current": round(fit["current_1rm"]),
+                "projected": round(projected),
+                "delta_pct": round(delta_pct, 1),
+            }
+        else:
+            # Fallback: simple +2%/week during build, with interference
+            projected = current * (1 + 0.02 * interference) ** n_build
+            delta_pct = (projected - current) / current * 100
+            results[lift] = {
+                "current": round(current),
+                "projected": round(projected),
+                "delta_pct": round(delta_pct, 1),
+            }
 
     return results
 
@@ -524,17 +479,14 @@ def get_plan_projections(
     df: pd.DataFrame,
     plan_weeks: list,
     current_1rms: dict,
+    best_efforts_df: pd.DataFrame | None = None,
 ) -> dict:
     """Combined race and strength projections for the plan page.
 
-    Returns: {
-        race_projections: {distance: {current_min, projected_min, delta_pct, method}},
-        strength_projections: {lift: {current, projected, delta_pct}},
-        banister_params: {p0, k1, k2, n_races, fitted},
-    }
+    Uses Critical Speed model for race predictions and log-curve with
+    interference for strength predictions.
     """
     return {
-        "race_projections": project_race_outcomes(df, plan_weeks),
+        "race_projections": project_race_outcomes(df, plan_weeks, best_efforts_df),
         "strength_projections": project_1rm_outcomes(df, plan_weeks, current_1rms),
-        "banister_params": fit_banister_params(df),
     }

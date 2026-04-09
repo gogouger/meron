@@ -187,7 +187,8 @@ def layout(**_kwargs):
     strength_trends = get_1rm_trends(df)
     race_readiness = get_race_readiness(df, plan, [_RACE1_DATE, _RACE2_DATE])
     compliance_data = get_compliance(df, flat)
-    plan_projections = get_plan_projections(df, plan, current_1rms)
+    best_efforts_df = data.get_best_efforts()
+    plan_projections = get_plan_projections(df, plan, current_1rms, best_efforts_df)
 
     today = date.today()
 
@@ -352,7 +353,6 @@ def _projected_outcomes_section(projections: dict) -> html.Div:
     """Render the projected outcomes from the Banister model."""
     race_proj = projections.get("race_projections", {})
     strength_proj = projections.get("strength_projections", {})
-    params = projections.get("banister_params", {})
 
     if not race_proj and not strength_proj:
         return html.P("Insufficient data for projections.", style={"color": TEXT_MUTED})
@@ -360,16 +360,14 @@ def _projected_outcomes_section(projections: dict) -> html.Div:
     items = []
 
     # Method label
-    method = ""
     if race_proj:
         first = next(iter(race_proj.values()))
         method = first.get("method", "")
-
-    if method:
-        items.append(html.P(method, style={
-            "color": TEXT_MUTED, "fontSize": "12px", "marginBottom": "16px",
-            "fontStyle": "italic",
-        }))
+        if method:
+            items.append(html.P(method, style={
+                "color": TEXT_MUTED, "fontSize": "12px", "marginBottom": "16px",
+                "fontStyle": "italic",
+            }))
 
     # Race projections
     if race_proj:

@@ -49,27 +49,16 @@ def layout(**_kwargs):
     now = df["date"].max()
     recent_cutoff = now - pd.Timedelta(days=180)
 
-    # Build CTL series for detraining-aware predictions
-    # Use 90-day avg as baseline (not peak) to avoid false detraining detection
-    ctl_by_date = {}
-    ctl_peak = 0.0
-    if "chronic_load_28d" in df.columns:
-        for _, row in df.dropna(subset=["chronic_load_28d"]).iterrows():
-            d = row["date"].date() if hasattr(row["date"], "date") else row["date"]
-            ctl_by_date[d] = float(row["chronic_load_28d"])
-        ctl_peak = max(ctl_by_date.values()) if ctl_by_date else 0.0
+    # Critical Speed model from best efforts (replaces Kalman filter)
+    from strava_analytics.critical_speed import (
+        fit_critical_speed, predict_race_times, cs_to_vdot,
+    )
+    best_efforts_df = data.get_best_efforts()
+    cs_params = fit_critical_speed(best_efforts_df)
+    cs_vdot = cs_to_vdot(cs_params["cs_m_per_s"]) if cs_params["cs_m_per_s"] > 0 else 0
 
-    # 90-day baseline for detraining ratio
-    from datetime import timedelta as _td
-    if ctl_by_date:
-        _cutoff = now.date() - _td(days=90)
-        _recent = [v for d, v in ctl_by_date.items() if d >= _cutoff]
-        ctl_baseline = sum(_recent) / len(_recent) if _recent else 0.0
-    else:
-        ctl_baseline = 0.0
-    ctl_ratio = (ctl_by_date.get(now.date(), 0) / ctl_baseline) if ctl_baseline > 0 else None
-
-    vdot = compute_athlete_vdot(df, ctl_ratio=ctl_ratio)
+    # Traditional VDOT from race efforts (for comparison / fallback)
+    vdot = compute_athlete_vdot(df)
     all_efforts = extract_race_efforts(df)
     recent_efforts = [e for e in all_efforts
                       if e["date"] is not None and e["date"] >= recent_cutoff]
@@ -97,38 +86,35 @@ def layout(**_kwargs):
 
     personal_exp = compute_personal_exponent(race_data) if len(race_data) >= 2 else 1.06
 
-    # Prefer Kalman-smoothed 5K estimate for stable calibration
-    calibration = None
-    from strava_analytics.kalman import kalman_race
-    runs_only = df[df["type"] == "Run"]
-    kalman_df = kalman_race(runs_only, target_m=5000,
-                            ctl_series=ctl_by_date, ctl_peak=ctl_peak)
-    if not kalman_df.empty:
-        latest = kalman_df.iloc[-1]
+    # Calibration: use CS-predicted 5K time (from best efforts, not training runs)
+    if cs_params["cs_m_per_s"] > 0:
+        from strava_analytics.critical_speed import predict_time_cs
+        cs_5k_s = predict_time_cs(cs_params["cs_m_per_s"], cs_params["d_prime_m"], 5000)
         calibration = {
             "distance_m": 5000,
-            "time_s": latest["kalman_min"] * 60,
-            "name": "Kalman-smoothed 5K",
+            "time_s": cs_5k_s,
+            "name": f"Critical Speed (R²={cs_params['r_squared']:.3f})",
             "elevation_gain_ft": 0,
         }
-
-    # Fall back to best recent ~5K effort
-    if not calibration:
+        calibration_label = calibration["name"]
+    else:
+        # Fallback to best recent 5K effort
+        calibration = None
         for e in recent_efforts:
             if 4800 <= e["distance_m"] <= 5200:
                 calibration = e
                 break
-    if not calibration:
-        calibration = recent_efforts[0] if recent_efforts else None
-    if not calibration:
-        race_pace = current_avg_pace * 0.92
-        est_5k_time = race_pace * 3.1 * 60
-        calibration = {"distance_m": 5000, "time_s": est_5k_time,
-                        "name": "est. from training pace", "elevation_gain_ft": 0}
+        if not calibration:
+            calibration = recent_efforts[0] if recent_efforts else None
+        if not calibration:
+            race_pace = current_avg_pace * 0.92
+            est_5k_time = race_pace * 3.1 * 60
+            calibration = {"distance_m": 5000, "time_s": est_5k_time,
+                            "name": "est. from training pace", "elevation_gain_ft": 0}
+        calibration_label = calibration.get("name", "recent effort")
 
     known_dist = calibration["distance_m"]
     known_time_raw = calibration["time_s"]
-    calibration_label = calibration.get("name", "recent effort")
 
     cal_elev_gain = calibration.get("elevation_gain_ft", 0) or 0
     cal_dist_mi = known_dist / 1609.344
@@ -164,7 +150,8 @@ def layout(**_kwargs):
             label="PREDICTIONS",
             headline="The math says you're faster than you think.",
             subtext=(
-                f"VDOT {vdot:.1f} at {training_elev['mid_ft']:.0f}ft. "
+                f"Critical Speed {cs_params['cs_min_per_mi']:.1f} min/mi "
+                f"(VDOT {cs_vdot:.1f}) at {training_elev['mid_ft']:.0f}ft. "
                 f"Current pace: {current_avg_pace:.1f} min/mi at "
                 f"{current_weekly_miles:.0f} mi/wk."
             ),
@@ -173,11 +160,13 @@ def layout(**_kwargs):
         # Calibration
         page_section("CALIBRATION", [
             feature_grid([
-                numbered_card(1, "VDOT", f"raw (at {training_elev['mid_ft']:.0f}ft altitude)",
-                              value=f"{vdot:.1f}", color=ACCENT),
-                numbered_card(2, "Calibration",
-                              f"adjusted from {_fmt(known_time_raw)} ({calibration_label[:25]})",
-                              value=_fmt(known_time), color=ACCENT_SLATE),
+                numbered_card(1, "Critical Speed",
+                              f"R\u00b2={cs_params['r_squared']:.3f} from {cs_params['n_points']} distances",
+                              value=f"{cs_params['cs_min_per_mi']:.1f} /mi",
+                              color=ACCENT),
+                numbered_card(2, "5K (from CS)",
+                              f"({calibration_label[:30]})",
+                              value=_fmt(known_time_raw), color=ACCENT_SLATE),
                 numbered_card(3, "Training Elevation",
                               f"{avg_gain_per_mi:.0f} ft/mi avg gain",
                               value=f"{training_elev['mid_ft']:,.0f} ft",
