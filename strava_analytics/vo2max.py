@@ -249,16 +249,33 @@ def compute_training_elevation(df: pd.DataFrame) -> dict:
     return {"mid_ft": mid_ft, "avg_gain_per_mi": avg_gain_per_mi}
 
 
+# Detraining constants for VDOT staleness discount
+# Mujika & Padilla (2000): ~2.5%/week VO2max decay with complete cessation
+# Mujika & Padilla (2000) measured ~2.5%/week for first 4 weeks, then slower.
+# Coyle (1984): VO2max plateaus at ~85% of trained value after 12 weeks.
+# We model this as exponential decay toward a floor rather than linear:
+#   factor = floor + (1 - floor) × e^(-decay_rate × weeks_stale)
+_VDOT_DECAY_RATE_PER_WEEK = 0.08   # exponential decay constant
+_VDOT_DECAY_ONSET_DAYS = 14        # no decay for first 2 weeks (Mujika)
+_VDOT_DECAY_FLOOR = 0.85           # Coyle (1984): plateaus at ~85%
+_VDOT_CTL_SAFE_RATIO = 0.70        # Hickson (1985): no decay if CTL > 70% of peak
+
+
 def compute_athlete_vdot(df: pd.DataFrame, n_best: int = 5,
-                          recent_weight: float = 2.0) -> float:
+                          recent_weight: float = 2.0,
+                          ctl_ratio: float | None = None) -> float:
     """Compute a weighted-average VDOT from the athlete's best efforts.
 
-    More recent efforts receive higher weight.
+    More recent efforts receive higher weight. When ctl_ratio is below the
+    Hickson threshold (0.70), stale efforts are discounted based on how long
+    ago they occurred (Mujika & Padilla 2000: ~2.5%/week VO2max decay).
 
     Args:
         df: Enriched activity DataFrame.
         n_best: Number of top efforts to consider.
         recent_weight: Weight multiplier for recency (applied linearly).
+        ctl_ratio: current CTL / peak CTL. When > 0.70, no staleness
+                   discount is applied (Hickson 1985).
 
     Returns:
         Weighted average VDOT.
@@ -274,12 +291,31 @@ def compute_athlete_vdot(df: pd.DataFrame, n_best: int = 5,
     # Sort by date ascending for recency weighting
     top.sort(key=lambda x: x["date"] if x["date"] is not None else pd.Timestamp.min)
 
+    today = df["date"].max() if not df.empty else pd.Timestamp.now()
+
+    # Determine if staleness discount applies
+    apply_staleness = (ctl_ratio is not None and ctl_ratio < _VDOT_CTL_SAFE_RATIO)
+
     total_weight = 0.0
     weighted_vdot = 0.0
     for i, effort in enumerate(top):
+        vdot = effort["vdot"]
+
+        # Apply staleness discount when detraining
+        if apply_staleness and effort["date"] is not None:
+            days_since = (today - effort["date"]).total_seconds() / 86400.0
+            stale_days = max(0, days_since - _VDOT_DECAY_ONSET_DAYS)
+            if stale_days > 0:
+                weeks_stale = stale_days / 7.0
+                # Exponential decay toward floor (Coyle 1984 plateau model)
+                decay_factor = (_VDOT_DECAY_FLOOR
+                                + (1.0 - _VDOT_DECAY_FLOOR)
+                                * math.exp(-_VDOT_DECAY_RATE_PER_WEEK * weeks_stale))
+                vdot = vdot * decay_factor
+
         # Linear recency weight: oldest=1.0, newest=recent_weight
         w = 1.0 + (recent_weight - 1.0) * i / max(len(top) - 1, 1)
-        weighted_vdot += effort["vdot"] * w
+        weighted_vdot += vdot * w
         total_weight += w
 
     return weighted_vdot / total_weight if total_weight > 0 else 0.0

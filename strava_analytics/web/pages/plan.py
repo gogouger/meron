@@ -34,6 +34,7 @@ from strava_analytics.web.plan_data import (
     get_fitness_timeseries, get_current_fitness,
     get_mileage_progression, get_1rm_trends,
     get_projected_fitness, get_race_readiness, get_compliance,
+    get_plan_projections,
 )
 
 dash.register_page(__name__, path="/plan", name="Training Plan")
@@ -156,12 +157,20 @@ def layout(**_kwargs):
     current_1rms = _get_current_1rms(df)
     current_miles = _get_current_weekly_miles(df)
 
+    # Get current CTL for target-driven plan scaling
+    fitness = get_current_fitness(df)
+    current_ctl = fitness["ctl"]
+    # Target CTL: 20% above current (realistic 8-week improvement)
+    target_ctl = current_ctl * 1.20 if current_ctl > 0 else None
+
     plan = generate_training_plan(
         start_date=_START_DATE,
         race1_date=_RACE1_DATE,
         race2_date=_RACE2_DATE,
         current_1rms=current_1rms,
         current_weekly_miles=current_miles,
+        current_ctl=current_ctl if current_ctl > 0 else None,
+        target_ctl=target_ctl,
     )
 
     flat = plan_to_flat_list(plan)
@@ -173,12 +182,12 @@ def layout(**_kwargs):
     ics_content = _generate_ics(flat)
 
     # Data computations
-    fitness = get_current_fitness(df)
     projected = get_projected_fitness(df, plan)
     mileage = get_mileage_progression(df, plan)
     strength_trends = get_1rm_trends(df)
     race_readiness = get_race_readiness(df, plan, [_RACE1_DATE, _RACE2_DATE])
     compliance_data = get_compliance(df, flat)
+    plan_projections = get_plan_projections(df, plan, current_1rms)
 
     today = date.today()
 
@@ -237,6 +246,11 @@ def layout(**_kwargs):
                 style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
             ),
         ], alt_bg=True),
+
+        # ── EXPECTED OUTCOMES ──
+        page_section("EXPECTED OUTCOMES", [
+            _projected_outcomes_section(plan_projections),
+        ]),
 
         # ── THE NUMBERS ──
         page_section("THE NUMBERS", [
@@ -319,6 +333,108 @@ def layout(**_kwargs):
         # Footer
         footer(),
     ])
+
+
+def _fmt_time(minutes: float) -> str:
+    """Format minutes to M:SS or H:MM:SS."""
+    total_s = int(minutes * 60)
+    if total_s < 3600:
+        m = total_s // 60
+        s = total_s % 60
+        return f"{m}:{s:02d}"
+    h = total_s // 3600
+    m = (total_s % 3600) // 60
+    s = total_s % 60
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def _projected_outcomes_section(projections: dict) -> html.Div:
+    """Render the projected outcomes from the Banister model."""
+    race_proj = projections.get("race_projections", {})
+    strength_proj = projections.get("strength_projections", {})
+    params = projections.get("banister_params", {})
+
+    if not race_proj and not strength_proj:
+        return html.P("Insufficient data for projections.", style={"color": TEXT_MUTED})
+
+    items = []
+
+    # Method label
+    method = ""
+    if race_proj:
+        first = next(iter(race_proj.values()))
+        method = first.get("method", "")
+
+    if method:
+        items.append(html.P(method, style={
+            "color": TEXT_MUTED, "fontSize": "12px", "marginBottom": "16px",
+            "fontStyle": "italic",
+        }))
+
+    # Race projections
+    if race_proj:
+        race_rows = []
+        for dist, data in race_proj.items():
+            delta = data["delta_pct"]
+            color = ACCENT_SLATE if delta < 0 else ACCENT_RED
+            arrow = "\u2193" if delta < 0 else "\u2191"
+            race_rows.append(html.Div([
+                html.Span(dist, style={
+                    "fontWeight": "600", "minWidth": "120px", "display": "inline-block",
+                }),
+                html.Span(f"{_fmt_time(data['current_min'])}", style={
+                    "color": TEXT_SECONDARY, "minWidth": "70px", "display": "inline-block",
+                }),
+                html.Span(" \u2192 ", style={"color": TEXT_MUTED}),
+                html.Span(f"{_fmt_time(data['projected_min'])}", style={
+                    "fontWeight": "700", "color": color, "minWidth": "70px",
+                    "display": "inline-block",
+                }),
+                html.Span(f" {arrow} {abs(delta):.1f}%", style={
+                    "color": color, "fontSize": "13px", "marginLeft": "8px",
+                }),
+            ], style={"marginBottom": "8px", "fontSize": "14px"}))
+
+        items.append(html.Div([
+            html.H6("Race Times", style={"color": ACCENT, "marginBottom": "8px",
+                                          "fontSize": "13px", "letterSpacing": "0.05em"}),
+            *race_rows,
+        ], style={"marginBottom": "20px"}))
+
+    # Strength projections
+    if strength_proj:
+        str_rows = []
+        for lift, data in strength_proj.items():
+            delta = data["delta_pct"]
+            color = ACCENT_SLATE if delta > 0 else ACCENT_RED
+            arrow = "\u2191" if delta > 0 else "\u2193"
+            str_rows.append(html.Div([
+                html.Span(lift.title(), style={
+                    "fontWeight": "600", "minWidth": "120px", "display": "inline-block",
+                }),
+                html.Span(f"{data['current']} lb", style={
+                    "color": TEXT_SECONDARY, "minWidth": "70px", "display": "inline-block",
+                }),
+                html.Span(" \u2192 ", style={"color": TEXT_MUTED}),
+                html.Span(f"{data['projected']} lb", style={
+                    "fontWeight": "700", "color": color, "minWidth": "70px",
+                    "display": "inline-block",
+                }),
+                html.Span(f" {arrow} {abs(delta):.1f}%", style={
+                    "color": color, "fontSize": "13px", "marginLeft": "8px",
+                }),
+            ], style={"marginBottom": "8px", "fontSize": "14px"}))
+
+        items.append(html.Div([
+            html.H6("Estimated 1RM", style={"color": ACCENT_AMBER, "marginBottom": "8px",
+                                              "fontSize": "13px", "letterSpacing": "0.05em"}),
+            *str_rows,
+        ]))
+
+    return html.Div(items, style={
+        "backgroundColor": BG_CARD, "padding": "20px",
+        "border": f"1px solid {BORDER}",
+    })
 
 
 def _legend():
@@ -406,11 +522,24 @@ def _obstacle_prep_section():
 def _science_section():
     return html.Div([
         html.Details([
+            html.Summary("Training Load & Predictions"),
+            html.Ul([
+                html.Li("Banister (1975/1991): Fitness-fatigue impulse-response model. "
+                         "Exponential TRIMP with physiologically-derived HR-lactate weighting."),
+                html.Li("Mujika & Padilla (2000): ~2.5%/week VO2max decay with complete detraining."),
+                html.Li("Hickson et al. (1985): Volume can be cut by 2/3 with no VO2max loss "
+                         "if intensity is maintained."),
+                html.Li("Ogasawara et al. (2013): No 1RM loss during 3-week detraining periods."),
+                html.Li("McMaster et al. (2013): ~2%/week 1RM decay after 3-week grace period."),
+            ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
+        ]),
+        html.Details([
             html.Summary("Concurrent Training"),
             html.Ul([
                 html.Li("Wilson et al. (2012): Running causes greater interference with strength than cycling."),
                 html.Li("Robineau et al. (2016): Separate run and lift sessions by 6+ hours."),
                 html.Li("Ronnested et al. (2011): 75-85% 1RM, 2x/week sufficient for strength maintenance."),
+                html.Li("Rhea et al. (2003): 1-2%/week 1RM gains for trained individuals."),
             ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
         ]),
         html.Details([

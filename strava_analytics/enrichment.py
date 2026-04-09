@@ -1,6 +1,7 @@
 """Enrich activity data with kid detection, HR adjustments, fatigue, and lifting."""
 
 import logging
+import math
 import re
 
 import numpy as np
@@ -99,69 +100,70 @@ def adjust_hr(avg_hr: float, temp_f: float, with_kid: bool) -> tuple[float, floa
 
 
 # ---------------------------------------------------------------------------
-# Fatigue scoring
+# Training stress — Banister exponential TRIMP (1991)
 # ---------------------------------------------------------------------------
+#
+# Running stress uses Banister TRIMP when HR is available, with a pace-based
+# fallback. Normalized so 1h at lactate threshold ≈ 100 (TSS convention).
+#
+# References:
+#   Banister, E.W. (1991). Modeling elite athletic performance.
+#   Mujika & Padilla (2000). Detraining: Loss of Training-Induced Adaptations.
+#   Hickson, R.C. et al. (1985). Reduced training and VO2max maintenance.
 
-def _training_stress(row: pd.Series) -> float:
-    """Estimate a single training stress score for one activity.
+_BANISTER_K = 0.64   # male coefficient
+_BANISTER_C = 1.92   # male exponent
+_LT_DHR = 0.80       # ΔHR at lactate threshold
+_RAW_1H_LT = 60.0 * _LT_DHR * _BANISTER_K * math.exp(_BANISTER_C * _LT_DHR)
+_NORM = 100.0 / _RAW_1H_LT  # normalize 1h@LT → 100
 
-    Running uses pace-based intensity factor, weighted by HR when available.
-    This avoids undervaluing slow hard efforts (hills, heat, stroller).
-    Falls back to pace-only when HR data is missing (~40% of activities).
+# Default athlete HR parameters
+_TS_HR_REST = 60
+_TS_HR_MAX = 200
+
+
+def _compute_training_stress_vectorized(
+    df: pd.DataFrame,
+    hr_rest: int = _TS_HR_REST,
+    hr_max: int = _TS_HR_MAX,
+) -> pd.Series:
+    """Vectorized training stress using Banister TRIMP for runs with HR.
+
+    Falls back to pace-based estimate when HR is missing.
+    Non-run activities use activity-type-specific heuristics.
     """
-    atype = row.get("type", "")
-    dist = row.get("distance_mi", 0) or 0
-    time_min = row.get("moving_time_min", 0) or 0
-    pace = row.get("pace_min_per_mi", None)
-    avg_hr = row.get("avg_hr", None)
-
-    if atype == "Run":
-        # Pace-based intensity: baseline ~10:30 = factor 1.0
-        if pd.notna(pace) and pace > 0:
-            factor = max(0.6, min(2.0, 10.5 / pace))
-        else:
-            factor = 1.0
-        # HR weighting: scale by cardiac effort when available
-        if pd.notna(avg_hr) and avg_hr > 0:
-            hr_factor = min(avg_hr / 160.0, 1.5)
-            factor *= (0.5 + 0.5 * hr_factor)
-        return dist * factor * 10
-    elif atype == "Weight Training":
-        return time_min * 0.5
-    elif atype in ("Walk", "Hike"):
-        return dist * 4
-    else:
-        return time_min * 0.2
-
-
-def _compute_training_stress_vectorized(df: pd.DataFrame) -> pd.Series:
-    """Vectorized training stress computation across all activities."""
     stress = pd.Series(0.0, index=df.index)
-    dist = df["distance_mi"].fillna(0)
     time_min = df["moving_time_min"].fillna(0)
-    pace = df["pace_min_per_mi"]
-    avg_hr = df["avg_hr"]
+    dist = df["distance_mi"].fillna(0)
+    avg_hr = df["avg_hr"] if "avg_hr" in df.columns else pd.Series(np.nan, index=df.index)
+    pace = df["pace_min_per_mi"] if "pace_min_per_mi" in df.columns else pd.Series(np.nan, index=df.index)
 
-    # Running
     run_mask = df["type"] == "Run"
-    factor = pd.Series(1.0, index=df.index)
-    valid_pace = pace.notna() & (pace > 0)
-    factor[valid_pace] = (10.5 / pace[valid_pace]).clip(0.6, 2.0)
-    # HR weighting
-    valid_hr = avg_hr.notna() & (avg_hr > 0)
-    hr_factor = (avg_hr / 160.0).clip(upper=1.5)
-    factor[valid_hr] *= (0.5 + 0.5 * hr_factor[valid_hr])
-    stress[run_mask] = dist[run_mask] * factor[run_mask] * 10
 
-    # Weight Training
+    # --- Runs with HR: Banister TRIMP ---
+    hr_valid = run_mask & avg_hr.notna() & (avg_hr > hr_rest) & (time_min > 0)
+    if hr_valid.any():
+        delta_hr = ((avg_hr[hr_valid] - hr_rest) / (hr_max - hr_rest)).clip(0.0, 1.0)
+        raw = time_min[hr_valid] * delta_hr * _BANISTER_K * np.exp(_BANISTER_C * delta_hr.values)
+        stress[hr_valid] = raw * _NORM
+
+    # --- Runs without HR: pace-based fallback ---
+    no_hr_run = run_mask & ~hr_valid
+    if no_hr_run.any():
+        factor = pd.Series(1.0, index=df.index)
+        valid_pace = pace.notna() & (pace > 0)
+        factor[valid_pace] = (10.5 / pace[valid_pace]).clip(0.6, 2.0)
+        stress[no_hr_run] = dist[no_hr_run] * factor[no_hr_run] * 10
+
+    # --- Weight Training: time-based ---
     wt_mask = df["type"] == "Weight Training"
     stress[wt_mask] = time_min[wt_mask] * 0.5
 
-    # Walk/Hike
+    # --- Walk/Hike: distance-based ---
     walk_mask = df["type"].isin(["Walk", "Hike"])
     stress[walk_mask] = dist[walk_mask] * 4
 
-    # Other
+    # --- Other ---
     other_mask = ~(run_mask | wt_mask | walk_mask)
     stress[other_mask] = time_min[other_mask] * 0.2
 

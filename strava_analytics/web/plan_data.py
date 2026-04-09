@@ -2,16 +2,27 @@
 
 Provides pre-computed data for charts and metrics on the /plan page.
 All functions accept the enriched DataFrame and return chart-ready data.
+
+Includes Banister fitness-fatigue model fitting and plan outcome projections:
+  p(t) = p0 + k1 × CTL(t) - k2 × ATL(t)
+  Banister et al. (1975), with defaults from literature when insufficient data.
 """
 
 from datetime import date, timedelta
+import logging
 import math
 
 import numpy as np
 import pandas as pd
 
+from strava_analytics.kalman import _kalman_1d, _GROUND_TRUTH_R
 from strava_analytics.predictions import estimate_1rm, extract_1rm_progression
 from strava_analytics.training_plan import generate_training_plan, plan_to_flat_list
+from strava_analytics.vo2max import (
+    daniels_vdot, vdot_to_race_time, compute_athlete_vdot, extract_race_efforts,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def get_fitness_timeseries(df: pd.DataFrame, days: int = 90) -> pd.DataFrame:
@@ -270,4 +281,249 @@ def get_compliance(df: pd.DataFrame, plan_rows: list[dict]) -> dict:
         "total_completed": completed,
         "pct": round(completed / total * 100, 1) if total > 0 else 0,
         "by_date": by_date,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Banister performance model fitting
+# ---------------------------------------------------------------------------
+#
+# p(t) = p0 + k1 * CTL(t) - k2 * ATL(t)
+#
+# Default k1, k2 from literature (Banister 1975, Busso 2003):
+#   k1 = 1.0, k2 = 2.0, tau1 = 42, tau2 = 7
+# When we have >= 3 race results with CTL/ATL data, fit k1/k2 via least squares.
+
+_DEFAULT_K1 = 1.0
+_DEFAULT_K2 = 2.0
+
+
+def fit_banister_params(df: pd.DataFrame) -> dict:
+    """Fit Banister performance model parameters from race history.
+
+    Returns: {p0, k1, k2, n_races, fitted: bool}
+    """
+    if df.empty or "chronic_load_28d" not in df.columns:
+        return {"p0": 0, "k1": _DEFAULT_K1, "k2": _DEFAULT_K2,
+                "n_races": 0, "fitted": False}
+
+    races = df[(df["type"] == "Run") &
+               (df.get("run_type", pd.Series("", index=df.index)) == "race")].copy()
+    if "run_type" not in races.columns or races.empty:
+        races = df[(df["type"] == "Run") &
+                   (df["distance_mi"] >= 3.0)].copy()
+
+    if races.empty:
+        return {"p0": 0, "k1": _DEFAULT_K1, "k2": _DEFAULT_K2,
+                "n_races": 0, "fitted": False}
+
+    # Extract race performance as 5K-equivalent time (VDOT → time)
+    perf_data = []
+    for _, r in races.iterrows():
+        dist_m = r.get("distance_m", 0)
+        time_s = r.get("moving_time_s", 0)
+        ctl = r.get("chronic_load_28d")
+        atl = r.get("acute_load_7d")
+        if dist_m > 0 and time_s > 0 and pd.notna(ctl) and pd.notna(atl):
+            vdot = daniels_vdot(dist_m, time_s / 60.0)
+            equiv_5k_min = vdot_to_race_time(vdot, 5000)
+            perf_data.append({"time_min": equiv_5k_min, "ctl": ctl, "atl": atl})
+
+    n = len(perf_data)
+    if n < 3:
+        # Not enough data to fit — use defaults with baseline from best effort
+        p0 = perf_data[0]["time_min"] if perf_data else 0
+        return {"p0": p0, "k1": _DEFAULT_K1, "k2": _DEFAULT_K2,
+                "n_races": n, "fitted": False}
+
+    # Least squares: time_min = p0 + k1 * CTL - k2 * ATL
+    # For race times, better fitness (higher CTL) → lower time, so k1 is negative.
+    # Reframe: time_min = p0 - k1 * CTL + k2 * ATL (k1, k2 > 0 by convention)
+    from numpy.linalg import lstsq
+    A = np.array([[-d["ctl"], d["atl"], 1.0] for d in perf_data])
+    b = np.array([d["time_min"] for d in perf_data])
+    result, _, _, _ = lstsq(A, b, rcond=None)
+    k1_fit, k2_fit, p0_fit = result
+
+    # Sanity check: k1, k2 should be positive (fitness helps, fatigue hurts)
+    k1_fit = max(0.01, k1_fit)
+    k2_fit = max(0.01, k2_fit)
+
+    return {"p0": round(p0_fit, 2), "k1": round(k1_fit, 4), "k2": round(k2_fit, 4),
+            "n_races": n, "fitted": True}
+
+
+# ---------------------------------------------------------------------------
+# Plan outcome projections
+# ---------------------------------------------------------------------------
+
+# Banister TRIMP estimates for planned workout intensities
+# (normalized so 1h@LT ≈ 100, matching our enrichment.py convention)
+_PLAN_STRESS_MAP = {
+    "easy": 30,
+    "moderate": 60,
+    "hard": 90,
+    "race": 120,
+}
+
+
+def project_race_outcomes(
+    df: pd.DataFrame,
+    plan_weeks: list,
+    target_distances: dict[str, int] | None = None,
+    tau_ctl: float = 42.0,
+    tau_atl: float = 7.0,
+) -> dict:
+    """Project race time outcomes through the training plan.
+
+    Uses the Banister model (fitted or default) to convert projected CTL/ATL
+    into race time estimates at each target distance.
+
+    Returns: {distance_label: {current_min, projected_min, delta_pct, method}}
+    """
+    if target_distances is None:
+        target_distances = {"5K": 5000, "10K": 10000, "Half Marathon": 21097}
+
+    if df.empty or "chronic_load_28d" not in df.columns:
+        return {}
+
+    # Current state
+    latest = df.sort_values("date").iloc[-1]
+    current_ctl = float(latest.get("chronic_load_28d", 0) or 0)
+    current_atl = float(latest.get("acute_load_7d", 0) or 0)
+    today = latest["date"].date() if hasattr(latest["date"], "date") else latest["date"]
+
+    # Fit Banister model
+    params = fit_banister_params(df)
+
+    # Current VDOT and race times
+    ctl_peak = 0.0
+    if "chronic_load_28d" in df.columns:
+        ctl_peak = float(df["chronic_load_28d"].max())
+    ctl_ratio = (current_ctl / ctl_peak) if ctl_peak > 0 else None
+    current_vdot = compute_athlete_vdot(df, ctl_ratio=ctl_ratio)
+
+    if current_vdot <= 0:
+        return {}
+
+    # Build daily stress from plan
+    flat = plan_to_flat_list(plan_weeks)
+    stress_by_date = {}
+    for row in flat:
+        d = row["date"]
+        if hasattr(d, "date") and callable(d.date):
+            d = d.date()
+        stress = _PLAN_STRESS_MAP.get(row.get("intensity", "easy"), 40)
+        if row.get("type") in ("rest", "mobility"):
+            stress = 5
+        stress_by_date[d] = stress_by_date.get(d, 0) + stress
+
+    # Project CTL/ATL forward
+    ctl = current_ctl
+    atl = current_atl
+    last_plan_date = max(stress_by_date.keys()) if stress_by_date else today
+
+    d = today + timedelta(days=1)
+    while d <= last_plan_date:
+        daily_stress = stress_by_date.get(d, 0)
+        ctl = ctl + (daily_stress - ctl) / tau_ctl
+        atl = atl + (daily_stress - atl) / tau_atl
+        d += timedelta(days=1)
+
+    projected_ctl = ctl
+    projected_atl = atl
+
+    # Convert CTL/ATL change to performance change via Banister model
+    results = {}
+    for label, dist_m in target_distances.items():
+        current_time = vdot_to_race_time(current_vdot, dist_m)
+
+        if params["fitted"]:
+            # Fitted model: Δtime = -k1*(CTL_proj - CTL_now) + k2*(ATL_proj - ATL_now)
+            delta_time = (-params["k1"] * (projected_ctl - current_ctl)
+                          + params["k2"] * (projected_atl - current_atl))
+            projected_time = current_time + delta_time
+            method = f"Banister model (fitted from {params['n_races']} races)"
+        else:
+            # Default: estimate improvement from CTL increase
+            # Heuristic: each unit CTL increase ≈ 0.1% improvement in race time
+            ctl_change_pct = (projected_ctl - current_ctl) / max(current_ctl, 1) * 100
+            # Taper effect: if ATL drops more than CTL (TSB increases), expect ~2-3% boost
+            tsb_now = current_ctl - current_atl
+            tsb_proj = projected_ctl - projected_atl
+            taper_bonus_pct = min(3.0, max(0, (tsb_proj - tsb_now) * 0.15))
+            improvement_pct = min(8.0, ctl_change_pct * 0.1 + taper_bonus_pct)
+            projected_time = current_time * (1 - improvement_pct / 100)
+            method = "Population defaults (add race results for personalized model)"
+
+        delta_pct = (projected_time - current_time) / current_time * 100
+
+        results[label] = {
+            "current_min": round(current_time, 2),
+            "projected_min": round(projected_time, 2),
+            "delta_pct": round(delta_pct, 1),
+            "method": method,
+        }
+
+    return results
+
+
+def project_1rm_outcomes(
+    df: pd.DataFrame,
+    plan_weeks: list,
+    current_1rms: dict,
+) -> dict:
+    """Project 1RM outcomes through the training plan.
+
+    Uses phase-specific progression rates:
+    - Build 1: +2%/week (Rhea et al. 2003 meta-analysis: 1-2%/week for trained)
+    - Build 2: +0% (maintain)
+    - Taper: +0% (Ogasawara 2013: no loss during 3-week detraining)
+    - Race: +0%
+
+    Returns: {lift: {current, projected, delta_pct}}
+    """
+    if not current_1rms:
+        return {}
+
+    # Count weeks per phase
+    phase_weeks = {}
+    for week in plan_weeks:
+        phase_weeks[week.phase] = phase_weeks.get(week.phase, 0) + 1
+
+    build1_weeks = phase_weeks.get("build1", 0)
+    # build2, taper, race: maintenance (no gain, no loss per Ogasawara/McMaster)
+
+    results = {}
+    for lift, current in current_1rms.items():
+        # +2% per build1 week, compounded
+        projected = current * (1.02 ** build1_weeks)
+        delta_pct = (projected - current) / current * 100
+
+        results[lift] = {
+            "current": round(current),
+            "projected": round(projected),
+            "delta_pct": round(delta_pct, 1),
+        }
+
+    return results
+
+
+def get_plan_projections(
+    df: pd.DataFrame,
+    plan_weeks: list,
+    current_1rms: dict,
+) -> dict:
+    """Combined race and strength projections for the plan page.
+
+    Returns: {
+        race_projections: {distance: {current_min, projected_min, delta_pct, method}},
+        strength_projections: {lift: {current, projected, delta_pct}},
+        banister_params: {p0, k1, k2, n_races, fitted},
+    }
+    """
+    return {
+        "race_projections": project_race_outcomes(df, plan_weeks),
+        "strength_projections": project_1rm_outcomes(df, plan_weeks, current_1rms),
+        "banister_params": fit_banister_params(df),
     }

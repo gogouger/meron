@@ -5,7 +5,14 @@ Calibrated to athlete's actual training structure:
   - 2-3 lifts/week (fits between run days)
   - Current weekly mileage ~17 mi/wk
 
+CTL-target-driven progression:
+  Instead of hardcoded +6%/week mileage increases, the plan derives weekly
+  training load from a target CTL at race day, then back-calculates the
+  mileage needed to reach it. Weekly mileage increase is capped at 10%
+  (injury prevention guideline).
+
 References:
+  - Banister, E.W. (1975). Modeling elite athletic performance.
   - Wilson, J.M. et al. (2012). Concurrent Training: A Meta-Analysis.
     JSCR, 26(8), 2293-2307.
   - Robineau, J. et al. (2016). Specific Training Effects of Concurrent
@@ -16,6 +23,8 @@ References:
     running and cycling endurance performance. Scand J Med Sci Sports.
   - Issurin, V.B. (2010). New Horizons for the Methodology and Physiology
     of Training Periodization. Sports Medicine, 40(3), 189-206.
+  - Rhea, M.R. et al. (2003). Meta-analysis of 1RM gains: 1-2%/week
+    for trained individuals.
 """
 
 import math
@@ -295,39 +304,149 @@ def _race_week(week_num: int, start: date) -> TrainingWeek:
     return tw
 
 
+# ---------------------------------------------------------------------------
+# CTL-target-driven mileage progression
+# ---------------------------------------------------------------------------
+
+# Approximate relationship: 1 mile of easy running ≈ 10 TRIMP (normalized).
+# Moderate ≈ 15, hard ≈ 20. Weighted average across a week's mix ≈ 12.
+_TRIMP_PER_MILE = 12.0
+_MAX_WEEKLY_INCREASE_PCT = 0.10  # 10% weekly cap (injury prevention)
+
+
+def _compute_build_mileage(
+    current_weekly_miles: float,
+    current_ctl: float,
+    target_ctl: float,
+    n_build_weeks: int,
+    tau_ctl: float = 42.0,
+) -> list[float]:
+    """Derive weekly mileage targets to reach a target CTL by end of build.
+
+    Uses the Banister CTL formula:
+        CTL(d+1) = CTL(d) + (daily_stress - CTL(d)) / tau
+    to back-calculate the daily stress (and thus mileage) needed.
+
+    Weekly mileage increase is capped at 10% per week.
+    """
+    if n_build_weeks <= 0:
+        return []
+
+    # Target: linear CTL ramp from current to target over build weeks
+    ctl_targets = [
+        current_ctl + (target_ctl - current_ctl) * (i + 1) / n_build_weeks
+        for i in range(n_build_weeks)
+    ]
+
+    mileages = []
+    ctl = current_ctl
+    prev_miles = current_weekly_miles
+
+    for week_idx in range(n_build_weeks):
+        target = ctl_targets[week_idx]
+        # Required daily stress to reach target CTL in 7 days
+        # CTL after 7 days with constant daily stress s:
+        # CTL_7 = CTL_0 + (s - CTL_0) * (1 - (1-1/tau)^7)
+        # Solving for s: s = CTL_0 + (target - CTL_0) / (1 - (1-1/tau)^7)
+        decay_factor = (1.0 - 1.0 / tau_ctl) ** 7
+        required_daily_stress = ctl + (target - ctl) / (1.0 - decay_factor)
+        required_daily_stress = max(required_daily_stress, 0)
+
+        # Convert stress to mileage: weekly_stress = daily × 7
+        # But only ~5 run days + 2 lift days. Lift stress is time-based, not mileage.
+        # Approximate: 5 run days × miles_per_day × TRIMP_PER_MILE + 2 × 25 (lift)
+        weekly_run_stress = required_daily_stress * 7 - 50  # subtract lift contribution
+        weekly_run_stress = max(weekly_run_stress, 0)
+        miles = weekly_run_stress / _TRIMP_PER_MILE
+
+        # Cap at 10% increase per week
+        max_miles = prev_miles * (1 + _MAX_WEEKLY_INCREASE_PCT)
+        miles = min(miles, max_miles)
+        miles = max(miles, prev_miles * 0.9)  # don't drop more than 10% either
+
+        mileages.append(round(miles, 1))
+        prev_miles = miles
+
+        # Update CTL estimate for next week
+        daily_stress = (miles * _TRIMP_PER_MILE + 50) / 7  # run + lift per day
+        for _ in range(7):
+            ctl = ctl + (daily_stress - ctl) / tau_ctl
+
+    return mileages
+
+
 def generate_training_plan(
     start_date: date,
     race1_date: date,
     race2_date: date,
     current_1rms: dict | None = None,
     current_weekly_miles: float = 17.0,
+    current_ctl: float | None = None,
+    target_ctl: float | None = None,
 ) -> list[TrainingWeek]:
     """Generate the full 8-week periodized training plan.
 
-    Starts AT current mileage and builds 5-10% per week during Build phases.
+    When current_ctl and target_ctl are provided, uses CTL-target-driven
+    mileage progression. Otherwise falls back to percentage-based scaling.
+    Weekly mileage increase is capped at 10% (injury prevention).
+
+    Args:
+        start_date: First day of the plan.
+        race1_date: First race date.
+        race2_date: Second race date.
+        current_1rms: Current estimated 1RM for each lift.
+        current_weekly_miles: Current weekly running volume.
+        current_ctl: Current CTL (chronic training load). Optional.
+        target_ctl: Desired CTL at peak build. Optional.
     """
     if current_1rms is None:
         current_1rms = {"bench": 225, "squat": 305, "deadlift": 405, "ohp": 110}
 
     weeks = []
 
-    # Build 1: weeks 1-3, start at current mileage and build 5-8% per week
+    # Compute build mileage progression
+    if current_ctl is not None and target_ctl is not None:
+        # CTL-driven: derive mileage from target CTL
+        build_mileages = _compute_build_mileage(
+            current_weekly_miles, current_ctl, target_ctl, n_build_weeks=5,
+        )
+        # Pad if needed
+        while len(build_mileages) < 5:
+            build_mileages.append(build_mileages[-1] if build_mileages else current_weekly_miles)
+    else:
+        # Fallback: percentage-based (original logic, capped at 10%)
+        build_mileages = []
+        prev = current_weekly_miles
+        for i in range(3):
+            target = current_weekly_miles * (1.0 + 0.06 * i)
+            target = min(target, prev * (1 + _MAX_WEEKLY_INCREASE_PCT))
+            build_mileages.append(round(target, 1))
+            prev = target
+        # Build 2: peak then hold
+        for i in range(2):
+            target = current_weekly_miles * (1.12 - 0.02 * i)
+            target = min(target, prev * (1 + _MAX_WEEKLY_INCREASE_PCT))
+            build_mileages.append(round(target, 1))
+            prev = target
+
+    peak_miles = max(build_mileages) if build_mileages else current_weekly_miles
+
+    # Build 1: weeks 1-3
     for i in range(3):
         week_start = start_date + timedelta(weeks=i)
-        miles = current_weekly_miles * (1.0 + 0.06 * i)  # +0%, +6%, +12%
+        miles = build_mileages[i]
         weeks.append(_build1_week(i + 1, week_start, current_1rms, miles))
 
-    # Build 2: weeks 4-5, peak mileage then hold
+    # Build 2: weeks 4-5
     for i in range(2):
         week_start = start_date + timedelta(weeks=3 + i)
-        miles = current_weekly_miles * (1.12 - 0.02 * i)  # peak then slight drop
+        miles = build_mileages[3 + i]
         weeks.append(_build2_week(4 + i, week_start, current_1rms, miles))
 
-    # Taper: weeks 6-7
+    # Taper: weeks 6-7 — Mujika & Padilla (2003): 60-90% volume reduction
     for i in range(2):
         week_start = start_date + timedelta(weeks=5 + i)
-        # Mujika & Padilla (2003): 60-90% volume reduction
-        miles = current_weekly_miles * (0.60 - 0.20 * i)  # ~60% → ~40% of current
+        miles = peak_miles * (0.60 - 0.20 * i)  # ~60% → ~40% of peak
         weeks.append(_taper_week(6 + i, week_start, current_1rms, miles, i + 1))
 
     # Race week 8

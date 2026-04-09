@@ -8,6 +8,8 @@ Provides:
 - Personal records detection across standard distances.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 
@@ -15,31 +17,112 @@ from .metrics import format_pace
 
 
 # ---------------------------------------------------------------------------
-# Relative Effort (Suffer Score)
+# Relative Effort — Banister exponential TRIMP (1991)
 # ---------------------------------------------------------------------------
+#
+# Banister's TRIMP uses the exponential relationship between heart rate
+# reserve (HRR) and blood lactate concentration, making it the only
+# TRIMP variant with a physiological basis.
+#
+# Formula: TRIMP = duration_min × ΔHR × k × e^(c × ΔHR)
+#   where ΔHR = (HR_avg - HR_rest) / (HR_max - HR_rest)
+#   Males:   k=0.64, c=1.92
+#   Females: k=0.86, c=1.67
+#
+# Normalized so 1 hour at lactate threshold ≈ 100 (TrainingPeaks TSS convention).
+# At LT, ΔHR ≈ 0.80 → raw TRIMP ≈ 60 × 0.80 × 0.64 × e^(1.92×0.80) ≈ 143.
+# Normalization factor = 100 / 143 ≈ 0.70.
+#
+# References:
+#   Banister, E.W. (1991). Modeling elite athletic performance.
+#   Strava Relative Effort uses the same exponential model (Altini, PhD).
 
-# Zone weights: TRIMP-style multipliers per minute in each zone.
-# Calibrated so a 30-min easy run ≈ 30-50, a 60-min moderate run ≈ 80-120,
-# a hard 10K race ≈ 150-200, a marathon ≈ 250-350.
-_ZONE_WEIGHTS = {1: 1.0, 2: 1.5, 3: 2.5, 4: 4.0, 5: 6.0}
+_BANISTER_K_MALE = 0.64
+_BANISTER_C_MALE = 1.92
+_BANISTER_K_FEMALE = 0.86
+_BANISTER_C_FEMALE = 1.67
+
+# Normalization: raw TRIMP for 1h at LT (ΔHR≈0.80) → 100
+_LT_DELTA_HR = 0.80
+_RAW_TRIMP_1H_LT = (60.0 * _LT_DELTA_HR * _BANISTER_K_MALE
+                     * math.exp(_BANISTER_C_MALE * _LT_DELTA_HR))
+_TRIMP_NORM = 100.0 / _RAW_TRIMP_1H_LT
+
+# Default athlete parameters (can be overridden via athlete_config)
+_DEFAULT_HR_REST = 60
+_DEFAULT_HR_MAX = 200
+
+# Fallback zone weights when only zone_*_s data is available (no avg_hr).
+# Zone midpoint ΔHR values assuming 5-zone model on %HRmax with rest=60, max=200:
+#   Z1: 55% → ΔHR=0.36, Z2: 65% → ΔHR=0.50, Z3: 75% → ΔHR=0.64,
+#   Z4: 85% → ΔHR=0.79, Z5: 95% → ΔHR=0.93
+_ZONE_MIDPOINT_DELTA_HR = {1: 0.36, 2: 0.50, 3: 0.64, 4: 0.79, 5: 0.93}
 
 
-def compute_relative_effort_vectorized(df: pd.DataFrame) -> pd.Series:
-    """Vectorized relative effort (TRIMP-style) for the full DataFrame.
+def _banister_trimp_zone(zone_seconds: dict[int, float],
+                         k: float = _BANISTER_K_MALE,
+                         c: float = _BANISTER_C_MALE) -> float:
+    """Compute Banister TRIMP from per-zone time distribution.
 
-    Score = sum(zone_minutes * zone_weight). Typical range: 20-300.
+    Uses zone midpoint ΔHR values when per-second HR stream isn't available.
     """
-    effort = pd.Series(0.0, index=df.index)
-    has_data = pd.Series(False, index=df.index)
+    total = 0.0
+    for z in range(1, 6):
+        secs = zone_seconds.get(z, 0)
+        if secs <= 0:
+            continue
+        mins = secs / 60.0
+        dhr = _ZONE_MIDPOINT_DELTA_HR[z]
+        total += mins * dhr * k * math.exp(c * dhr)
+    return total * _TRIMP_NORM
+
+
+def compute_relative_effort_vectorized(
+    df: pd.DataFrame,
+    hr_rest: int = _DEFAULT_HR_REST,
+    hr_max: int = _DEFAULT_HR_MAX,
+) -> pd.Series:
+    """Vectorized Banister exponential TRIMP for the full DataFrame.
+
+    Primary path: uses avg_hr + moving_time to compute per-activity TRIMP.
+    Fallback: uses zone_*_s columns with zone midpoint ΔHR approximation.
+
+    Normalized so 1h at lactate threshold ≈ 100 (comparable to TSS).
+    """
+    effort = pd.Series(np.nan, index=df.index)
+    k, c = _BANISTER_K_MALE, _BANISTER_C_MALE
+
+    # Primary: Banister TRIMP from avg_hr + duration
+    avg_hr = df["avg_hr"] if "avg_hr" in df.columns else pd.Series(np.nan, index=df.index)
+    time_min = df["moving_time_min"] if "moving_time_min" in df.columns else (
+        df["moving_time_s"].fillna(0) / 60.0 if "moving_time_s" in df.columns
+        else pd.Series(0.0, index=df.index)
+    )
+
+    hr_valid = avg_hr.notna() & (avg_hr > hr_rest) & (time_min > 0)
+    if hr_valid.any():
+        delta_hr = ((avg_hr[hr_valid] - hr_rest) / (hr_max - hr_rest)).clip(0.0, 1.0)
+        raw = time_min[hr_valid] * delta_hr * k * np.exp(c * delta_hr)
+        effort[hr_valid] = (raw * _TRIMP_NORM).round(0)
+
+    # Fallback: zone-based approximation for activities without avg_hr
+    no_hr = ~hr_valid
+    has_zone_data = pd.Series(False, index=df.index)
     for z in range(1, 6):
         col = f"zone_{z}_s"
         if col in df.columns:
-            secs = df[col].fillna(0)
-            mask = secs > 0
-            has_data = has_data | mask
-            effort += (secs / 60) * _ZONE_WEIGHTS[z]
-    effort[~has_data] = np.nan
-    return effort.round(0)
+            has_zone_data = has_zone_data | (df[col].fillna(0) > 0)
+
+    fallback_mask = no_hr & has_zone_data
+    if fallback_mask.any():
+        for idx in df.index[fallback_mask]:
+            zone_secs = {}
+            for z in range(1, 6):
+                col = f"zone_{z}_s"
+                zone_secs[z] = df.at[idx, col] if col in df.columns else 0
+            effort.at[idx] = round(_banister_trimp_zone(zone_secs, k, c))
+
+    return effort
 
 
 # ---------------------------------------------------------------------------

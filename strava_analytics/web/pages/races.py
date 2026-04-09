@@ -49,7 +49,17 @@ def layout(**_kwargs):
     now = df["date"].max()
     recent_cutoff = now - pd.Timedelta(days=180)
 
-    vdot = compute_athlete_vdot(df)
+    # Build CTL series for detraining-aware predictions
+    ctl_by_date = {}
+    ctl_peak = 0.0
+    if "chronic_load_28d" in df.columns:
+        for _, row in df.dropna(subset=["chronic_load_28d"]).iterrows():
+            d = row["date"].date() if hasattr(row["date"], "date") else row["date"]
+            ctl_by_date[d] = float(row["chronic_load_28d"])
+        ctl_peak = max(ctl_by_date.values()) if ctl_by_date else 0.0
+    ctl_ratio = (ctl_by_date.get(now.date(), 0) / ctl_peak) if ctl_peak > 0 else None
+
+    vdot = compute_athlete_vdot(df, ctl_ratio=ctl_ratio)
     all_efforts = extract_race_efforts(df)
     recent_efforts = [e for e in all_efforts
                       if e["date"] is not None and e["date"] >= recent_cutoff]
@@ -81,7 +91,8 @@ def layout(**_kwargs):
     calibration = None
     from strava_analytics.kalman import kalman_race
     runs_only = df[df["type"] == "Run"]
-    kalman_df = kalman_race(runs_only, target_m=5000)
+    kalman_df = kalman_race(runs_only, target_m=5000,
+                            ctl_series=ctl_by_date, ctl_peak=ctl_peak)
     if not kalman_df.empty:
         latest = kalman_df.iloc[-1]
         calibration = {
@@ -362,6 +373,17 @@ def _methodology_section():
                 html.Li("Cameron (1999): Non-linear distance scaling model"),
                 html.Li("Daniels VDOT (2014): VO2 cost + sustainable fraction model"),
                 html.Li("Personal exponent computed from your race history via least-squares fit"),
+            ], style={"fontSize": "0.8rem", "color": "var(--text-secondary)"}),
+        ]),
+        html.Details([
+            html.Summary("Fitness-Aware Predictions"),
+            html.Ul([
+                html.Li("Banister exponential TRIMP (1991): physiologically-derived HR-lactate weighting"),
+                html.Li("Kalman filter with CTL-informed drift: predictions decay when training drops "
+                         "below Hickson threshold (70% of peak CTL)"),
+                html.Li("Mujika & Padilla (2000): ~2.5%/week VO2max decay during detraining"),
+                html.Li("Hickson (1985): no fitness loss if intensity maintained at reduced volume"),
+                html.Li("VDOT staleness discount: older efforts weighted less when detraining detected"),
             ], style={"fontSize": "0.8rem", "color": "var(--text-secondary)"}),
         ]),
         html.Details([
