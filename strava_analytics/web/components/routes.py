@@ -269,6 +269,113 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
                style={"marginTop": "8px"},
                **{"data-chartcfg": stream_cfg}))
 
+    # Dedicated HR line chart with zone background bands
+    if has_hr and stream.heart_rate and len(stream.heart_rate) > 10:
+        _route_map_counter += 1
+        hr_chart_id = f"hr-line-{_route_map_counter}"
+        hr_cfg = data.get_athlete_config()
+        hr_max = hr_cfg.get("max_hr", 200)
+        hr_zone_pct = hr_cfg.get("hr_zones_pct", [60, 70, 80, 90])
+        hr_boundaries = [int(hr_max * p / 100) for p in hr_zone_pct]
+
+        hr_smooth_vals = _smooth(stream.heart_rate, window=11)
+        hr_x = dist_mi[:len(hr_smooth_vals)] if dist_mi else list(range(len(hr_smooth_vals)))
+        hr_x_vals = [round(x, 3) for x in hr_x]
+
+        hr_valid = [h for h in stream.heart_rate if h and h > 0]
+        if hr_valid:
+            hr_y_min = max(min(hr_valid) - 15, hr_boundaries[0] - 10)
+            hr_y_max = min(max(hr_valid) + 10, hr_max + 10)
+
+            # Zone band datasets — stacked filled line pairs (bottom → top)
+            # Each zone is a line at the top boundary, filled down to the previous
+            zone_bands = []
+            all_boundaries = [hr_y_min] + hr_boundaries + [hr_y_max]
+            x_range = [hr_x_vals[0], hr_x_vals[-1]]
+            for zi in range(5):
+                bot = max(all_boundaries[zi], hr_y_min)
+                top = min(all_boundaries[zi + 1], hr_y_max)
+                if top <= bot:
+                    continue
+                color = HR_ZONE_COLORS.get(zi + 1, TEXT_MUTED)
+                h = color.lstrip("#") if color.startswith("#") else "999999"
+                if len(h) >= 6:
+                    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+                else:
+                    r, g, b = 150, 150, 150
+                band_color = f"rgba({r},{g},{b},0.18)"
+                # Bottom line (hidden)
+                zone_bands.append({
+                    "label": f"_zbot{zi}",
+                    "data": [{"x": x_range[0], "y": bot}, {"x": x_range[1], "y": bot}],
+                    "borderColor": "transparent", "borderWidth": 0,
+                    "pointRadius": 0, "showLine": True, "fill": False,
+                    "order": 20,
+                })
+                # Top line, filled down to the bottom line
+                zone_bands.append({
+                    "label": HR_ZONE_LABELS[zi],
+                    "data": [{"x": x_range[0], "y": top}, {"x": x_range[1], "y": top}],
+                    "borderColor": "transparent", "borderWidth": 0,
+                    "backgroundColor": band_color,
+                    "pointRadius": 0, "showLine": True,
+                    "fill": "-1",  # fill to previous dataset
+                    "order": 20,
+                })
+
+            # HR line dataset
+            hr_line_data = [{"x": hr_x_vals[i], "y": round(hr_smooth_vals[i], 1)
+                             if hr_smooth_vals[i] else None}
+                            for i in range(min(len(hr_smooth_vals), len(hr_x_vals)))]
+
+            hr_datasets = zone_bands + [{
+                "label": "Heart Rate",
+                "data": hr_line_data,
+                "borderColor": ACCENT_RED,
+                "borderWidth": 2,
+                "fill": False,
+                "pointRadius": 0,
+                "tension": 0.3,
+                "spanGaps": True,
+                "order": 1,
+            }]
+
+            hr_line_cfg = json.dumps({
+                "type": "line",
+                "data": {"datasets": hr_datasets},
+                "options": {
+                    "responsive": True, "maintainAspectRatio": False,
+                    "interaction": {"mode": "index", "intersect": False},
+                    "plugins": {
+                        "title": {"display": True, "text": "Heart Rate",
+                                  "font": {"size": 13, "weight": "500"}},
+                        "legend": {
+                            "display": True, "position": "bottom",
+                            "labels": {"boxWidth": 12, "padding": 6, "usePointStyle": True,
+                                       "font": {"size": 10}},
+                        },
+                    },
+                    "scales": {
+                        "x": {
+                            "type": "linear", "min": 0,
+                            "max": hr_x_vals[-1] if hr_x_vals else 1,
+                            "title": {"display": True, "text": "mi"},
+                            "ticks": {"stepSize": 0.25},
+                        },
+                        "y": {
+                            "min": hr_y_min, "max": hr_y_max,
+                            "title": {"display": True, "text": "bpm"},
+                        },
+                    },
+                },
+            })
+
+            children.append(html.Div([
+                html.Div(className="cjs-canvas-box", style={"height": "200px"}),
+            ], id=f"{hr_chart_id}-wrap", className="cjs-chart-wrap",
+               style={"marginTop": "12px"},
+               **{"data-chartcfg": hr_line_cfg}))
+
     # Per-run HR zone time bar chart
     if stream.heart_rate and stream.timestamps and len(stream.heart_rate) > 10:
         cfg = data.get_athlete_config()

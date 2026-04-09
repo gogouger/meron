@@ -18,31 +18,17 @@ from .metrics import format_pace
 # Relative Effort (Suffer Score)
 # ---------------------------------------------------------------------------
 
-# Zone weights: time in higher zones counts more. Based on Strava's model.
-_ZONE_WEIGHTS = {1: 25, 2: 60, 3: 115, 4: 200, 5: 300}
-
-
-def compute_relative_effort(row: pd.Series) -> float:
-    """Compute a single Relative Effort score from per-second zone times.
-
-    Returns a score roughly in 0-300 range for typical runs.
-    Score = sum(zone_seconds * zone_weight) / 60.
-    """
-    total = 0.0
-    has_zone_data = False
-    for z in range(1, 6):
-        col = f"zone_{z}_s"
-        secs = row.get(col, 0)
-        if pd.notna(secs) and secs > 0:
-            has_zone_data = True
-            total += secs * _ZONE_WEIGHTS[z]
-    if not has_zone_data:
-        return np.nan
-    return round(total / 60, 1)
+# Zone weights: TRIMP-style multipliers per minute in each zone.
+# Calibrated so a 30-min easy run ≈ 30-50, a 60-min moderate run ≈ 80-120,
+# a hard 10K race ≈ 150-200, a marathon ≈ 250-350.
+_ZONE_WEIGHTS = {1: 1.0, 2: 1.5, 3: 2.5, 4: 4.0, 5: 6.0}
 
 
 def compute_relative_effort_vectorized(df: pd.DataFrame) -> pd.Series:
-    """Vectorized relative effort for the full DataFrame."""
+    """Vectorized relative effort (TRIMP-style) for the full DataFrame.
+
+    Score = sum(zone_minutes * zone_weight). Typical range: 20-300.
+    """
     effort = pd.Series(0.0, index=df.index)
     has_data = pd.Series(False, index=df.index)
     for z in range(1, 6):
@@ -51,10 +37,9 @@ def compute_relative_effort_vectorized(df: pd.DataFrame) -> pd.Series:
             secs = df[col].fillna(0)
             mask = secs > 0
             has_data = has_data | mask
-            effort += secs * _ZONE_WEIGHTS[z]
-    effort = effort / 60
+            effort += (secs / 60) * _ZONE_WEIGHTS[z]
     effort[~has_data] = np.nan
-    return effort.round(1)
+    return effort.round(0)
 
 
 # ---------------------------------------------------------------------------
