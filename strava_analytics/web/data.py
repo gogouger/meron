@@ -14,6 +14,7 @@ _df: pd.DataFrame | None = None
 _profile: dict | None = None
 _export_dir: Path | None = None
 _athlete_config: dict | None = None
+_best_efforts: pd.DataFrame | None = None
 
 # Default athlete config
 _DEFAULT_CONFIG = {
@@ -46,7 +47,7 @@ def save_athlete_config(config: dict) -> None:
 
 def init(export_dir: str | Path) -> None:
     """Load and enrich the Strava data. Call once at startup."""
-    global _df, _profile, _export_dir, _athlete_config
+    global _df, _profile, _export_dir, _athlete_config, _best_efforts
     _export_dir = Path(export_dir)
     _athlete_config = _load_athlete_config(_export_dir)
     raw = load_activities(_export_dir)
@@ -56,6 +57,14 @@ def init(export_dir: str | Path) -> None:
     # Build route fingerprint index (incremental, fast after first run)
     from strava_analytics.route_matching import build_route_index
     build_route_index(_df, _export_dir)
+
+    # Compute best efforts at startup (cached after first run)
+    from strava_analytics.fitness import compute_best_efforts
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("Computing best efforts...")
+    _best_efforts = compute_best_efforts(_df, _export_dir)
+    logger.info("Best efforts: %d records", len(_best_efforts) if _best_efforts is not None else 0)
 
 
 def get_df() -> pd.DataFrame:
@@ -98,6 +107,13 @@ def get_program() -> list:
 def get_athlete_config() -> dict:
     """Return athlete config dict."""
     return _athlete_config or _DEFAULT_CONFIG.copy()
+
+
+def get_best_efforts() -> pd.DataFrame:
+    """Return pre-computed best efforts DataFrame."""
+    if _best_efforts is None:
+        return pd.DataFrame()
+    return _best_efforts
 
 
 def get_export_dir() -> Path:

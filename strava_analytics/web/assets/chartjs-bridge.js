@@ -268,21 +268,16 @@
                     limits: zoomLimits,
                 };
             } else {
+                // Zoom disabled — pan only (no wheel/pinch/drag zoom)
                 cfg.options.plugins.zoom = {
                     pan: {
                         enabled: true,
                         mode: zoomMode,
                     },
                     zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
-                        drag: {
-                            enabled: true,
-                            backgroundColor: "rgba(239,60,74,0.08)",
-                            borderColor: "rgba(239,60,74,0.3)",
-                            borderWidth: 1,
-                        },
-                        mode: zoomMode,
+                        wheel: { enabled: false },
+                        pinch: { enabled: false },
+                        drag: { enabled: false },
                     },
                     limits: zoomLimits,
                 };
@@ -516,6 +511,11 @@
             for (var i = 0; i < mutations.length; i++) {
                 if (mutations[i].addedNodes.length) { dominated = true; break; }
                 if (mutations[i].type === "attributes" && mutations[i].attributeName === "data-chartcfg") {
+                    // Config changed on existing element — clear rendered flag so it re-renders
+                    var target = mutations[i].target;
+                    if (target && target.getAttribute("data-rendered")) {
+                        target.removeAttribute("data-rendered");
+                    }
                     dominated = true; break;
                 }
             }

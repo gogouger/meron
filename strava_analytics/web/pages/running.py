@@ -400,14 +400,20 @@ def layout(**_kwargs):
                     ),
                 ], md=4),
                 dbc.Col([
-                    html.Label("Date Range",
-                               style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
-                    dcc.DatePickerRange(
-                        id="run-date-range",
-                        start_date=runs["date"].min(),
-                        end_date=runs["date"].max(),
-                        style={"fontSize": "0.85rem"},
-                    ),
+                    html.Label("Time Range",
+                               style={"fontSize": "0.8rem", "color": TEXT_SECONDARY,
+                                      "marginBottom": "6px", "display": "block"}),
+                    html.Div([
+                        html.Button("3M", id="range-3m", n_clicks=0,
+                                    className="range-pill"),
+                        html.Button("6M", id="range-6m", n_clicks=0,
+                                    className="range-pill"),
+                        html.Button("1Y", id="range-1y", n_clicks=0,
+                                    className="range-pill"),
+                        html.Button("ALL", id="range-all", n_clicks=1,
+                                    className="range-pill range-pill-active"),
+                    ], className="range-pill-bar"),
+                    dcc.Store(id="run-time-range", data="all"),
                 ], md=6),
             ]),
         ], alt_bg=True),
@@ -557,6 +563,35 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
     return html.Div([metrics_row, *text_items, chart_row])
 
 
+# Clientside callback: pill buttons → update run-time-range store + highlight
+clientside_callback(
+    """
+    function(n3m, n6m, n1y, nall) {
+        const ctx = dash_clientside.callback_context;
+        if (!ctx.triggered.length) return dash_clientside.no_update;
+        const btn = ctx.triggered[0].prop_id.split(".")[0];
+        const map = {"range-3m": "3m", "range-6m": "6m", "range-1y": "1y", "range-all": "all"};
+        const val = map[btn] || "all";
+        // Highlight active pill
+        var pills = document.querySelectorAll(".range-pill");
+        pills.forEach(function(p) {
+            if (p.id === btn) {
+                p.classList.add("range-pill-active");
+            } else {
+                p.classList.remove("range-pill-active");
+            }
+        });
+        return val;
+    }
+    """,
+    Output("run-time-range", "data"),
+    Input("range-3m", "n_clicks"),
+    Input("range-6m", "n_clicks"),
+    Input("range-1y", "n_clicks"),
+    Input("range-all", "n_clicks"),
+)
+
+
 @callback(
     Output("pace-trend-container", "children"),
     Output("weekly-miles-container", "children"),
@@ -565,20 +600,22 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
     Output("hr-analysis-container", "children"),
     Output("weekly-load-container", "children"),
     Input("run-type-filter", "value"),
-    Input("run-date-range", "start_date"),
-    Input("run-date-range", "end_date"),
+    Input("run-time-range", "data"),
     Input("data-version-store", "data"),
     State("run-meta-store", "data"),
 )
-def update_charts(run_types, start_date, end_date, _data_version, run_meta):
+def update_charts(run_types, time_range, _data_version, run_meta):
     runs = data.get_runs().copy()
 
     if run_types:
         runs = runs[runs["run_type"].isin(run_types)]
-    if start_date:
-        runs = runs[runs["date"] >= start_date]
-    if end_date:
-        runs = runs[runs["date"] <= end_date]
+
+    # Apply time range filter
+    if time_range and time_range != "all":
+        now = runs["date"].max()
+        days = {"3m": 90, "6m": 180, "1y": 365}.get(time_range, 9999)
+        cutoff = now - pd.Timedelta(days=days)
+        runs = runs[runs["date"] >= cutoff]
 
     # Charts return html.Div with inline Chart.js rendering script
     pace_chart = charts.pace_trend_chart(runs, chart_id="pace-trend", run_meta=run_meta)

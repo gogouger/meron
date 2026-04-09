@@ -141,33 +141,247 @@ def compute_trends(df: pd.DataFrame) -> list[dict]:
 # Personal Records by distance
 # ---------------------------------------------------------------------------
 
-_PR_DISTANCES = [
-    ("1 Mile", 0.9, 1.1),
-    ("5K", 2.9, 3.3),
-    ("10K", 5.9, 6.5),
-    ("Half Marathon", 12.8, 13.5),
-    ("Marathon", 25.8, 26.8),
+# ---------------------------------------------------------------------------
+# Best Effort detection (Strava-style: fastest segment within any run)
+# ---------------------------------------------------------------------------
+
+_PR_DISTANCES_M = [
+    ("1 Mile", 1609.34),
+    ("5K", 5000.0),
+    ("10K", 10000.0),
+    ("Half Marathon", 21097.0),
+    ("Marathon", 42195.0),
 ]
 
+_BEST_EFFORT_CACHE_FILE = ".best_efforts_cache.json"
 
-def detect_prs(df: pd.DataFrame) -> list[dict]:
-    """Find best pace for standard race distances.
 
-    Returns list of {distance, best_pace, best_date, best_name, year_pace, year_date}.
+def _find_best_effort(distance_m: list[float], timestamps: list, target_m: float) -> float | None:
+    """Sliding window: find fastest contiguous segment of target_m meters.
+
+    Returns elapsed time in seconds, or None if the run is shorter than target_m.
     """
+    if not distance_m or not timestamps or len(distance_m) < 2:
+        return None
+    total_dist = distance_m[-1] - distance_m[0]
+    if total_dist < target_m * 0.95:  # run too short
+        return None
+
+    best_time = None
+    j = 0
+    for i in range(len(distance_m)):
+        # Advance j until segment covers target_m
+        while j < len(distance_m) - 1 and (distance_m[j] - distance_m[i]) < target_m:
+            j += 1
+        seg_dist = distance_m[j] - distance_m[i]
+        if seg_dist < target_m * 0.98:  # not enough distance
+            continue
+        # Interpolate to get exact time for target_m
+        dt = (timestamps[j] - timestamps[i]).total_seconds()
+        if dt <= 0:
+            continue
+        # Adjust for overshoot
+        if seg_dist > target_m and j > 0:
+            overshoot = seg_dist - target_m
+            speed = seg_dist / dt
+            dt -= overshoot / speed if speed > 0 else 0
+        if best_time is None or dt < best_time:
+            best_time = dt
+    return best_time
+
+
+def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
+    """Scan FIT files for best efforts at standard distances.
+
+    Returns a DataFrame with columns: distance_label, time_s, pace_min_mi,
+    date, name, activity_idx, rank (1-3 per distance).
+    Results are cached to disk.
+    """
+    import json
+    from pathlib import Path
+    from .routes import parse_distance_stream
+
+    if export_dir is None:
+        return pd.DataFrame()
+    export_dir = Path(export_dir)
+
+    runs = df[df["type"] == "Run"].copy()
+    if runs.empty or "filename" not in runs.columns:
+        return pd.DataFrame()
+
+    # Load cache
+    cache_path = export_dir / _BEST_EFFORT_CACHE_FILE
+    cache = {}
+    if cache_path.exists():
+        try:
+            with open(cache_path) as f:
+                cache = json.load(f)
+        except Exception:
+            cache = {}
+
+    # For each run, find best effort at each distance
+    all_efforts = []
+    for idx, row in runs.iterrows():
+        fn = row.get("filename", "")
+        if not isinstance(fn, str) or not fn.strip():
+            continue
+        # Only parse FIT.gz files (skip GPX, TCX, etc.)
+        if not fn.lower().endswith(".fit.gz"):
+            continue
+
+        # Check cache
+        if fn in cache:
+            for eff in cache[fn]:
+                eff["date"] = row["date"]
+                eff["name"] = row.get("name", "")
+                eff["activity_idx"] = idx
+                all_efforts.append(eff)
+            continue
+
+        fit_path = export_dir / fn
+        points = parse_distance_stream(fit_path)
+        if len(points) < 10:
+            cache[fn] = []
+            continue
+
+        timestamps = [p[0] for p in points]
+        distance_m = [p[1] for p in points]
+
+        file_efforts = []
+        for label, target_m in _PR_DISTANCES_M:
+            time_s = _find_best_effort(distance_m, timestamps, target_m)
+            if time_s is not None and time_s > 0:
+                # Convert to pace (min/mi)
+                dist_mi = target_m / 1609.34
+                pace = (time_s / 60) / dist_mi
+                eff = {"distance_label": label, "time_s": round(time_s, 1),
+                       "pace_min_mi": round(pace, 2)}
+                file_efforts.append(eff)
+
+        cache[fn] = [{"distance_label": e["distance_label"],
+                       "time_s": e["time_s"], "pace_min_mi": e["pace_min_mi"]}
+                      for e in file_efforts]
+
+        for eff in file_efforts:
+            eff["date"] = row["date"]
+            eff["name"] = row.get("name", "")
+            eff["activity_idx"] = idx
+            all_efforts.append(eff)
+
+    # Save cache
+    try:
+        with open(cache_path, "w") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass
+
+    if not all_efforts:
+        return pd.DataFrame()
+
+    edf = pd.DataFrame(all_efforts)
+
+    # Rank within each distance (top 3)
+    edf = edf.sort_values(["distance_label", "pace_min_mi"])
+    edf["rank"] = edf.groupby("distance_label").cumcount() + 1
+
+    return edf
+
+
+def _format_effort_time(seconds: float) -> str:
+    """Format seconds to H:MM:SS or M:SS."""
+    if seconds < 3600:
+        m = int(seconds // 60)
+        s = int(seconds % 60)
+        return f"{m}:{s:02d}"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def detect_prs(df: pd.DataFrame, efforts_df: pd.DataFrame | None = None) -> list[dict]:
+    """Find best efforts across standard distances using FIT stream data.
+
+    Pass pre-computed efforts_df from compute_best_efforts() to avoid
+    re-parsing FIT files on every page load.
+    Falls back to overall-pace matching when FIT data isn't available.
+    Returns list of dicts with top-3 efforts per distance.
+    """
+    if efforts_df is None or efforts_df.empty:
+        # Fallback: use overall pace for runs near the target distance
+        return _detect_prs_fallback(df)
+
+    now = df[df["type"] == "Run"]["date"].max()
+    year_start = pd.Timestamp(now.year, 1, 1)
+    prs = []
+
+    for label, _ in _PR_DISTANCES_M:
+        dist_efforts = efforts_df[efforts_df["distance_label"] == label].copy()
+        if dist_efforts.empty:
+            continue
+
+        top3 = dist_efforts[dist_efforts["rank"] <= 3]
+
+        # All-time best
+        best = top3.iloc[0]
+        best_time = _format_effort_time(best["time_s"])
+        best_pace = format_pace(best["pace_min_mi"])
+
+        # This year's best
+        year_efforts = dist_efforts[dist_efforts["date"] >= year_start]
+        year_best = None
+        if not year_efforts.empty:
+            yr = year_efforts.iloc[0]
+            year_best = {
+                "time": _format_effort_time(yr["time_s"]),
+                "pace": format_pace(yr["pace_min_mi"]),
+                "date": yr["date"].strftime("%b %d, %Y"),
+                "name": yr.get("name", ""),
+            }
+
+        prs.append({
+            "distance": label,
+            "best_time": best_time,
+            "best_pace": best_pace,
+            "best_date": best["date"].strftime("%b %d, %Y"),
+            "best_name": best.get("name", ""),
+            "year_best": year_best,
+            "top3": [
+                {
+                    "rank": int(r["rank"]),
+                    "time": _format_effort_time(r["time_s"]),
+                    "pace": format_pace(r["pace_min_mi"]),
+                    "date": r["date"].strftime("%b %d, %Y"),
+                    "name": r.get("name", ""),
+                }
+                for _, r in top3.iterrows()
+            ],
+        })
+
+    return prs
+
+
+def _detect_prs_fallback(df: pd.DataFrame) -> list[dict]:
+    """Fallback PR detection using overall pace (no FIT data)."""
     runs = df[df["type"] == "Run"].copy()
     if runs.empty:
         return []
 
     now = runs["date"].max()
     year_start = pd.Timestamp(now.year, 1, 1)
-    prs = []
 
-    for label, lo, hi in _PR_DISTANCES:
+    fallback_bands = [
+        ("1 Mile", 0.95, 1.15),
+        ("5K", 2.9, 3.3),
+        ("10K", 5.9, 6.5),
+        ("Half Marathon", 12.8, 13.5),
+        ("Marathon", 25.8, 26.8),
+    ]
+    prs = []
+    for label, lo, hi in fallback_bands:
         band = runs[(runs["distance_mi"] >= lo) & (runs["distance_mi"] <= hi)]
         if band.empty:
             continue
-
         best_idx = band["pace_min_per_mi"].idxmin()
         best = band.loc[best_idx]
 
@@ -177,19 +391,20 @@ def detect_prs(df: pd.DataFrame) -> list[dict]:
             yr_idx = year_band["pace_min_per_mi"].idxmin()
             yr = year_band.loc[yr_idx]
             year_best = {
+                "time": "",
                 "pace": format_pace(yr["pace_min_per_mi"]),
                 "date": yr["date"].strftime("%b %d, %Y"),
                 "name": yr.get("name", ""),
             }
-
         prs.append({
             "distance": label,
+            "best_time": "",
             "best_pace": format_pace(best["pace_min_per_mi"]),
             "best_date": best["date"].strftime("%b %d, %Y"),
             "best_name": best.get("name", ""),
             "year_best": year_best,
+            "top3": [],
         })
-
     return prs
 
 

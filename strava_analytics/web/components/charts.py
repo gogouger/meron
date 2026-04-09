@@ -17,7 +17,7 @@ from dash import html, dcc
 
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
-    SLATE_60, AMBER_60, TEXT_SECONDARY, TEXT_MUTED,
+    SLATE_60, AMBER_60, TEXT_SECONDARY, TEXT_MUTED, BG_CARD,
     LIFT_COLORS, RUN_TYPE_COLORS, WORKOUT_TYPE_COLORS,
 )
 from strava_analytics.metrics import format_pace

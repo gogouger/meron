@@ -380,59 +380,110 @@ def _trends_section(df: pd.DataFrame) -> html.Div:
 
 
 def _prs_section(df: pd.DataFrame) -> html.Div:
-    """Personal records across standard race distances."""
-    prs = detect_prs(df)
+    """Personal records across standard race distances (best effort within any run)."""
+    efforts_df = data.get_best_efforts()
+    prs = detect_prs(df, efforts_df=efforts_df)
     if not prs:
         return html.Div()
 
-    rows = []
+    year = df["date"].max().year
+
+    # Build expandable PR cards per distance
+    pr_cards = []
     for pr in prs:
-        year_col = []
+        # All-time best header
+        time_str = pr["best_time"]
+        pace_str = pr["best_pace"]
+        display_val = f"{time_str}  ({pace_str} /mi)" if time_str else f"{pace_str} /mi"
+
+        # Year best
+        year_row = None
         if pr["year_best"]:
             yb = pr["year_best"]
-            year_col = [
-                html.Td(yb["pace"], style={
-                    "fontFamily": "'IBM Plex Mono', monospace",
-                    "fontWeight": "600",
+            yr_val = f"{yb['time']}  ({yb['pace']} /mi)" if yb.get("time") else f"{yb['pace']} /mi"
+            year_row = html.Div([
+                html.Span(f"{year} best: ", style={
+                    "color": TEXT_MUTED, "fontSize": "11px",
                 }),
-                html.Td(yb["date"], style={"color": TEXT_MUTED, "fontSize": "12px"}),
-            ]
-        else:
-            year_col = [html.Td("--"), html.Td("")]
+                html.Span(yr_val, style={
+                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontSize": "12px", "fontWeight": "600",
+                }),
+                html.Span(f" — {yb['date']}", style={
+                    "color": TEXT_MUTED, "fontSize": "11px",
+                }),
+            ], style={"marginTop": "4px"})
 
-        rows.append(html.Tr([
-            html.Td(pr["distance"], style={"fontWeight": "600"}),
-            html.Td(pr["best_pace"], style={
-                "fontFamily": "'IBM Plex Mono', monospace",
-                "fontWeight": "600", "color": ACCENT,
-            }),
-            html.Td(pr["best_date"], style={"color": TEXT_MUTED, "fontSize": "12px"}),
-            *year_col,
-        ]))
+        # Top 3 list (expandable)
+        top3_rows = []
+        for eff in pr.get("top3", []):
+            eff_val = f"{eff['time']}  ({eff['pace']} /mi)" if eff.get("time") else f"{eff['pace']} /mi"
+            medal = {1: "", 2: "", 3: ""}.get(eff["rank"], "")
+            top3_rows.append(html.Div([
+                html.Span(f"{medal} #{eff['rank']} ", style={
+                    "fontWeight": "700", "fontSize": "12px",
+                    "color": ACCENT if eff["rank"] == 1 else TEXT_SECONDARY,
+                    "minWidth": "40px", "display": "inline-block",
+                }),
+                html.Span(eff_val, style={
+                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontSize": "12px",
+                }),
+                html.Span(f"  {eff['name']}", style={
+                    "color": TEXT_MUTED, "fontSize": "11px",
+                }),
+                html.Span(f"  {eff['date']}", style={
+                    "color": TEXT_MUTED, "fontSize": "11px",
+                }),
+            ], style={"padding": "3px 0"}))
 
-    table = html.Table([
-        html.Thead(html.Tr([
-            html.Th("Distance"),
-            html.Th("All-Time Best"),
-            html.Th("Date"),
-            html.Th(f"{df['date'].max().year} Best"),
-            html.Th("Date"),
-        ], style={"fontSize": "11px", "textTransform": "uppercase",
-                  "letterSpacing": "0.05em", "color": TEXT_MUTED})),
-        html.Tbody(rows),
-    ], style={
-        "width": "100%", "borderCollapse": "collapse",
-        "fontSize": "14px",
-    })
+        detail_children = []
+        if year_row:
+            detail_children.append(year_row)
+        if top3_rows:
+            detail_children.append(html.Div(top3_rows, style={
+                "marginTop": "8px", "paddingTop": "8px",
+                "borderTop": f"1px solid {BORDER}",
+            }))
+
+        card = html.Details([
+            html.Summary([
+                html.Div([
+                    html.Span(pr["distance"], style={
+                        "fontWeight": "700", "fontSize": "14px",
+                        "minWidth": "120px", "display": "inline-block",
+                    }),
+                    html.Span(display_val, style={
+                        "fontFamily": "'IBM Plex Mono', monospace",
+                        "fontSize": "16px", "fontWeight": "600",
+                        "color": ACCENT,
+                    }),
+                    html.Span(f"  {pr['best_name']}", style={
+                        "color": TEXT_MUTED, "fontSize": "12px",
+                        "marginLeft": "12px",
+                    }),
+                    html.Span(f"  {pr['best_date']}", style={
+                        "color": TEXT_MUTED, "fontSize": "12px",
+                    }),
+                ], style={"display": "flex", "alignItems": "baseline",
+                          "flexWrap": "wrap", "gap": "4px"}),
+            ], style={"listStyle": "none", "cursor": "pointer",
+                      "padding": "12px 16px"}),
+            html.Div(detail_children, style={
+                "padding": "0 16px 12px",
+            }) if detail_children else None,
+        ], style={
+            "backgroundColor": BG_CARD,
+            "border": f"1px solid {BORDER}",
+            "marginBottom": "4px",
+        })
+        pr_cards.append(card)
 
     return page_section("PERSONAL RECORDS", [
-        html.P("Best pace at standard race distances.",
+        html.P("Best efforts within any run — fastest segment at each distance.",
                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
                       "marginBottom": "16px"}),
-        html.Div(table, style={
-            "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-            "padding": "16px", "overflowX": "auto",
-        }),
+        html.Div(pr_cards),
     ])
 
 

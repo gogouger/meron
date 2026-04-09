@@ -147,6 +147,32 @@ def parse_hr_stream(fit_gz_path: str | Path) -> list[tuple]:
     return points
 
 
+def parse_distance_stream(fit_gz_path: str | Path) -> list[tuple]:
+    """Extract distance + timestamp stream at full resolution from a FIT.gz file.
+
+    Returns list of (timestamp, distance_meters) tuples — no downsampling.
+    Lightweight: skips GPS, HR, speed, altitude, etc.
+    """
+    path = Path(fit_gz_path)
+    if not path.exists():
+        return []
+
+    points = []
+    try:
+        with gzip.open(path) as f:
+            fit = fitparse.FitFile(f)
+            for record in fit.get_messages("record"):
+                ts = record.get_value("timestamp")
+                dist = record.get_value("distance")
+                if ts is not None and dist is not None:
+                    points.append((ts, float(dist)))
+    except Exception as e:
+        logger.warning("Failed to parse distance stream from %s: %s", path, e)
+        return []
+
+    return points
+
+
 def compute_splits(stream: ActivityStream, split_distance_m: float = 1609.34) -> list[dict]:
     """Compute per-mile (or per-split) pace, HR, and elevation from activity stream.
 
