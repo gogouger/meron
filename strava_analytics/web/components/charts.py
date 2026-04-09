@@ -1299,7 +1299,21 @@ def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") 
     if weekly.empty:
         return _empty_chart("No training load data")
 
-    labels = [str(w) for w in weekly["week"]]
+    # Convert week labels to short month format, showing only first week of each month
+    labels = []
+    for w in weekly["week"]:
+        s = str(w)
+        # Parse "2024-W01" → show "Jan", "Feb", etc. only on first week of month
+        try:
+            from datetime import datetime
+            # ISO week to date
+            dt = datetime.strptime(s + "-1", "%G-W%V-%u")
+            if dt.day <= 7:
+                labels.append(dt.strftime("%b '%y") if dt.month == 1 else dt.strftime("%b"))
+            else:
+                labels.append("")
+        except (ValueError, AttributeError):
+            labels.append("")
 
     cfg: dict[str, Any] = {
         "type": "bar",
@@ -1334,7 +1348,9 @@ def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") 
                 "legend": {"position": "bottom"},
             },
             "scales": {
-                "x": {"ticks": {"maxRotation": 45}},
+                "x": {
+                    "ticks": {"maxRotation": 0, "autoSkip": False},
+                },
                 "y": {
                     "beginAtZero": True, "min": 0,
                     "title": {"display": True, "text": "Training Stress"},

@@ -74,20 +74,22 @@ def fit_critical_speed(
     if efforts_df is None or efforts_df.empty:
         return _empty_cs_result()
 
-    # Use rank-1 (best) effort per distance
-    best = efforts_df[efforts_df["rank"] == 1].copy()
+    # Use top-3 efforts per distance for a more robust fit
+    best = efforts_df[efforts_df["rank"] <= 3].copy()
     if best.empty:
-        best = efforts_df.groupby("distance_label").first().reset_index()
+        best = efforts_df.groupby("distance_label").head(3).reset_index(drop=True)
 
     points = []
+    seen_distances = set()
     for _, row in best.iterrows():
         label = row.get("distance_label", "")
         dist_m = _DIST_M.get(label)
         time_s = row.get("time_s", 0)
         if dist_m and time_s > 0:
             points.append({"label": label, "dist_m": dist_m, "time_s": time_s})
+            seen_distances.add(label)
 
-    if len(points) < min_distances:
+    if len(seen_distances) < min_distances:
         logger.warning("CS fit: only %d distances (need %d)", len(points), min_distances)
         return _empty_cs_result()
 
