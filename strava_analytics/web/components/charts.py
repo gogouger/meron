@@ -976,7 +976,9 @@ def _single_race_chart(
     cs = fit_critical_speed(best_efforts)
     cs_time_min = predict_time_cs(cs["cs_m_per_s"], cs["d_prime_m"], target_m) / 60.0 if cs["cs_m_per_s"] > 0 else 0
 
-    # Build VDOT-equivalent estimates from ALL qualifying runs
+    # Build race-equivalent times from effective VDOT (adjusted for conditions)
+    # or raw VDOT as fallback. Every run contributes a data point.
+    has_ev = "effective_vdot" in runs.columns
     filtered = runs[(runs["distance_mi"] >= 2.0) &
                      (runs["pace_min_per_mi"] >= 6) &
                      (runs["pace_min_per_mi"] <= 14)].copy()
@@ -987,7 +989,14 @@ def _single_race_chart(
         time_s = r.get("moving_time_s", 0)
         if dist_m <= 0 or time_s <= 0:
             continue
-        vdot = daniels_vdot(dist_m, time_s / 60.0)
+
+        # Prefer effective VDOT (heat/stroller/elevation adjusted)
+        ev = r.get("effective_vdot") if has_ev else None
+        if pd.notna(ev) and ev > 0:
+            vdot = ev
+        else:
+            vdot = daniels_vdot(dist_m, time_s / 60.0)
+
         est_time = vdot_to_race_time(vdot, target_m)
         rows.append({
             "date": r["date"],

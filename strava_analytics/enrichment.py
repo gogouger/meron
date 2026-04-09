@@ -560,6 +560,12 @@ def enrich(df: pd.DataFrame, athlete_config: dict | None = None, export_dir=None
     # Relative effort (zone-weighted intensity score)
     from .fitness import compute_relative_effort_vectorized
     df["relative_effort"] = compute_relative_effort_vectorized(df)
+
+    # Effective VDOT per run (adjusted for heat, stroller, elevation, intensity)
+    from .vo2max import compute_effective_vdot_series
+    df["effective_vdot"] = compute_effective_vdot_series(df)
+    ev_count = df["effective_vdot"].notna().sum()
+    logger.info("Effective VDOT: %d runs scored", ev_count)
     re_count = df["relative_effort"].notna().sum()
     logger.info("Relative effort: %d activities scored", re_count)
 

@@ -107,6 +107,115 @@ def daniels_vdot_adjusted(distance_m: float, time_min: float,
     return vo2 / intensity_fraction
 
 
+# ---------------------------------------------------------------------------
+# Effective VDOT per run (adjusted for conditions)
+# ---------------------------------------------------------------------------
+#
+# Every run is a fitness signal. An easy Z2 run at 10:00/mi in 90°F heat
+# pushing a stroller uphill tells us something different than 10:00/mi in
+# perfect conditions. By adjusting for:
+#   1. HR intensity (what fraction of VO2max was sustained)
+#   2. Elevation gain (uphill slows pace without reducing fitness)
+#   3. Heat/stroller (already captured in adjusted_hr)
+# we get "effective VDOT" — what VO2max this run implies.
+#
+# This is equivalent to Garmin/Firstbeat's per-activity VO2max estimate
+# and Runalyze's "effective VO2max."
+
+# Minetti et al. (2002): ~12 sec/mi per 100ft elevation gain
+_ELEV_PENALTY_SEC_PER_MI_PER_100FT = 12.0
+
+
+def effective_vdot(
+    distance_m: float,
+    time_min: float,
+    intensity_fraction: float | None = None,
+    elevation_gain_ft: float = 0,
+    distance_mi: float | None = None,
+) -> float:
+    """Compute effective VDOT for a single run, adjusted for conditions.
+
+    Args:
+        distance_m: Run distance in meters.
+        time_min: Moving time in minutes.
+        intensity_fraction: Fraction of VO2max from HR zones (0.6-0.95).
+            If None, assumes race effort (uses standard Daniels fraction).
+        elevation_gain_ft: Total elevation gain in feet.
+        distance_mi: Distance in miles (computed from distance_m if None).
+
+    Returns:
+        Effective VDOT — what VO2max this run implies given the conditions.
+    """
+    if time_min <= 0 or distance_m <= 0:
+        return 0.0
+
+    if distance_mi is None:
+        distance_mi = distance_m / 1609.344
+
+    # Adjust pace for elevation: remove the uphill penalty to get "flat equivalent"
+    if elevation_gain_ft > 0 and distance_mi > 0:
+        gain_per_mi = elevation_gain_ft / distance_mi
+        penalty_sec_per_mi = gain_per_mi / 100.0 * _ELEV_PENALTY_SEC_PER_MI_PER_100FT
+        total_penalty_min = (penalty_sec_per_mi * distance_mi) / 60.0
+        time_min = max(time_min - total_penalty_min, time_min * 0.7)  # cap at 30% adjustment
+
+    if intensity_fraction is not None and intensity_fraction > 0:
+        return daniels_vdot_adjusted(distance_m, time_min, intensity_fraction)
+    else:
+        return daniels_vdot(distance_m, time_min)
+
+
+def compute_effective_vdot_series(df: pd.DataFrame) -> pd.Series:
+    """Compute effective VDOT for every run in the DataFrame.
+
+    Uses adjusted_hr (heat/stroller corrected) for intensity,
+    elevation gain for uphill penalty, and zone data when available.
+
+    Returns a Series of VDOT values aligned to the DataFrame index.
+    """
+    import numpy as np
+
+    vdot_series = pd.Series(np.nan, index=df.index)
+    runs = df[df["type"] == "Run"]
+
+    for idx, row in runs.iterrows():
+        dist_m = row.get("distance_m", 0) or 0
+        time_s = row.get("moving_time_s", 0) or 0
+        if dist_m < 1000 or time_s < 300:  # skip very short runs
+            continue
+
+        time_min = time_s / 60.0
+        elev_ft = row.get("elevation_gain_ft", 0) or 0
+        dist_mi = row.get("distance_mi", 0) or dist_m / 1609.344
+
+        # Get intensity from zone data (preferred) or adjusted HR
+        intensity = None
+        zone_total = 0
+        zone_secs = {}
+        for z in range(1, 6):
+            col = f"zone_{z}_s"
+            val = row.get(col, 0) or 0
+            zone_secs[z] = val
+            zone_total += val
+
+        if zone_total > 0:
+            intensity = intensity_from_zones(zone_secs)
+        elif pd.notna(row.get("adjusted_hr")) and row["adjusted_hr"] > 0:
+            # Fallback: estimate intensity from adjusted HR
+            hr_max = row.get("estimated_max_hr", 200) or 200
+            hr_rest = 60  # default
+            hr = row["adjusted_hr"]
+            # HR reserve fraction → approximate VO2 fraction (Swain 1994)
+            hrr = (hr - hr_rest) / (hr_max - hr_rest) if hr_max > hr_rest else 0.7
+            intensity = max(0.4, min(0.98, hrr))
+
+        ev = effective_vdot(dist_m, time_min, intensity, elev_ft, dist_mi)
+        if ev > 10 and ev < 80:  # sanity bounds
+            vdot_series.at[idx] = round(ev, 1)
+
+    return vdot_series
+
+
 def vdot_to_velocity(vdot: float, time_min: float) -> float:
     """Given a VDOT and race duration, find the sustainable velocity (m/min).
 
