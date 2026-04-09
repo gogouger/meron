@@ -180,7 +180,8 @@ def pace_trend_chart(runs: pd.DataFrame, chart_id: str = "pace-trend", run_meta:
             },
             "scales": {
                 "x": {
-                    "type": "time", "time": {"unit": "week"},
+                    "type": "time", "time": {"unit": "month"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(df["date"]),
                 },
                 "y": {
@@ -325,6 +326,7 @@ def aerobic_efficiency_chart(runs: pd.DataFrame, chart_id: str = "hr-vs-pace",
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "month"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(df["date"]),
                 },
                 "y": {
@@ -453,6 +455,7 @@ def hr_over_time_chart(runs: pd.DataFrame, chart_id: str = "hr-trend") -> html.D
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "month"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(df["date"]),
                 },
                 "y": {
@@ -546,6 +549,7 @@ def stroller_pace_chart(runs: pd.DataFrame, chart_id: str = "stroller-pace") -> 
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "month"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(both["date"]),
                 },
                 "y": {
@@ -773,6 +777,7 @@ def lift_progression_chart(df: pd.DataFrame, chart_id: str = "lift-prog") -> htm
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "week"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(date_series),
                 },
                 "y": {
@@ -951,6 +956,7 @@ def onerm_progression_chart(
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "week"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(df["date"]),
                 },
                 "y": {
@@ -1077,6 +1083,7 @@ def _single_race_chart(
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "month"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
                     **_time_limits(edf["date"]),
                 },
                 "y": {
@@ -1303,7 +1310,7 @@ def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") 
             },
             "scales": {
                 "x": {
-                    "ticks": {"maxRotation": 0, "autoSkip": False},
+                    "ticks": {"maxRotation": 0, "autoSkip": True},
                 },
                 "y": {
                     "beginAtZero": True, "min": 0,
@@ -1494,7 +1501,8 @@ def fitness_freshness_chart(fitness_df: pd.DataFrame,
                 "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
             },
             "scales": {
-                "x": {"type": "time", "time": {"unit": "week"}},
+                "x": {"type": "time", "time": {"unit": "month"},
+                      "ticks": {"maxRotation": 0, "maxTicksLimit": 10}},
                 "y": {"title": {"display": True, "text": "Load / Form"}},
             },
         },
@@ -1609,7 +1617,8 @@ def strength_progression_chart(lift_name: str,
                 "legend": {"position": "bottom", "labels": {"boxWidth": 12}},
             },
             "scales": {
-                "x": {"type": "time", "time": {"unit": "week"}},
+                "x": {"type": "time", "time": {"unit": "month"},
+                      "ticks": {"maxRotation": 0, "maxTicksLimit": 10}},
                 "y": {
                     "title": {"display": True, "text": "lbs"},
                     "beginAtZero": False,
