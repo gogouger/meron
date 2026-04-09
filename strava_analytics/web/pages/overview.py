@@ -544,11 +544,13 @@ def layout(**_kwargs):
         if not recent_fatigue.empty:
             fatigue_now = recent_fatigue.iloc[0]["fatigue_level"]
 
-    # VDOT — prefer Critical Speed model, fall back to effort-based VDOT
+    # VDOT — prefer best-effort VDOT (true VO2max), fall back to CS-derived
     try:
-        best_efforts_df = data.get_best_efforts()
-        cs = fit_critical_speed(best_efforts_df)
-        vdot = cs_to_vdot(cs["cs_m_per_s"]) if cs["cs_m_per_s"] > 0 else compute_athlete_vdot(df)
+        vdot = compute_athlete_vdot(df)
+        if not vdot or vdot <= 0:
+            best_efforts_df = data.get_best_efforts()
+            cs = fit_critical_speed(best_efforts_df)
+            vdot = cs_to_vdot(cs["cs_m_per_s"]) if cs["cs_m_per_s"] > 0 else 0
     except Exception:
         vdot = 0
 
@@ -603,7 +605,7 @@ def layout(**_kwargs):
                     3, "Racing",
                     f"VDOT {vdot:.1f}. Next up: Boulder Bolder 10K (May 25) "
                     "and Spartan Beast (May 31).",
-                    link_text="Learn more", link_href="/races",
+                    link_text="Learn more", link_href="/running",
                 ),
             ]),
         ]),

@@ -54,8 +54,10 @@ def _strength_projections_section(df: pd.DataFrame) -> html.Div:
         sign = "+" if delta >= 0 else ""
         color_map = {"bench": ACCENT, "squat": ACCENT_SLATE,
                      "deadlift": ACCENT_AMBER, "ohp": ACCENT_SLATE}
+        lift_display = {"bench": "Bench", "squat": "Squat",
+                        "deadlift": "Deadlift", "ohp": "OHP"}.get(lift, lift.title())
         projection_cards.append(numbered_card(
-            i, lift.title(),
+            i, lift_display,
             f"{current:.0f} \u2192 {projected:.0f} lbs ({sign}{delta_pct:.1f}%)",
             value=f"{projected:.0f} lbs",
             color=color_map.get(lift, ACCENT),

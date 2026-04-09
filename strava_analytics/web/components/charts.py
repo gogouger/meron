@@ -705,6 +705,7 @@ def fatigue_chart(df: pd.DataFrame, chart_id: str = "fatigue") -> html.Div:
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "week"},
+                    "ticks": {"maxTicksLimit": 8, "autoSkip": True, "maxRotation": 0},
                     **_time_limits(has["date"]),
                 },
                 "y": {
@@ -1326,6 +1327,13 @@ def year_monthly_chart(summary: dict, chart_id: str = "year-monthly") -> html.Di
         return _empty_chart("No monthly data")
 
     import calendar as _cal
+    from datetime import date as _date
+    current_month = _date.today().month
+    current_year = _date.today().year
+    chart_year = summary.get("year", current_year)
+    # Only show months up to the current month if viewing the current year
+    if chart_year == current_year:
+        monthly = [m for m in monthly if m["month"] <= current_month]
     labels = [_cal.month_abbr[m["month"]] for m in monthly]
     miles = [m["miles"] for m in monthly]
     counts = [m["activities"] for m in monthly]

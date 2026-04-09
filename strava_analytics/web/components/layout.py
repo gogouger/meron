@@ -148,7 +148,6 @@ def footer():
                     dcc.Link("Running", href="/running", className="footer-link"),
                     dcc.Link("Lifting", href="/lifting", className="footer-link"),
                     dcc.Link("Activities", href="/activities", className="footer-link"),
-                    dcc.Link("Predictions", href="/races", className="footer-link"),
                     dcc.Link("Plan", href="/plan", className="footer-link"),
                     dcc.Link("Settings", href="/settings", className="footer-link"),
                 ]),
