@@ -1026,18 +1026,46 @@ def _single_race_chart(
             "showLine": False,
         })
 
-    # CS predicted time as horizontal reference line
+    # Rolling best-effort trend: 60-day rolling minimum of race/hard_effort estimates
+    # Shows how race-equivalent fitness evolves over time
+    key_types = edf[edf["run_type"].isin(["race", "hard_effort", "long"])].copy()
+    if key_types.empty:
+        key_types = edf.copy()
+    key_types = key_types.sort_values("date")
+    key_types["rolling_best"] = (
+        key_types.set_index("date")["est_time_min"]
+        .rolling("60D", min_periods=1).min()
+        .values
+    )
+    # Subsample to avoid too many points (every 7th point)
+    trend = key_types.iloc[::max(1, len(key_types) // 50)]
+    if not trend.empty:
+        datasets.append({
+            "label": "Fitness trend (60d best)",
+            "data": [
+                {"x": _ts(row["date"]), "y": round(row["rolling_best"], 2)}
+                for _, row in trend.iterrows()
+            ],
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
+        })
+
+    # CS current prediction as horizontal reference
     if cs_time_min > 0:
         dates = edf["date"]
         datasets.append({
-            "label": f"CS Predicted ({cs_time_min:.1f} min)",
+            "label": f"CS Current ({cs_time_min:.1f} min)",
             "data": [
                 {"x": _ts(dates.min()), "y": round(cs_time_min, 2)},
                 {"x": _ts(dates.max()), "y": round(cs_time_min, 2)},
             ],
             "borderColor": ACCENT,
-            "borderWidth": 2,
-            "borderDash": [6, 3],
+            "borderWidth": 1,
+            "borderDash": [4, 4],
             "pointRadius": 0,
             "showLine": True,
             "fill": False,
