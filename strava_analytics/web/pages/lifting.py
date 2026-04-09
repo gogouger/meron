@@ -207,13 +207,63 @@ def _lift_card(session, idx):
     day_str = session["date"].strftime("%A")
     program_day = session.get("program_day", None)
 
-    # -- Summary stat cells (primary lifts, only when present) --
+    # -- Summary: lift icon cards in a compact grid --
+    _LIFT_ICONS = {
+        "bench": '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="24" x2="42" y2="24"/><rect x="10" y="18" width="4" height="12" rx="1"/><rect x="34" y="18" width="4" height="12" rx="1"/><circle cx="6" cy="24" r="3"/><circle cx="42" cy="24" r="3"/></svg>',
+        "squat": '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="14" x2="40" y2="14"/><rect x="12" y="8" width="3" height="12" rx="1"/><rect x="33" y="8" width="3" height="12" rx="1"/><circle cx="8" cy="14" r="2.5"/><circle cx="40" cy="14" r="2.5"/><path d="M18 20 L18 30 Q18 36 24 38 Q30 36 30 30 L30 20"/></svg>',
+        "deadlift": '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="34" x2="42" y2="34"/><rect x="10" y="28" width="4" height="12" rx="1"/><rect x="34" y="28" width="4" height="12" rx="1"/><circle cx="6" cy="34" r="3"/><circle cx="42" cy="34" r="3"/><path d="M20 34 L20 18 M28 34 L28 18"/><line x1="18" y1="18" x2="30" y2="18"/></svg>',
+        "ohp": '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="10" x2="40" y2="10"/><rect x="12" y="4" width="3" height="12" rx="1"/><rect x="33" y="4" width="3" height="12" rx="1"/><circle cx="8" cy="10" r="2.5"/><circle cx="40" cy="10" r="2.5"/><path d="M20 16 L20 34 M28 16 L28 34"/></svg>',
+    }
+
     stat_cells = []
-    for label, col in [("Bench", "bench_weight"), ("Squat", "squat_weight"),
-                        ("Deadlift", "deadlift_weight"), ("OHP", "ohp_weight")]:
+    for label, col, sets_col, reps_col, icon_key in [
+        ("Bench", "bench_weight", "bench_sets", "bench_reps", "bench"),
+        ("Squat", "squat_weight", "squat_sets", "squat_reps", "squat"),
+        ("Deadlift", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
+        ("OHP", "ohp_weight", "ohp_sets", "ohp_reps", "ohp"),
+    ]:
         val = session.get(col, None)
-        if val is not None and not pd.isna(val):
-            stat_cells.append(_stat_cell(label, f"{val:.0f} lbs"))
+        if val is None or pd.isna(val):
+            continue
+        sets = session.get(sets_col, None)
+        reps = session.get(reps_col, None)
+        scheme = ""
+        if sets and not pd.isna(sets) and reps and not pd.isna(reps):
+            scheme = f"{int(sets)}x{int(reps)}"
+
+        svg = _LIFT_ICONS.get(icon_key, "")
+        icon_div = html.Div(
+            style={
+                "width": "24px", "height": "24px",
+                "color": LIFT_COLORS.get(icon_key, TEXT_MUTED),
+                "flexShrink": "0",
+            },
+            **{"data-svg-icon": svg},
+        ) if svg else html.Div()
+
+        stat_cells.append(html.Div([
+            icon_div,
+            html.Div([
+                html.Div(f"{val:.0f}", style={
+                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontSize": "15px", "fontWeight": "700",
+                    "color": TEXT_PRIMARY, "lineHeight": "1",
+                }),
+                html.Div(scheme, style={
+                    "fontSize": "10px", "color": TEXT_MUTED,
+                }) if scheme else None,
+            ]),
+        ], style={
+            "display": "flex", "gap": "6px", "alignItems": "center",
+        }))
+
+    # Add HR + calories to summary
+    avg_hr = session.get("avg_hr", None)
+    if avg_hr is not None and not pd.isna(avg_hr):
+        stat_cells.append(_stat_cell("HR", f"{avg_hr:.0f} bpm"))
+    cals = session.get("calories", None)
+    if cals is not None and not pd.isna(cals) and cals > 0:
+        stat_cells.append(_stat_cell("Cal", f"{cals:.0f}"))
 
     # Program day badge
     badge = []
@@ -252,7 +302,7 @@ def _lift_card(session, idx):
     # -- Expanded detail content --
     detail_items = []
 
-    # Exercise list
+    # Exercise list — compact inline format instead of bullet list
     exercises_str = session.get("lift_exercises", "")
     if exercises_str and not pd.isna(exercises_str):
         exercises = [e.strip() for e in str(exercises_str).split(";") if e.strip()]
@@ -263,14 +313,11 @@ def _lift_card(session, idx):
                     "textTransform": "uppercase", "letterSpacing": "0.1em",
                     "color": TEXT_MUTED, "marginBottom": "6px",
                 }),
-                html.Ul([
-                    html.Li(ex, style={
-                        "fontSize": "13px", "color": TEXT_SECONDARY,
-                        "padding": "2px 0",
-                    }) for ex in exercises
-                ], style={
-                    "listStyleType": "disc", "paddingLeft": "18px", "margin": "0",
-                }),
+                html.Div(
+                    " · ".join(exercises),
+                    style={"fontSize": "12px", "color": TEXT_SECONDARY,
+                           "lineHeight": "1.6"},
+                ),
             ], style={"marginBottom": "12px"}))
 
     # Pullup stats
