@@ -22,6 +22,7 @@ from strava_analytics.web.theme import (
 from strava_analytics.metrics import format_pace
 from strava_analytics.vo2max import compute_athlete_vdot
 from strava_analytics.lifting_program import END_PRS
+from strava_analytics.fitness import compute_trends, detect_prs, year_summary
 
 dash.register_page(__name__, path="/", name="Overview")
 
@@ -325,6 +326,165 @@ def _activity_calendar(df: pd.DataFrame, months: int = 3) -> html.Div:
     ])
 
 
+def _trends_section(df: pd.DataFrame) -> html.Div:
+    """90-day vs 365-day trend comparison (Apple Fitness style)."""
+    trends = compute_trends(df)
+    if not trends:
+        return html.Div()
+
+    cards = []
+    for t in trends:
+        is_improving = t["direction"] == "improving"
+        arrow = "\u2191" if (t["delta_pct"] > 0) else "\u2193"
+        arrow_color = ACCENT_SLATE if is_improving else ACCENT_RED
+        delta_str = f"{arrow} {abs(t['delta_pct']):.0f}%"
+
+        cards.append(html.Div([
+            html.Div(t["metric"], style={
+                "fontSize": "10px", "fontWeight": "500",
+                "textTransform": "uppercase", "letterSpacing": "0.1em",
+                "color": TEXT_MUTED, "marginBottom": "4px",
+            }),
+            html.Div(f"{t['recent']}", style={
+                "fontFamily": "'IBM Plex Mono', monospace",
+                "fontSize": "20px", "fontWeight": "600",
+                "color": TEXT_PRIMARY,
+            }),
+            html.Div([
+                html.Span(delta_str, style={
+                    "color": arrow_color, "fontWeight": "600",
+                    "fontSize": "12px",
+                }),
+                html.Span(f" vs {t['baseline']}", style={
+                    "color": TEXT_MUTED, "fontSize": "11px",
+                }),
+            ], style={"marginTop": "4px"}),
+            html.Div(t["unit"], style={
+                "fontSize": "10px", "color": TEXT_MUTED, "marginTop": "2px",
+            }),
+        ], style={
+            "padding": "16px", "backgroundColor": BG_CARD,
+            "border": f"1px solid {BORDER}",
+        }))
+
+    return page_section("TRENDS", [
+        html.P("Last 90 days vs prior year baseline.",
+               style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                      "marginBottom": "16px"}),
+        html.Div(cards, style={
+            "display": "grid",
+            "gridTemplateColumns": f"repeat({min(len(cards), 5)}, 1fr)",
+            "gap": "12px",
+        }),
+    ], alt_bg=True)
+
+
+def _prs_section(df: pd.DataFrame) -> html.Div:
+    """Personal records across standard race distances."""
+    prs = detect_prs(df)
+    if not prs:
+        return html.Div()
+
+    rows = []
+    for pr in prs:
+        year_col = []
+        if pr["year_best"]:
+            yb = pr["year_best"]
+            year_col = [
+                html.Td(yb["pace"], style={
+                    "fontFamily": "'IBM Plex Mono', monospace",
+                    "fontWeight": "600",
+                }),
+                html.Td(yb["date"], style={"color": TEXT_MUTED, "fontSize": "12px"}),
+            ]
+        else:
+            year_col = [html.Td("--"), html.Td("")]
+
+        rows.append(html.Tr([
+            html.Td(pr["distance"], style={"fontWeight": "600"}),
+            html.Td(pr["best_pace"], style={
+                "fontFamily": "'IBM Plex Mono', monospace",
+                "fontWeight": "600", "color": ACCENT,
+            }),
+            html.Td(pr["best_date"], style={"color": TEXT_MUTED, "fontSize": "12px"}),
+            *year_col,
+        ]))
+
+    table = html.Table([
+        html.Thead(html.Tr([
+            html.Th("Distance"),
+            html.Th("All-Time Best"),
+            html.Th("Date"),
+            html.Th(f"{df['date'].max().year} Best"),
+            html.Th("Date"),
+        ], style={"fontSize": "11px", "textTransform": "uppercase",
+                  "letterSpacing": "0.05em", "color": TEXT_MUTED})),
+        html.Tbody(rows),
+    ], style={
+        "width": "100%", "borderCollapse": "collapse",
+        "fontSize": "14px",
+    })
+
+    return page_section("PERSONAL RECORDS", [
+        html.P("Best pace at standard race distances.",
+               style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                      "marginBottom": "16px"}),
+        html.Div(table, style={
+            "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+            "padding": "16px", "overflowX": "auto",
+        }),
+    ])
+
+
+def _year_section(df: pd.DataFrame) -> html.Div:
+    """Year in Review annual summary."""
+    summary = year_summary(df)
+    if not summary:
+        return html.Div()
+
+    year = summary["year"]
+
+    stat_items = [
+        ("Activities", str(summary["total_activities"])),
+        ("Miles", f"{summary['total_miles']:,.1f}"),
+        ("Hours", f"{summary['total_hours']:,.1f}"),
+        ("Elevation", f"{summary['total_elevation_ft']:,} ft"),
+        ("Active Days", str(summary["active_days"])),
+        ("Runs", str(summary["total_runs"])),
+        ("Lifts", str(summary["total_lifts"])),
+    ]
+    if "avg_pace" in summary:
+        stat_items.append(("Avg Pace", f"{summary['avg_pace']} /mi"))
+    if "longest_run" in summary:
+        stat_items.append(("Longest Run", f"{summary['longest_run']} mi"))
+
+    stat_cells = []
+    for label, val in stat_items:
+        stat_cells.append(html.Div([
+            html.Div(label, style={
+                "fontSize": "10px", "fontWeight": "500",
+                "textTransform": "uppercase", "letterSpacing": "0.1em",
+                "color": TEXT_MUTED, "marginBottom": "4px",
+            }),
+            html.Div(val, style={
+                "fontFamily": "'IBM Plex Mono', monospace",
+                "fontSize": "18px", "fontWeight": "600",
+                "color": TEXT_PRIMARY,
+            }),
+        ], style={"padding": "12px 16px"}))
+
+    return page_section(f"{year} IN REVIEW", [
+        html.Div(stat_cells, style={
+            "display": "grid",
+            "gridTemplateColumns": "repeat(auto-fill, minmax(140px, 1fr))",
+            "gap": "8px", "marginBottom": "20px",
+            "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+            "padding": "8px",
+        }),
+        charts.year_monthly_chart(summary, chart_id="year-monthly"),
+    ], alt_bg=True)
+
+
 def layout(**_kwargs):
     df = data.get_df()
     runs = data.get_runs()
@@ -420,6 +580,15 @@ def layout(**_kwargs):
                           "marginBottom": "20px"}),
             charts.fatigue_chart(df, chart_id="fatigue"),
         ], alt_bg=True),
+
+        # Trends (90d vs 365d)
+        _trends_section(df),
+
+        # Personal Records
+        _prs_section(df),
+
+        # Year in Review
+        _year_section(df),
 
         # Activity calendar
         page_section("ACTIVITY", [

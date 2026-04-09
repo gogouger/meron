@@ -84,6 +84,9 @@ def _run_card(run, idx):
     ]
     if hr and not pd.isna(hr):
         primary_stats.append(_stat_cell("Avg HR", f"{hr:.0f} bpm"))
+    rel_effort = run.get("relative_effort", None)
+    if rel_effort and not pd.isna(rel_effort):
+        primary_stats.append(_stat_cell("Effort", f"{rel_effort:.0f}"))
     if elev > 0:
         primary_stats.append(_stat_cell("Elevation", f"\u2191{elev:.0f} ft"))
 
@@ -450,6 +453,14 @@ def layout(**_kwargs):
             ]),
         ]),
 
+        # Training Load (intensity-weighted)
+        page_section("TRAINING LOAD", [
+            html.P("Weekly load accounts for intensity, not just mileage.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                          "marginBottom": "16px"}),
+            html.Div(id="weekly-load-container"),
+        ], alt_bg=True),
+
         # HR Analysis
         page_section("HEART RATE ANALYSIS", [
             html.Div(id="hr-analysis-container"),
@@ -552,6 +563,7 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
     Output("hr-vs-pace-container", "children"),
     Output("race-pred-container", "children"),
     Output("hr-analysis-container", "children"),
+    Output("weekly-load-container", "children"),
     Input("run-type-filter", "value"),
     Input("run-date-range", "start_date"),
     Input("run-date-range", "end_date"),
@@ -576,6 +588,7 @@ def update_charts(run_types, start_date, end_date, _data_version, run_meta):
         charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace"),
         charts.race_predictions_chart(runs, chart_id="race-pred"),
         _adjusted_hr_section(runs),
+        charts.weekly_training_load_chart(runs, chart_id="weekly-load"),
     )
 
 

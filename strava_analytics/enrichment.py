@@ -555,6 +555,12 @@ def enrich(df: pd.DataFrame, athlete_config: dict | None = None, export_dir=None
     # Fatigue
     df = compute_fatigue(df)
 
+    # Relative effort (zone-weighted intensity score)
+    from .fitness import compute_relative_effort_vectorized
+    df["relative_effort"] = compute_relative_effort_vectorized(df)
+    re_count = df["relative_effort"].notna().sum()
+    logger.info("Relative effort: %d activities scored", re_count)
+
     # Lifting program mapping
     df = map_lifting_program(df)
 

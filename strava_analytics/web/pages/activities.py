@@ -54,6 +54,9 @@ def _activity_card(row, idx: int) -> html.Details:
         hr = row.get("avg_hr", 0)
         if hr and not pd.isna(hr):
             primary.append(stat_cell("Avg HR", f"{hr:.0f} bpm"))
+        rel_effort = row.get("relative_effort", None)
+        if rel_effort and not pd.isna(rel_effort):
+            primary.append(stat_cell("Effort", f"{rel_effort:.0f}"))
         elev = row.get("elevation_gain_ft", 0) or 0
         if elev > 0:
             primary.append(stat_cell("Elevation", f"\u2191{elev:.0f} ft"))

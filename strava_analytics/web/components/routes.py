@@ -13,7 +13,7 @@ from strava_analytics.web import data
 from strava_analytics.web.theme import (
     ACCENT, ACCENT_SLATE, ACCENT_AMBER, ACCENT_RED,
     TEXT_PRIMARY, TEXT_MUTED, BORDER,
-    HRHR_ZONE_COLORS, HRHR_ZONE_LABELS,
+    HR_ZONE_COLORS, HR_ZONE_LABELS,
 )
 from strava_analytics.metrics import format_pace
 

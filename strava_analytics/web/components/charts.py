@@ -1253,3 +1253,122 @@ def plan_calendar_chart(plan_rows: list[dict]) -> html.Div:
         }))
 
     return html.Div(rows, style={"marginBottom": "8px"})
+
+
+# ── training load (weekly intensity-weighted) ────────────────────────
+
+def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") -> html.Div:
+    """Weekly training load bars with 4-week rolling average trend line."""
+    from strava_analytics.fitness import weekly_training_load
+
+    weekly = weekly_training_load(df)
+    if weekly.empty:
+        return _empty_chart("No training load data")
+
+    labels = [str(w) for w in weekly["week"]]
+
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Weekly Load",
+                    "data": [round(v, 1) for v in weekly["load"]],
+                    "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.7),
+                    "borderColor": ACCENT_SLATE,
+                    "borderWidth": 1,
+                    "borderRadius": 2,
+                    "order": 2,
+                },
+                {
+                    "label": "4-Week Avg",
+                    "data": [round(v, 1) if pd.notna(v) else None for v in weekly["trend"]],
+                    "type": "line",
+                    "borderColor": ACCENT,
+                    "borderWidth": 2,
+                    "pointRadius": 0,
+                    "fill": False,
+                    "tension": 0.3,
+                    "order": 1,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Weekly Training Load"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {"ticks": {"maxRotation": 45}},
+                "y": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Training Stress"},
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=350)
+
+
+# ── year in review monthly breakdown ─────────────────────────────────
+
+def year_monthly_chart(summary: dict, chart_id: str = "year-monthly") -> html.Div:
+    """Bar chart of monthly miles for year in review."""
+    monthly = summary.get("monthly", [])
+    if not monthly:
+        return _empty_chart("No monthly data")
+
+    import calendar as _cal
+    labels = [_cal.month_abbr[m["month"]] for m in monthly]
+    miles = [m["miles"] for m in monthly]
+    counts = [m["activities"] for m in monthly]
+
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "label": "Miles",
+                    "data": miles,
+                    "backgroundColor": ACCENT,
+                    "borderRadius": 2,
+                    "yAxisID": "y",
+                    "order": 2,
+                },
+                {
+                    "label": "Activities",
+                    "data": counts,
+                    "type": "line",
+                    "borderColor": ACCENT_SLATE,
+                    "borderWidth": 2,
+                    "pointRadius": _PT_LINE,
+                    "yAxisID": "y1",
+                    "fill": False,
+                    "order": 1,
+                },
+            ],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg(f"{summary.get('year', '')} Month by Month"),
+                "legend": {"position": "bottom"},
+            },
+            "scales": {
+                "x": {},
+                "y": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Miles"},
+                    "position": "left",
+                },
+                "y1": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Activities"},
+                    "position": "right",
+                    "grid": {"drawOnChartArea": False},
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=300)
