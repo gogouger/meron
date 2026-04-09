@@ -1010,48 +1010,33 @@ def _single_race_chart(
 
     edf = pd.DataFrame(rows)
 
-    # All runs as a single scatter layer, colored by type
-    type_color_map = {
-        "race": ACCENT, "hard_effort": ACCENT_AMBER,
-        "long": ACCENT_SLATE, "moderate": _hex_to_rgba(ACCENT_AMBER, 0.4),
-        "easy": SLATE_60,
-    }
-    type_size_map = {"race": 5, "hard_effort": 4, "long": 3, "moderate": 2, "easy": 2}
-
+    # All runs as uniform dots
     datasets = [{
         "label": "Runs",
         "data": [
             {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
             for _, row in edf.iterrows()
         ],
-        "backgroundColor": [
-            type_color_map.get(row["run_type"], SLATE_60)
-            for _, row in edf.iterrows()
-        ],
-        "pointRadius": [
-            type_size_map.get(row["run_type"], 2)
-            for _, row in edf.iterrows()
-        ],
+        "backgroundColor": _hex_to_rgba(ACCENT_SLATE, 0.35),
+        "borderColor": "transparent",
+        "pointRadius": 2,
         "pointHoverRadius": 5,
         "showLine": False,
     }]
 
-    # Rolling best-effort trend: 60-day rolling minimum of race/hard_effort estimates
-    # Shows how race-equivalent fitness evolves over time
-    key_types = edf[edf["run_type"].isin(["race", "hard_effort", "long"])].copy()
-    if key_types.empty:
-        key_types = edf.copy()
-    key_types = key_types.sort_values("date")
-    key_types["rolling_best"] = (
-        key_types.set_index("date")["est_time_min"]
-        .rolling("60D", min_periods=1).min()
+    # Fitness trend: 60-day rolling minimum across all runs
+    sorted_edf = edf.sort_values("date").copy()
+    sorted_edf["rolling_best"] = (
+        sorted_edf.set_index("date")["est_time_min"]
+        .rolling("60D", min_periods=3).quantile(0.1)  # 10th percentile = near-best
         .values
     )
-    # Subsample to avoid too many points (every 7th point)
-    trend = key_types.iloc[::max(1, len(key_types) // 50)]
+    trend = sorted_edf.dropna(subset=["rolling_best"])
+    # Subsample for clean line
+    trend = trend.iloc[::max(1, len(trend) // 60)]
     if not trend.empty:
         datasets.append({
-            "label": "Fitness trend (60d best)",
+            "label": "Fitness trend",
             "data": [
                 {"x": _ts(row["date"]), "y": round(row["rolling_best"], 2)}
                 for _, row in trend.iterrows()
@@ -1061,56 +1046,10 @@ def _single_race_chart(
             "pointRadius": 0,
             "showLine": True,
             "fill": False,
-            "tension": 0.3,
+            "tension": 0.4,
         })
 
-    # CS current prediction as horizontal reference
-    if cs_time_min > 0:
-        dates = edf["date"]
-        datasets.append({
-            "label": f"CS Current ({cs_time_min:.1f} min)",
-            "data": [
-                {"x": _ts(dates.min()), "y": round(cs_time_min, 2)},
-                {"x": _ts(dates.max()), "y": round(cs_time_min, 2)},
-            ],
-            "borderColor": ACCENT,
-            "borderWidth": 1,
-            "borderDash": [4, 4],
-            "pointRadius": 0,
-            "showLine": True,
-            "fill": False,
-        })
-
-    # Best effort markers from FIT data (stars)
-    _dist_m_map = {"1 Mile": 1609.344, "5K": 5000, "10K": 10000,
-                    "Half Marathon": 21097, "Marathon": 42195}
-    relevant_efforts = best_efforts[best_efforts["rank"] <= 3].copy()
-    be_rows = []
-    for _, eff in relevant_efforts.iterrows():
-        eff_dist = _dist_m_map.get(eff["distance_label"], 0)
-        if eff_dist <= 0 or eff["time_s"] <= 0:
-            continue
-        vdot = daniels_vdot(eff_dist, eff["time_s"] / 60.0)
-        est = vdot_to_race_time(vdot, target_m)
-        be_rows.append({"date": eff["date"], "est_time_min": round(est, 2),
-                         "label": eff["distance_label"]})
-    if be_rows:
-        datasets.append({
-            "label": "Best effort",
-            "data": [{"x": _ts(r["date"]), "y": r["est_time_min"]} for r in be_rows],
-            "backgroundColor": ACCENT_SLATE,
-            "borderColor": BG_CARD,
-            "borderWidth": 1,
-            "pointRadius": 6,
-            "pointHoverRadius": 8,
-            "pointStyle": "star",
-            "showLine": False,
-        })
-
-    all_times = edf["est_time_min"]
-    if be_rows:
-        all_times = pd.concat([all_times, pd.Series([r["est_time_min"] for r in be_rows])])
-    y_lim = _val_limits(all_times, pad_frac=0.05)
+    y_lim = _val_limits(edf["est_time_min"], pad_frac=0.05)
     y_label = f"{label} Time (min)" if target_m <= 10_000 else f"{label} Time (hr:min)"
 
     cfg: dict[str, Any] = {
@@ -1308,17 +1247,16 @@ def weekly_training_load_chart(df: pd.DataFrame, chart_id: str = "weekly-load") 
     if weekly.empty:
         return _empty_chart("No training load data")
 
-    # Convert week labels to short month format, showing only first week of each month
+    # Show quarter labels only (Jan, Apr, Jul, Oct) for clean x-axis
     labels = []
     for w in weekly["week"]:
         s = str(w)
-        # Parse "2024-W01" → show "Jan", "Feb", etc. only on first week of month
         try:
             from datetime import datetime
-            # ISO week to date
             dt = datetime.strptime(s + "-1", "%G-W%V-%u")
-            if dt.day <= 7:
-                labels.append(dt.strftime("%b '%y") if dt.month == 1 else dt.strftime("%b"))
+            # Show label on first week of Jan, Apr, Jul, Oct
+            if dt.day <= 7 and dt.month in (1, 4, 7, 10):
+                labels.append(dt.strftime("%b '%y"))
             else:
                 labels.append("")
         except (ValueError, AttributeError):
