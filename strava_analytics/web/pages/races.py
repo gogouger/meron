@@ -57,8 +57,8 @@ def layout(**_kwargs):
     cs_params = fit_critical_speed(best_efforts_df)
     cs_vdot = cs_to_vdot(cs_params["cs_m_per_s"]) if cs_params["cs_m_per_s"] > 0 else 0
 
-    # Traditional VDOT from race efforts (for comparison / fallback)
-    vdot = compute_athlete_vdot(df)
+    # VDOT: prefer CS-derived, fall back to effort-based
+    vdot = cs_vdot if cs_vdot > 0 else compute_athlete_vdot(df)
     all_efforts = extract_race_efforts(df)
     recent_efforts = [e for e in all_efforts
                       if e["date"] is not None and e["date"] >= recent_cutoff]

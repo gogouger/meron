@@ -623,7 +623,8 @@ def update_charts(run_types, time_range, _data_version, run_meta):
         pace_chart,
         charts.weekly_mileage_chart(runs, chart_id="weekly-miles"),
         charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace"),
-        charts.race_predictions_chart(runs, chart_id="race-pred"),
+        charts.race_predictions_chart(runs, chart_id="race-pred",
+                                      best_efforts=data.get_best_efforts()),
         _adjusted_hr_section(runs),
         charts.weekly_training_load_chart(runs, chart_id="weekly-load"),
     )

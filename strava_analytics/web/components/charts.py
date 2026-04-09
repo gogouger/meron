@@ -855,8 +855,9 @@ def onerm_progression_chart(
     color: str,
     chart_id: str | None = None,
 ) -> html.Div:
-    """Estimated 1RM with Kalman filter smoothing and confidence band."""
-    from strava_analytics.kalman import kalman_1rm
+    """Estimated 1RM with log-curve fit trend line."""
+    from strava_analytics.strength_model import fit_1rm_curve
+    import math
 
     if chart_id is None:
         chart_id = f"onerm-{lift_name.lower().replace(' ', '-')}"
@@ -864,27 +865,31 @@ def onerm_progression_chart(
     if progression_df.empty:
         return _empty_chart(f"No 1RM data for {lift_name}")
 
-    kdf = kalman_1rm(progression_df)
-    if kdf.empty:
-        return _empty_chart(f"No 1RM data for {lift_name}")
+    df = progression_df.sort_values("date").copy()
+    fit = fit_1rm_curve(df)
 
-    labels = [_ts(d) for d in kdf["date"]]
+    labels = [_ts(d) for d in df["date"]]
+
+    # Compute log-curve trend line: 1RM(w) = a * ln(w+1) + b
+    first_date = df["date"].min()
+    weeks = (df["date"] - first_date).dt.total_seconds() / (7 * 86400)
+    trend = [round(fit["a"] * math.log(w + 1) + fit["b"], 1) for w in weeks]
 
     datasets = [
         # Per-session estimated 1RM as dots
         {
             "label": "Session estimate",
-            "data": [round(float(v), 1) for v in kdf["estimated_1rm"]],
+            "data": [round(float(v), 1) for v in df["estimated_1rm"]],
             "borderColor": _hex_to_rgba(color, 0.4),
             "backgroundColor": _hex_to_rgba(color, 0.4),
             "borderWidth": 0,
             "pointRadius": _PT,
             "pointHoverRadius": _PT_HOVER,
         },
-        # Estimated 1RM line
+        # Log-curve trend line
         {
-            "label": "Estimated 1RM",
-            "data": [round(float(v), 1) for v in kdf["kalman_1rm"]],
+            "label": "Trend (log fit)",
+            "data": trend,
             "borderColor": color,
             "backgroundColor": color,
             "borderWidth": 3,
@@ -892,35 +897,15 @@ def onerm_progression_chart(
             "fill": False,
             "tension": 0.3,
         },
-        # Confidence band (upper)
-        {
-            "label": "_Upper",
-            "data": [round(float(v), 1) for v in kdf["kalman_upper"]],
-            "borderColor": "transparent",
-            "backgroundColor": _hex_to_rgba(color, 0.12),
-            "pointRadius": 0,
-            "fill": "+1",
-            "tension": 0.3,
-        },
-        # Confidence band (lower)
-        {
-            "label": "_lower",
-            "data": [round(float(v), 1) for v in kdf["kalman_lower"]],
-            "borderColor": "transparent",
-            "pointRadius": 0,
-            "fill": False,
-            "tension": 0.3,
-        },
     ]
 
     # Highlight tested maxes
-    if "is_test" in kdf.columns:
-        tests = kdf[kdf["is_test"] == True]
+    if "is_test" in df.columns:
+        tests = df[df["is_test"] == True]
         if not tests.empty:
-            # Create sparse array with None for non-test points
-            test_data = [None] * len(kdf)
+            test_data = [None] * len(df)
             for idx in tests.index:
-                pos = kdf.index.get_loc(idx)
+                pos = df.index.get_loc(idx)
                 test_data[pos] = round(float(tests.loc[idx, "estimated_1rm"]), 1)
             datasets.append({
                 "label": "Tested max",
@@ -934,15 +919,14 @@ def onerm_progression_chart(
                 "showLine": False,
             })
 
-    all_vals = pd.concat([kdf["kalman_upper"], kdf["kalman_lower"], kdf["estimated_1rm"]])
-    y_lim = _val_limits(all_vals)
+    y_lim = _val_limits(df["estimated_1rm"])
 
     cfg: dict[str, Any] = {
         "type": "line",
         "data": {"labels": labels, "datasets": datasets},
         "options": {
             "plugins": {
-                "title": _title_cfg(f"{lift_name} — Estimated 1RM"),
+                "title": _title_cfg(f"{lift_name} — Estimated 1RM (R²={fit['r_squared']:.2f})"),
                 "legend": {
                     "display": True,
                     "position": "bottom",
@@ -955,7 +939,7 @@ def onerm_progression_chart(
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "week"},
-                    **_time_limits(kdf["date"]),
+                    **_time_limits(df["date"]),
                 },
                 "y": {
                     "title": {"display": True, "text": "Est. 1RM (lbs)"},
@@ -979,80 +963,104 @@ _RACE_DISTANCES = [
 
 def _single_race_chart(
     runs: pd.DataFrame, target_m: int, label: str, chart_id: str,
+    best_efforts: pd.DataFrame | None = None,
 ) -> html.Div:
-    """Build one Kalman-filtered race prediction chart for a single distance."""
-    from strava_analytics.kalman import kalman_race
+    """Build a race prediction chart using Critical Speed model + best efforts."""
+    from strava_analytics.critical_speed import fit_critical_speed, predict_time_cs
+    from strava_analytics.vo2max import daniels_vdot, vdot_to_race_time
 
-    kdf = kalman_race(runs, target_m)
-    if kdf.empty:
+    if best_efforts is None or best_efforts.empty:
         return _empty_chart(f"Not enough data for {label}", height=280)
+
+    # Fit CS model for the predicted time line
+    cs = fit_critical_speed(best_efforts)
+    cs_time_min = predict_time_cs(cs["cs_m_per_s"], cs["d_prime_m"], target_m) / 60.0 if cs["cs_m_per_s"] > 0 else 0
+
+    # Build VDOT-equivalent estimates from each qualifying run (race + hard efforts only)
+    filtered = runs[(runs["run_type"].isin(["race", "hard_effort"])) &
+                     (runs["distance_mi"] >= 2.0) &
+                     (runs["pace_min_per_mi"] >= 6) &
+                     (runs["pace_min_per_mi"] <= 14)].copy()
+    if filtered.empty:
+        filtered = runs[(runs["distance_mi"] >= 2.0)].copy()
+
+    rows = []
+    for _, r in filtered.sort_values("date").iterrows():
+        dist_m = r.get("distance_m", 0)
+        time_s = r.get("moving_time_s", 0)
+        if dist_m <= 0 or time_s <= 0:
+            continue
+        vdot = daniels_vdot(dist_m, time_s / 60.0)
+        est_time = vdot_to_race_time(vdot, target_m)
+        rows.append({
+            "date": r["date"],
+            "est_time_min": round(est_time, 2),
+            "run_type": r.get("run_type", ""),
+            "date_str": r["date"].strftime("%Y-%m-%d"),
+        })
+
+    if not rows:
+        return _empty_chart(f"Not enough data for {label}", height=280)
+
+    edf = pd.DataFrame(rows)
 
     type_colors = {
         "race": ACCENT, "hard_effort": ACCENT_AMBER,
-        "long": ACCENT_SLATE, "moderate": ACCENT_AMBER, "easy": SLATE_60,
     }
 
     datasets = []
-    date_strings: dict[int, list[str]] = {}
-
     for rtype, color in type_colors.items():
-        subset = kdf[kdf["run_type"] == rtype]
+        subset = edf[edf["run_type"] == rtype]
         if subset.empty:
             continue
-        ds_idx = len(datasets)
         datasets.append({
-            "label": rtype.title(),
+            "label": rtype.replace("_", " ").title(),
             "data": [
                 {"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
                 for _, row in subset.iterrows()
             ],
             "backgroundColor": color,
             "borderColor": color,
-            "pointRadius": 2,
-            "pointHoverRadius": 4,
+            "pointRadius": 4,
+            "pointHoverRadius": 6,
             "showLine": False,
         })
-        date_strings[ds_idx] = subset["date_str"].tolist()
 
-    # Kalman smoothed line
-    datasets.append({
-        "label": "Predicted",
-        "data": [
-            {"x": _ts(row["date"]), "y": row["kalman_min"]}
-            for _, row in kdf.iterrows()
-        ],
-        "borderColor": ACCENT,
-        "borderWidth": 2,
-        "pointRadius": 0,
-        "showLine": True,
-        "fill": False,
-        "tension": 0.3,
-    })
-
-    # Confidence band
-    datasets.append({
-        "label": "_upper",
-        "data": [{"x": _ts(row["date"]), "y": row["kalman_upper"]}
-                 for _, row in kdf.iterrows()],
-        "borderColor": "transparent",
-        "backgroundColor": _hex_to_rgba(ACCENT, 0.1),
-        "pointRadius": 0, "showLine": True, "fill": "+1", "tension": 0.3,
-    })
-    datasets.append({
-        "label": "_lower",
-        "data": [{"x": _ts(row["date"]), "y": row["kalman_lower"]}
-                 for _, row in kdf.iterrows()],
-        "borderColor": "transparent",
-        "pointRadius": 0, "showLine": True, "fill": False, "tension": 0.3,
-    })
-
-    # Ground truth race markers
-    gt = kdf[kdf["R"] < 0]
-    if not gt.empty:
+    # CS predicted time as horizontal reference line
+    if cs_time_min > 0:
+        dates = edf["date"]
         datasets.append({
-            "label": "Race result",
-            "data": [{"x": _ts(row["date"]), "y": round(row["est_time_min"], 2)}
-                     for _, row in gt.iterrows()],
+            "label": f"CS Predicted ({cs_time_min:.1f} min)",
+            "data": [
+                {"x": _ts(dates.min()), "y": round(cs_time_min, 2)},
+                {"x": _ts(dates.max()), "y": round(cs_time_min, 2)},
+            ],
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "borderDash": [6, 3],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+        })
+
+    # Best effort markers from FIT data
+    _dist_m_map = {"1 Mile": 1609.344, "5K": 5000, "10K": 10000,
+                    "Half Marathon": 21097, "Marathon": 42195}
+    gt_lo, gt_hi = target_m * 0.9, target_m * 1.1
+    relevant_efforts = best_efforts[best_efforts["rank"] <= 3].copy()
+    be_rows = []
+    for _, eff in relevant_efforts.iterrows():
+        eff_dist = _dist_m_map.get(eff["distance_label"], 0)
+        if eff_dist <= 0 or eff["time_s"] <= 0:
+            continue
+        vdot = daniels_vdot(eff_dist, eff["time_s"] / 60.0)
+        est = vdot_to_race_time(vdot, target_m)
+        be_rows.append({"date": eff["date"], "est_time_min": round(est, 2),
+                         "label": eff["distance_label"]})
+    if be_rows:
+        datasets.append({
+            "label": "Best effort",
+            "data": [{"x": _ts(r["date"]), "y": r["est_time_min"]} for r in be_rows],
             "backgroundColor": ACCENT_SLATE,
             "borderColor": BG_CARD,
             "borderWidth": 1,
@@ -1062,10 +1070,11 @@ def _single_race_chart(
             "showLine": False,
         })
 
-    y_lim = _val_limits(kdf["est_time_min"], pad_frac=0.05)
-
-    # Y-axis label: MM:SS for shorter, H:MM for longer
-    y_label = f"{label} Time (min:sec)" if target_m <= 10_000 else f"{label} Time (hr:min)"
+    all_times = edf["est_time_min"]
+    if be_rows:
+        all_times = pd.concat([all_times, pd.Series([r["est_time_min"] for r in be_rows])])
+    y_lim = _val_limits(all_times, pad_frac=0.05)
+    y_label = f"{label} Time (min)" if target_m <= 10_000 else f"{label} Time (hr:min)"
 
     cfg: dict[str, Any] = {
         "type": "scatter",
@@ -1073,12 +1082,13 @@ def _single_race_chart(
         "options": {
             "plugins": {
                 "title": _title_cfg(label),
-                "legend": {"display": False},
+                "legend": {"display": True, "position": "bottom",
+                           "labels": {"boxWidth": 10, "padding": 6, "usePointStyle": True}},
             },
             "scales": {
                 "x": {
                     "type": "time", "time": {"unit": "month"},
-                    **_time_limits(kdf["date"]),
+                    **_time_limits(edf["date"]),
                 },
                 "y": {
                     "reverse": True,
@@ -1087,27 +1097,23 @@ def _single_race_chart(
                 },
             },
         },
-        "_meta": {
-            "clickToScroll": True,
-            "dateStrings": date_strings,
-        },
     }
     return _chart_wrap(chart_id, cfg, height=280)
 
 
-def race_predictions_chart(runs: pd.DataFrame, chart_id: str = "race-pred") -> html.Div:
-    """Tabbed race predictions — one Kalman-filtered chart per distance."""
+def race_predictions_chart(runs: pd.DataFrame, chart_id: str = "race-pred",
+                            best_efforts: pd.DataFrame | None = None) -> html.Div:
+    """Tabbed race predictions — one CS-based chart per distance."""
     if runs.empty:
         return _empty_chart("No runs for race prediction")
 
-    # Build all 4 charts (hidden by default, JS tabs switch visibility)
     panels = []
     tab_buttons = []
     for i, (target_m, label) in enumerate(_RACE_DISTANCES):
         sub_id = f"{chart_id}-{label.lower().replace(' ', '-')}"
         is_default = (i == 0)
         panels.append(html.Div(
-            _single_race_chart(runs, target_m, label, sub_id),
+            _single_race_chart(runs, target_m, label, sub_id, best_efforts),
             id=f"{chart_id}-panel-{i}",
             className="race-tab-panel",
             style={"display": "block" if is_default else "none"},
