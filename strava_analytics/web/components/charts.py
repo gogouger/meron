@@ -976,13 +976,10 @@ def _single_race_chart(
     cs = fit_critical_speed(best_efforts)
     cs_time_min = predict_time_cs(cs["cs_m_per_s"], cs["d_prime_m"], target_m) / 60.0 if cs["cs_m_per_s"] > 0 else 0
 
-    # Build VDOT-equivalent estimates from each qualifying run (race + hard efforts only)
-    filtered = runs[(runs["run_type"].isin(["race", "hard_effort"])) &
-                     (runs["distance_mi"] >= 2.0) &
+    # Build VDOT-equivalent estimates from ALL qualifying runs
+    filtered = runs[(runs["distance_mi"] >= 2.0) &
                      (runs["pace_min_per_mi"] >= 6) &
                      (runs["pace_min_per_mi"] <= 14)].copy()
-    if filtered.empty:
-        filtered = runs[(runs["distance_mi"] >= 2.0)].copy()
 
     rows = []
     for _, r in filtered.sort_values("date").iterrows():
@@ -1006,6 +1003,8 @@ def _single_race_chart(
 
     type_colors = {
         "race": ACCENT, "hard_effort": ACCENT_AMBER,
+        "long": ACCENT_SLATE, "moderate": _hex_to_rgba(ACCENT_AMBER, 0.5),
+        "easy": SLATE_60,
     }
 
     datasets = []
@@ -1013,6 +1012,7 @@ def _single_race_chart(
         subset = edf[edf["run_type"] == rtype]
         if subset.empty:
             continue
+        is_key = rtype in ("race", "hard_effort")
         datasets.append({
             "label": rtype.replace("_", " ").title(),
             "data": [
@@ -1021,8 +1021,8 @@ def _single_race_chart(
             ],
             "backgroundColor": color,
             "borderColor": color,
-            "pointRadius": 4,
-            "pointHoverRadius": 6,
+            "pointRadius": 4 if is_key else 2,
+            "pointHoverRadius": 6 if is_key else 4,
             "showLine": False,
         })
 
@@ -1043,10 +1043,9 @@ def _single_race_chart(
             "fill": False,
         })
 
-    # Best effort markers from FIT data
+    # Best effort markers from FIT data (stars)
     _dist_m_map = {"1 Mile": 1609.344, "5K": 5000, "10K": 10000,
                     "Half Marathon": 21097, "Marathon": 42195}
-    gt_lo, gt_hi = target_m * 0.9, target_m * 1.1
     relevant_efforts = best_efforts[best_efforts["rank"] <= 3].copy()
     be_rows = []
     for _, eff in relevant_efforts.iterrows():
