@@ -456,19 +456,23 @@ def project_1rm_outcomes(
         if fit and fit["n_points"] >= 3:
             projected = project_1rm(fit, weeks_ahead=n_build,
                                      interference_factor=interference)
-            delta_pct = (projected - fit["current_1rm"]) / fit["current_1rm"] * 100
+            cur_r = round(fit["current_1rm"])
+            proj_r = round(projected)
+            delta_pct = (proj_r - cur_r) / cur_r * 100 if cur_r > 0 else 0
             results[lift] = {
-                "current": round(fit["current_1rm"]),
-                "projected": round(projected),
+                "current": cur_r,
+                "projected": proj_r,
                 "delta_pct": round(delta_pct, 1),
             }
         else:
             # Fallback: simple +2%/week during build, with interference
             projected = current * (1 + 0.02 * interference) ** n_build
-            delta_pct = (projected - current) / current * 100
+            cur_r = round(current)
+            proj_r = round(projected)
+            delta_pct = (proj_r - cur_r) / cur_r * 100 if cur_r > 0 else 0
             results[lift] = {
-                "current": round(current),
-                "projected": round(projected),
+                "current": cur_r,
+                "projected": proj_r,
                 "delta_pct": round(delta_pct, 1),
             }
 

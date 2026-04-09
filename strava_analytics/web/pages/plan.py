@@ -402,12 +402,14 @@ def _projected_outcomes_section(projections: dict) -> html.Div:
     # Strength projections
     if strength_proj:
         str_rows = []
+        _lift_names = {"bench": "Bench", "squat": "Squat",
+                       "deadlift": "Deadlift", "ohp": "OHP"}
         for lift, data in strength_proj.items():
             delta = data["delta_pct"]
             color = ACCENT_SLATE if delta > 0 else ACCENT_RED
             arrow = "\u2191" if delta > 0 else "\u2193"
             str_rows.append(html.Div([
-                html.Span(lift.title(), style={
+                html.Span(_lift_names.get(lift, lift.title()), style={
                     "fontWeight": "600", "minWidth": "120px", "display": "inline-block",
                 }),
                 html.Span(f"{data['current']} lb", style={
