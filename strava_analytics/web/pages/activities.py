@@ -121,7 +121,7 @@ def _mini_map(filename: str, height: int = 140) -> html.Div | None:
 
 
 def _inline_hr_zone_bar(row) -> html.Div | None:
-    """Stacked horizontal HR zone bar with labels and time for one activity."""
+    """Horizontal bar chart of HR zones — one row per zone, matching running page style."""
     zone_secs = []
     has_data = False
     for z in range(1, 6):
@@ -133,58 +133,48 @@ def _inline_hr_zone_bar(row) -> html.Div | None:
     if not has_data:
         return None
 
-    total = sum(zone_secs)
-    if total <= 0:
-        return None
+    max_secs = max(zone_secs) or 1
 
-    # Stacked bar segments
-    segments = []
+    rows = []
     for z in range(5):
-        pct = zone_secs[z] / total * 100
-        if pct < 1:
-            continue
+        secs = zone_secs[z]
         color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
-        mins = int(zone_secs[z] / 60)
-        label = f"Z{z+1}" if pct >= 8 else ""
-        segments.append(html.Div(
-            label,
-            title=f"{HR_ZONE_LABELS[z]}: {mins}m ({pct:.0f}%)",
-            style={
-                "width": f"{pct}%", "height": "100%",
-                "backgroundColor": color,
-                "fontSize": "9px", "fontWeight": "600",
-                "color": "white", "textAlign": "center",
-                "lineHeight": "20px",
-            },
-        ))
-
-    # Zone legend below
-    legend = []
-    for z in range(5):
-        pct = zone_secs[z] / total * 100
-        if pct < 1:
-            continue
-        color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
-        mins = int(zone_secs[z] / 60)
-        legend.append(html.Span([
-            html.Span("\u25a0 ", style={"color": color, "fontSize": "10px"}),
-            html.Span(f"Z{z+1} {mins}m", style={
+        mins = int(secs / 60)
+        pct = secs / max_secs * 100
+        rows.append(html.Div([
+            html.Span(HR_ZONE_LABELS[z] if z < len(HR_ZONE_LABELS) else f"Z{z+1}", style={
                 "fontSize": "10px", "color": TEXT_MUTED,
+                "minWidth": "65px", "display": "inline-block",
+                "textAlign": "right", "paddingRight": "8px",
             }),
-        ], style={"marginRight": "12px"}))
+            html.Div(
+                html.Div(style={
+                    "width": f"{max(2, pct):.0f}%", "height": "100%",
+                    "backgroundColor": color, "borderRadius": "2px",
+                }),
+                style={
+                    "flex": "1", "height": "14px",
+                    "backgroundColor": BORDER, "borderRadius": "2px",
+                    "overflow": "hidden",
+                },
+            ),
+            html.Span(f"{mins}m", style={
+                "fontSize": "10px", "color": TEXT_MUTED,
+                "minWidth": "30px", "textAlign": "right",
+                "paddingLeft": "6px", "fontFamily": FONT_MONO,
+            }),
+        ], style={
+            "display": "flex", "alignItems": "center", "gap": "0",
+            "marginBottom": "2px",
+        }))
 
     return html.Div([
         html.Div("HR ZONES", style={
             "fontSize": "10px", "fontWeight": "600",
             "textTransform": "uppercase", "letterSpacing": "0.1em",
-            "color": TEXT_MUTED, "marginBottom": "4px",
+            "color": TEXT_MUTED, "marginBottom": "6px",
         }),
-        html.Div(segments, style={
-            "height": "20px", "display": "flex",
-            "borderRadius": "4px", "overflow": "hidden",
-            "backgroundColor": BORDER,
-        }),
-        html.Div(legend, style={"marginTop": "4px"}),
+        html.Div(rows),
     ], style={"marginTop": "12px", "paddingTop": "12px",
               "borderTop": f"1px solid {BORDER}"})
 
@@ -358,37 +348,52 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 **{"data-svg-icon": svg},
             )
 
-            # Rep ladder: tiny vertical bars, one per set, height = reps
-            # 5-rep reference line helps distinguish 5 vs 8 reps at a glance
-            max_reps_scale = 12  # visual scale
-            ladder_h = 24  # total container height
+            # Rep ladder: SVG mini chart with y-axis labels and gridlines
             rep_bars = None
             if n_sets > 0 and n_reps > 0:
-                bar_h = max(4, min(ladder_h, int(n_reps / max_reps_scale * ladder_h)))
-                ref_5_h = int(5 / max_reps_scale * ladder_h)  # 5-rep reference
-                rep_bars = html.Div([
-                    # Reference line at 5 reps
-                    html.Div(style={
-                        "position": "absolute", "bottom": f"{ref_5_h}px",
-                        "left": "-2px", "right": "-2px",
-                        "borderBottom": f"1px solid {lift_color}",
-                        "opacity": "0.25",
-                    }),
-                    # Bars
-                    html.Div([
-                        html.Div(style={
-                            "width": "7px", "height": f"{bar_h}px",
-                            "backgroundColor": lift_color, "opacity": "0.5",
-                            "borderRadius": "1.5px",
-                        }) for _ in range(n_sets)
-                    ], style={
-                        "display": "flex", "gap": "2px",
-                        "alignItems": "flex-end", "height": "100%",
-                    }),
-                ], style={
-                    "position": "relative",
-                    "marginTop": "6px", "height": f"{ladder_h}px",
-                })
+                max_r = max(12, n_reps + 2)  # scale ceiling
+                chart_h = 28
+                axis_w = 14  # space for y-axis labels
+                bar_w = 7
+                bar_gap = 3
+                bars_w = n_sets * (bar_w + bar_gap) - bar_gap
+                total_w = axis_w + bars_w + 4
+
+                # Y-axis gridlines at 5 and 10
+                grid_svg = ""
+                for tick in [5, 10]:
+                    if tick > max_r:
+                        continue
+                    y = chart_h - (tick / max_r * (chart_h - 2))
+                    grid_svg += (
+                        f'<line x1="{axis_w}" y1="{y:.0f}" x2="{total_w}" y2="{y:.0f}" '
+                        f'stroke="{TEXT_MUTED}" stroke-width="0.5" opacity="0.3"/>'
+                        f'<text x="{axis_w - 2}" y="{y + 3:.0f}" font-size="7" '
+                        f'fill="{TEXT_MUTED}" font-family="monospace" text-anchor="end">'
+                        f'{tick}</text>'
+                    )
+
+                # Bars
+                bar_svg = ""
+                for s in range(n_sets):
+                    bx = axis_w + s * (bar_w + bar_gap)
+                    bh = max(2, n_reps / max_r * (chart_h - 2))
+                    by = chart_h - bh
+                    bar_svg += (
+                        f'<rect x="{bx}" y="{by:.1f}" width="{bar_w}" height="{bh:.1f}" '
+                        f'rx="1.5" fill="{lift_color}" opacity="0.55"/>'
+                    )
+
+                ladder_svg = (
+                    f'<svg viewBox="0 0 {total_w} {chart_h}" '
+                    f'xmlns="http://www.w3.org/2000/svg" '
+                    f'style="width:{total_w}px;height:{chart_h}px">'
+                    f'{grid_svg}{bar_svg}</svg>'
+                )
+                rep_bars = html.Div(
+                    style={"marginTop": "6px", "height": f"{chart_h}px"},
+                    **{"data-svg-icon": ladder_svg},
+                )
 
             _lift_cards.append(html.Div([
                 html.Div([
@@ -469,28 +474,63 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 hr_range = max_hr - min_hr or 1
                 chart_w, chart_h = 400, 60
 
-                # Build SVG polyline for HR
-                step = max(1, len(hrs) // 100)  # downsample to ~100 points
+                # Build SVG HR timeline with zone background bands
+                step = max(1, len(hrs) // 100)
                 svg_pts = []
                 for i in range(0, len(hrs), step):
                     x = times_min[i] / max_t * chart_w
                     y = chart_h - (hrs[i] - min_hr) / hr_range * (chart_h - 4) - 2
                     svg_pts.append(f"{x:.1f},{y:.1f}")
 
-                # Fill area under curve
-                area_pts = svg_pts + [f"{chart_w:.1f},{chart_h}", "0,{chart_h}"]
+                # Zone background bands
+                est_max_hr = row.get("estimated_max_hr", 200) or 200
+                zone_pcts = [0.60, 0.70, 0.80, 0.90, 1.00]
+                zone_colors_svg = [
+                    HR_ZONE_COLORS.get(z, "#666") for z in range(1, 6)
+                ]
+                zone_bands = ""
+                for z in range(5):
+                    lo_hr = est_max_hr * (zone_pcts[z - 1] if z > 0 else 0.50)
+                    hi_hr = est_max_hr * zone_pcts[z]
+                    # Map to SVG y coords
+                    if hi_hr < min_hr or lo_hr > max_hr:
+                        continue
+                    y_top = chart_h - (min(hi_hr, max_hr) - min_hr) / hr_range * (chart_h - 4) - 2
+                    y_bot = chart_h - (max(lo_hr, min_hr) - min_hr) / hr_range * (chart_h - 4) - 2
+                    zone_bands += (
+                        f'<rect x="0" y="{y_top:.0f}" width="{chart_w}" '
+                        f'height="{max(1, y_bot - y_top):.0f}" '
+                        f'fill="{zone_colors_svg[z]}" opacity="0.08"/>'
+                    )
+
+                # Time labels on x-axis
+                time_labels = ""
+                interval = 15  # minutes
+                t = interval
+                while t < max_t:
+                    x = t / max_t * chart_w
+                    time_labels += (
+                        f'<text x="{x:.0f}" y="{chart_h - 1}" font-size="8" '
+                        f'fill="{TEXT_MUTED}" font-family="monospace" '
+                        f'text-anchor="middle">{int(t)}m</text>'
+                    )
+                    t += interval
+
+                area_pts = svg_pts + [f"{chart_w:.1f},{chart_h}", f"0,{chart_h}"]
                 hr_svg = (
                     f'<svg viewBox="0 0 {chart_w} {chart_h}" '
                     f'xmlns="http://www.w3.org/2000/svg" '
                     f'style="width:100%;height:{chart_h}px" preserveAspectRatio="none">'
+                    f'{zone_bands}'
                     f'<polygon points="{" ".join(area_pts)}" '
                     f'fill="{ACCENT_RED}" opacity="0.1"/>'
                     f'<polyline points="{" ".join(svg_pts)}" fill="none" '
                     f'stroke="{ACCENT_RED}" stroke-width="1.5" opacity="0.7"/>'
                     f'<text x="2" y="10" font-size="9" fill="{TEXT_MUTED}" '
                     f'font-family="monospace">{max_hr:.0f}</text>'
-                    f'<text x="2" y="{chart_h - 2}" font-size="9" fill="{TEXT_MUTED}" '
+                    f'<text x="2" y="{chart_h - 12}" font-size="9" fill="{TEXT_MUTED}" '
                     f'font-family="monospace">{min_hr:.0f}</text>'
+                    f'{time_labels}'
                     f'</svg>'
                 )
 
