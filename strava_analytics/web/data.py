@@ -67,6 +67,9 @@ def init(export_dir: str | Path) -> None:
     _best_efforts = compute_best_efforts(_df, _export_dir)
     logger.info("Best efforts: %d records", len(_best_efforts) if _best_efforts is not None else 0)
 
+    # Precompute heatmap data from route fingerprints
+    _precompute_heatmap(_export_dir)
+
 
 def get_df() -> pd.DataFrame:
     """Return the full enriched DataFrame."""
@@ -115,6 +118,41 @@ def get_best_efforts() -> pd.DataFrame:
     if _best_efforts is None:
         return pd.DataFrame()
     return _best_efforts
+
+
+def _precompute_heatmap(export_dir: Path) -> None:
+    """Write heatmap GPS data to assets/heatmap-data.json at startup."""
+    import json
+    import logging
+    logger = logging.getLogger(__name__)
+
+    index_path = export_dir / "route_index.json"
+    if not index_path.exists():
+        return
+
+    try:
+        raw = json.loads(index_path.read_text())
+        fps = raw.get("fingerprints", {})
+    except Exception:
+        return
+
+    heat_data = []
+    for fn, fp in fps.items():
+        pts = fp.get("points", [])
+        for i, (lat, lon) in enumerate(pts):
+            if i % 3 == 0:
+                heat_data.append([round(lat, 5), round(lon, 5), 0.5])
+
+    if len(heat_data) < 10:
+        return
+
+    assets_dir = Path(__file__).parent / "assets"
+    heat_path = assets_dir / "heatmap-data.json"
+    try:
+        heat_path.write_text(json.dumps(heat_data, separators=(",", ":")))
+        logger.info("Heatmap: wrote %d points to %s", len(heat_data), heat_path)
+    except Exception as e:
+        logger.warning("Heatmap: failed to write: %s", e)
 
 
 def get_export_dir() -> Path:

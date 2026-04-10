@@ -611,48 +611,16 @@ def layout(**_kwargs):
 
 
 def _heatmap_section(runs: pd.DataFrame) -> html.Div:
-    """Route heatmap — precompute heat data to a static JSON file, load via JS."""
-    import json
+    """Route heatmap — data precomputed at startup to assets/heatmap-data.json."""
     from pathlib import Path
-
-    export_dir = data.get_export_dir()
-    if export_dir is None:
+    heat_path = Path(__file__).parent.parent / "assets" / "heatmap-data.json"
+    if not heat_path.exists():
         return html.Div()
 
-    index_path = Path(export_dir) / "route_index.json"
-    if not index_path.exists():
-        return html.Div()
-
-    try:
-        raw = json.loads(index_path.read_text())
-        fps = raw.get("fingerprints", {})
-    except Exception:
-        return html.Div()
-
-    if not fps:
-        return html.Div()
-
-    # Precompute heat data and write to assets folder as static JSON
-    heat_data = []
-    for fn, fp in fps.items():
-        pts = fp.get("points", [])
-        for i, (lat, lon) in enumerate(pts):
-            if i % 3 == 0:
-                heat_data.append([round(lat, 5), round(lon, 5), 0.5])
-
-    if len(heat_data) < 10:
-        return html.Div()
-
-    # Write to assets so JS can fetch it
-    assets_dir = Path(__file__).parent.parent / "assets"
-    heat_path = assets_dir / "heatmap-data.json"
-    try:
-        heat_path.write_text(json.dumps(heat_data, separators=(",", ":")))
-    except Exception:
-        return html.Div()
+    n_routes = len(runs["filename"].dropna().unique()) if "filename" in runs.columns else 0
 
     return page_section("ROUTE HEATMAP", [
-        html.P(f"{len(fps)} routes overlaid. Brighter = more frequently run.",
+        html.P(f"{n_routes} routes overlaid. Brighter = more frequently run.",
                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
                       "marginBottom": "12px"}),
         html.Div(
