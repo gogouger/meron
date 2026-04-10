@@ -138,34 +138,37 @@ def _inline_hr_zone_bar(row) -> html.Div | None:
     rows = []
     for z in range(5):
         secs = zone_secs[z]
+        if secs < 30:  # skip zones with less than 30 seconds
+            continue
         color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
         mins = int(secs / 60)
+        time_label = f"{mins}m" if mins >= 1 else f"{int(secs)}s"
         pct = secs / max_secs * 100
         rows.append(html.Div([
             html.Span(HR_ZONE_LABELS[z] if z < len(HR_ZONE_LABELS) else f"Z{z+1}", style={
                 "fontSize": "10px", "color": TEXT_MUTED,
-                "minWidth": "65px", "display": "inline-block",
+                "minWidth": "70px", "display": "inline-block",
                 "textAlign": "right", "paddingRight": "8px",
             }),
             html.Div(
                 html.Div(style={
-                    "width": f"{max(2, pct):.0f}%", "height": "100%",
+                    "width": f"{max(3, pct):.0f}%", "height": "100%",
                     "backgroundColor": color, "borderRadius": "2px",
                 }),
                 style={
-                    "flex": "1", "height": "14px",
+                    "flex": "1", "height": "16px",
                     "backgroundColor": BORDER, "borderRadius": "2px",
                     "overflow": "hidden",
                 },
             ),
-            html.Span(f"{mins}m", style={
+            html.Span(time_label, style={
                 "fontSize": "10px", "color": TEXT_MUTED,
-                "minWidth": "30px", "textAlign": "right",
+                "minWidth": "35px", "textAlign": "right",
                 "paddingLeft": "6px", "fontFamily": FONT_MONO,
             }),
         ], style={
             "display": "flex", "alignItems": "center", "gap": "0",
-            "marginBottom": "2px",
+            "marginBottom": "3px",
         }))
 
     return html.Div([
@@ -472,7 +475,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 min_hr = min(hrs)
                 max_hr = max(hrs)
                 hr_range = max_hr - min_hr or 1
-                chart_w, chart_h = 400, 60
+                chart_w, chart_h = 400, 80
 
                 # Build SVG HR timeline with zone background bands
                 step = max(1, len(hrs) // 100)
