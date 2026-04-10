@@ -342,20 +342,34 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             )
 
             # Rep ladder: tiny vertical bars, one per set, height = reps
-            max_reps = 10  # scale reference (most sets are under 10 reps)
+            # 5-rep reference line helps distinguish 5 vs 8 reps at a glance
+            max_reps_scale = 12  # visual scale
+            ladder_h = 24  # total container height
             rep_bars = None
             if n_sets > 0 and n_reps > 0:
-                bar_h = max(4, min(20, int(n_reps / max_reps * 20)))
+                bar_h = max(4, min(ladder_h, int(n_reps / max_reps_scale * ladder_h)))
+                ref_5_h = int(5 / max_reps_scale * ladder_h)  # 5-rep reference
                 rep_bars = html.Div([
+                    # Reference line at 5 reps
                     html.Div(style={
-                        "width": "6px", "height": f"{bar_h}px",
-                        "backgroundColor": lift_color, "opacity": "0.5",
-                        "borderRadius": "1px",
-                    }) for _ in range(n_sets)
+                        "position": "absolute", "bottom": f"{ref_5_h}px",
+                        "left": "0", "right": "0",
+                        "borderBottom": f"1px dashed {BORDER}",
+                    }),
+                    # Bars
+                    html.Div([
+                        html.Div(style={
+                            "width": "7px", "height": f"{bar_h}px",
+                            "backgroundColor": lift_color, "opacity": "0.5",
+                            "borderRadius": "1.5px",
+                        }) for _ in range(n_sets)
+                    ], style={
+                        "display": "flex", "gap": "2px",
+                        "alignItems": "flex-end", "height": "100%",
+                    }),
                 ], style={
-                    "display": "flex", "gap": "2px",
-                    "alignItems": "flex-end",
-                    "marginTop": "6px", "height": "20px",
+                    "position": "relative",
+                    "marginTop": "6px", "height": f"{ladder_h}px",
                 })
 
             _lift_cards.append(html.Div([
@@ -392,7 +406,89 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 "gap": "6px", "marginTop": "10px",
             })
 
-        # Expanded detail: pullups, HR zones
+        # Expanded detail: session stats + HR timeline + pullups + HR zones
+
+        # Session summary stats
+        total_volume = sum(
+            ex["weight"] * ex["sets"] * ex["reps"]
+            for ex in parsed_exercises if ex["weight"]
+        )
+        total_sets = sum(ex["sets"] for ex in parsed_exercises)
+        detail_stats = []
+        if total_volume:
+            detail_stats.append(stat_cell("Total Volume", f"{total_volume:,.0f} lbs"))
+        if total_sets:
+            detail_stats.append(stat_cell("Total Sets", str(total_sets)))
+        max_hr_val = row.get("max_hr", 0)
+        if max_hr_val and not pd.isna(max_hr_val):
+            detail_stats.append(stat_cell("Peak HR", f"{max_hr_val:.0f} bpm"))
+        ts = row.get("training_stress", 0)
+        if ts and not pd.isna(ts) and ts > 0:
+            detail_stats.append(stat_cell("Training Stress", f"{ts:.0f}"))
+        if detail_stats:
+            detail_content.append(html.Div(detail_stats, style={
+                "display": "flex", "gap": "24px", "flexWrap": "wrap",
+                "marginBottom": "12px",
+            }))
+
+        # HR timeline chart (SVG sparkline from FIT HR stream)
+        filename = row.get("filename", "")
+        if filename and str(filename).endswith(".fit.gz"):
+            from strava_analytics.routes import parse_hr_stream
+            hr_pts = parse_hr_stream(data.get_export_dir() / str(filename))
+            if len(hr_pts) > 10:
+                hrs = [p[1] for p in hr_pts]
+                t0 = hr_pts[0][0]
+                times_min = [(p[0] - t0).total_seconds() / 60 for p in hr_pts]
+                max_t = max(times_min) or 1
+                min_hr = min(hrs)
+                max_hr = max(hrs)
+                hr_range = max_hr - min_hr or 1
+                chart_w, chart_h = 400, 60
+
+                # Build SVG polyline for HR
+                step = max(1, len(hrs) // 100)  # downsample to ~100 points
+                svg_pts = []
+                for i in range(0, len(hrs), step):
+                    x = times_min[i] / max_t * chart_w
+                    y = chart_h - (hrs[i] - min_hr) / hr_range * (chart_h - 4) - 2
+                    svg_pts.append(f"{x:.1f},{y:.1f}")
+
+                # Fill area under curve
+                area_pts = svg_pts + [f"{chart_w:.1f},{chart_h}", "0,{chart_h}"]
+                hr_svg = (
+                    f'<svg viewBox="0 0 {chart_w} {chart_h}" '
+                    f'xmlns="http://www.w3.org/2000/svg" '
+                    f'style="width:100%;height:{chart_h}px" preserveAspectRatio="none">'
+                    f'<polygon points="{" ".join(area_pts)}" '
+                    f'fill="{ACCENT_RED}" opacity="0.1"/>'
+                    f'<polyline points="{" ".join(svg_pts)}" fill="none" '
+                    f'stroke="{ACCENT_RED}" stroke-width="1.5" opacity="0.7"/>'
+                    f'<text x="2" y="10" font-size="9" fill="{TEXT_MUTED}" '
+                    f'font-family="monospace">{max_hr:.0f}</text>'
+                    f'<text x="2" y="{chart_h - 2}" font-size="9" fill="{TEXT_MUTED}" '
+                    f'font-family="monospace">{min_hr:.0f}</text>'
+                    f'</svg>'
+                )
+
+                detail_content.append(html.Div([
+                    html.Div("HEART RATE", style={
+                        "fontSize": "10px", "fontWeight": "600",
+                        "textTransform": "uppercase", "letterSpacing": "0.1em",
+                        "color": TEXT_MUTED, "marginBottom": "4px",
+                    }),
+                    html.Div(
+                        style={
+                            "width": "100%", "height": f"{chart_h}px",
+                            "borderRadius": "4px", "overflow": "hidden",
+                            "backgroundColor": "var(--surface, #1c1917)",
+                            "border": f"1px solid {BORDER}",
+                        },
+                        **{"data-svg-icon": hr_svg},
+                    ),
+                ], style={"marginBottom": "12px"}))
+
+        # Pullup stats
         pullup_sets = row.get("pullup_sets", None)
         pullup_reps = row.get("pullup_reps", None)
         parts = []
@@ -403,6 +499,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if parts:
             detail_content.append(stat_cell("Pull-ups", " / ".join(parts)))
 
+        # HR zone bar
         zone_bar = _inline_hr_zone_bar(row)
         if zone_bar:
             detail_content.append(zone_bar)
