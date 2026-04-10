@@ -234,11 +234,15 @@ def layout(**_kwargs):
             mileage_progression_chart(mileage),
         ], alt_bg=True),
 
-        # ── RACE PROJECTION ──
+        # ── RACE PROJECTION (tabbed: 5K / 10K / Half / Marathon) ──
         page_section("RACE PROJECTION", [
             html.P("Estimated race times based on current fitness + plan improvements.",
                    style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "12px"}),
-            _race_projection_chart(runs, best_efforts_df, race_proj, plan),
+            charts.race_predictions_chart(
+                runs, chart_id="plan-race-pred",
+                best_efforts=best_efforts_df,
+                projected_by_distance=_build_race_projections(race_proj, plan),
+            ),
         ]),
 
         # ── STRENGTH PROJECTION ──
@@ -308,33 +312,34 @@ def layout(**_kwargs):
     ])
 
 
-def _race_projection_chart(runs, best_efforts_df, race_proj, plan_weeks) -> html.Div:
-    """Build a 10K race prediction chart with projected dashed line."""
-    from strava_analytics.web.components.charts import _single_race_chart
+def _build_race_projections(race_proj: dict, plan_weeks: list) -> dict:
+    """Build projected time points for all distances, keyed by target_m."""
     import pandas as pd
 
-    proj_10k = race_proj.get("10K", {})
-    if not proj_10k:
-        return html.P("Insufficient data for race projection.", style={"color": TEXT_MUTED})
+    label_to_m = {
+        "5K": 5_000, "10K": 10_000,
+        "Half Marathon": 21_097, "Marathon": 42_195,
+    }
 
-    # Build projected points: linear from current to projected over plan weeks
-    current_min = proj_10k.get("current_min", 0)
-    projected_min = proj_10k.get("projected_min", 0)
-    if not current_min or not projected_min or not plan_weeks:
-        return html.P("Insufficient data.", style={"color": TEXT_MUTED})
+    if not plan_weeks:
+        return {}
 
     n = len(plan_weeks)
-    proj_points = []
-    for i, week in enumerate(plan_weeks):
-        t = (i + 1) / n
-        val = current_min + (projected_min - current_min) * t
-        proj_points.append({"date": pd.Timestamp(week.start_date), "time_min": round(val, 2)})
+    result = {}
+    for label, target_m in label_to_m.items():
+        proj = race_proj.get(label, {})
+        current_min = proj.get("current_min", 0)
+        projected_min = proj.get("projected_min", 0)
+        if not current_min or not projected_min:
+            continue
+        points = []
+        for i, week in enumerate(plan_weeks):
+            t = (i + 1) / n
+            val = current_min + (projected_min - current_min) * t
+            points.append({"date": pd.Timestamp(week.start_date), "time_min": round(val, 2)})
+        result[target_m] = points
 
-    return _single_race_chart(
-        runs, 10000, "10K Projection", "plan-race-10k",
-        best_efforts=best_efforts_df,
-        projected=proj_points,
-    )
+    return result
 
 
 def _build_1rm_projection(lift: str, str_proj: dict, plan_weeks: list) -> list:

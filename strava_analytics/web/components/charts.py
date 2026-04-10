@@ -1122,8 +1122,13 @@ def _single_race_chart(
 
 
 def race_predictions_chart(runs: pd.DataFrame, chart_id: str = "race-pred",
-                            best_efforts: pd.DataFrame | None = None) -> html.Div:
-    """Tabbed race predictions — one CS-based chart per distance."""
+                            best_efforts: pd.DataFrame | None = None,
+                            projected_by_distance: dict | None = None) -> html.Div:
+    """Tabbed race predictions — one CS-based chart per distance.
+
+    projected_by_distance: optional dict mapping target_m (int) to list of
+    {"date": Timestamp, "time_min": float} for dashed projection lines.
+    """
     if runs.empty:
         return _empty_chart("No runs for race prediction")
 
@@ -1132,8 +1137,9 @@ def race_predictions_chart(runs: pd.DataFrame, chart_id: str = "race-pred",
     for i, (target_m, label) in enumerate(_RACE_DISTANCES):
         sub_id = f"{chart_id}-{label.lower().replace(' ', '-')}"
         is_default = (i == 0)
+        proj = projected_by_distance.get(target_m) if projected_by_distance else None
         panels.append(html.Div(
-            _single_race_chart(runs, target_m, label, sub_id, best_efforts),
+            _single_race_chart(runs, target_m, label, sub_id, best_efforts, projected=proj),
             id=f"{chart_id}-panel-{i}",
             className="race-tab-panel",
             style={"display": "block" if is_default else "none"},
@@ -1758,28 +1764,24 @@ def enhanced_plan_calendar(plan_rows: list[dict],
         # Find the weekday of the 1st (0=Mon)
         first_weekday = date_type(year, mo, 1).weekday()
 
-        # Header with 8th summary column
-        header_cells = [
+        # Header — 7-column, clean
+        header = html.Div([
             html.Div(day_names[i], style={
                 "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
-                "color": TEXT_MUTED, "padding": "6px 0",
-                "letterSpacing": "0.08em",
+                "color": TEXT_MUTED, "padding": "4px 0",
+                "letterSpacing": "0.06em",
             }) for i in range(7)
-        ]
-        header_cells.append(html.Div("Wk", style={
-            "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
-            "color": TEXT_MUTED, "padding": "6px 0",
-        }))
-        header = html.Div(header_cells, style={
-            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr) 56px",
-            "gap": "3px",
+        ], style={
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "2px", "borderBottom": f"1px solid {_BORDER}",
+            "marginBottom": "4px",
         })
 
         # Build grid of day cells
         cells = []
-        # Empty leading cells
+        # Empty leading cells — invisible but preserve grid alignment
         for _ in range(first_weekday):
-            cells.append(html.Div(style={"minHeight": "72px"}))
+            cells.append(html.Div(style={"minHeight": "48px", "visibility": "hidden"}))
 
         for day in range(1, days_in_month + 1):
             d = date_type(year, mo, day)
@@ -1870,7 +1872,7 @@ def enhanced_plan_calendar(plan_rows: list[dict],
             }.get(dominant_intensity, "transparent")
 
             cell_style = {
-                "minHeight": "72px",
+                "minHeight": "48px",
                 "padding": "4px 5px 0 5px",
                 "borderRadius": "4px",
                 "backgroundColor": "var(--bg-card, #1c1917)" if is_plan_day else "transparent",
@@ -1899,23 +1901,23 @@ def enhanced_plan_calendar(plan_rows: list[dict],
                 strip,
             ], style=cell_style))
 
-        # Trailing empty cells to complete last week row
+        # Trailing empty cells — invisible
         total_cells = first_weekday + days_in_month
         trailing = (7 - total_cells % 7) % 7
         for _ in range(trailing):
-            cells.append(html.Div(style={"minHeight": "72px"}))
+            cells.append(html.Div(style={"minHeight": "48px", "visibility": "hidden"}))
 
-        # Insert weekly summary cells (8th column) after every 7 day cells
+        # Build grid with week summary footer rows after each 7-day row
         grid_cells = []
         for i in range(0, len(cells), 7):
             week_row = cells[i:i+7]
             grid_cells.extend(week_row)
 
-            # Compute week summary from plan data for these 7 days
+            # Compute weekly summary for this row
             wk_miles = 0.0
             wk_lifts = 0
+            wk_runs = 0
             for cell_idx in range(i, min(i + 7, len(cells))):
-                # Map cell index back to actual date
                 day_num = cell_idx - first_weekday + 1
                 if 1 <= day_num <= days_in_month:
                     d = date_type(year, mo, day_num)
@@ -1924,34 +1926,37 @@ def enhanced_plan_calendar(plan_rows: list[dict],
                         if wr["type"] == "lift":
                             wk_lifts += 1
                         if wr["type"] == "run":
-                            title = wr.get("title", "")
+                            wk_runs += 1
                             import re as _re2
-                            m2 = _re2.search(r'([\d.]+)\s*mi', title)
+                            m2 = _re2.search(r'([\d.]+)\s*mi', wr.get("title", ""))
                             if m2:
                                 wk_miles += float(m2.group(1))
 
-            summary_text = []
+            # Week footer row spanning all 7 columns
+            parts = []
             if wk_miles > 0:
-                summary_text.append(f"{wk_miles:.0f} mi")
+                parts.append(f"{wk_miles:.0f} mi")
+            if wk_runs > 0:
+                parts.append(f"{wk_runs} runs")
             if wk_lifts > 0:
-                summary_text.append(f"{wk_lifts} lift{'s' if wk_lifts > 1 else ''}")
+                parts.append(f"{wk_lifts} lifts")
 
-            grid_cells.append(html.Div(
-                html.Div("\n".join(summary_text) if summary_text else "", style={
-                    "fontSize": "9px", "color": TEXT_MUTED,
-                    "fontFamily": FONT_MONO, "lineHeight": "1.4",
-                    "whiteSpace": "pre-line",
-                }),
-                style={
-                    "minHeight": "72px", "padding": "4px",
-                    "display": "flex", "alignItems": "center",
-                    "justifyContent": "center", "textAlign": "center",
-                },
-            ))
+            if parts:
+                grid_cells.append(html.Div(
+                    " \u00b7 ".join(parts),
+                    style={
+                        "gridColumn": "1 / -1",
+                        "fontSize": "10px", "color": TEXT_MUTED,
+                        "fontFamily": FONT_MONO,
+                        "padding": "2px 4px 6px",
+                        "borderBottom": f"1px solid {_BORDER}",
+                        "marginBottom": "4px",
+                    },
+                ))
 
         grid = html.Div(grid_cells, style={
-            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr) 56px",
-            "gap": "3px",
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+            "gap": "2px",
         })
 
         month_views.append(html.Div([
