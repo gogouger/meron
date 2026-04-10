@@ -384,35 +384,42 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                 }),
             ], style={"marginTop": "4px"})
 
-        # Top 3 list (expandable)
+        # Top 3 as compact rows with date and link
         top3_rows = []
         for eff in pr.get("top3", []):
-            eff_val = f"{eff['time']}  ({eff['pace']} /mi)" if eff.get("time") else f"{eff['pace']} /mi"
-            medal = {1: "", 2: "", 3: ""}.get(eff["rank"], "")
+            time_str = eff.get("time", "")
+            pace_str = eff.get("pace", "")
+            rank_color = ACCENT if eff["rank"] == 1 else (
+                ACCENT_SLATE if eff["rank"] == 2 else TEXT_MUTED)
             top3_rows.append(html.Div([
-                html.Span(f"{medal} #{eff['rank']} ", style={
-                    "fontWeight": "700", "fontSize": "12px",
-                    "color": ACCENT if eff["rank"] == 1 else TEXT_SECONDARY,
-                    "minWidth": "40px", "display": "inline-block",
+                html.Span(f"#{eff['rank']}", style={
+                    "fontWeight": "700", "fontSize": "11px",
+                    "color": rank_color,
+                    "minWidth": "24px", "display": "inline-block",
                 }),
-                html.Span(eff_val, style={
-                    "fontFamily": FONT_MONO,
-                    "fontSize": "12px",
+                html.Span(time_str if time_str else pace_str, style={
+                    "fontFamily": FONT_MONO, "fontSize": "12px",
+                    "fontWeight": "600", "minWidth": "55px",
+                    "display": "inline-block",
                 }),
-                html.Span(eff["name"], style={
-                    "color": ACCENT, "fontSize": "11px",
-                    "marginLeft": "4px",
+                html.Span(f"{pace_str} /mi", style={
+                    "fontFamily": FONT_MONO, "fontSize": "11px",
+                    "color": TEXT_SECONDARY, "minWidth": "65px",
+                    "display": "inline-block",
+                }) if time_str else None,
+                html.Span(eff["date"], style={
+                    "fontSize": "11px", "color": TEXT_MUTED,
+                    "minWidth": "85px", "display": "inline-block",
                 }),
-                html.Span(f"  {eff['date']}", style={
-                    "color": TEXT_MUTED, "fontSize": "11px",
+                html.A(eff["name"] or "View run", href="/activities", style={
+                    "fontSize": "11px", "color": ACCENT,
+                    "textDecoration": "none",
                 }),
-            ], style={"padding": "3px 0"}))
+            ], style={"padding": "4px 0", "display": "flex",
+                      "alignItems": "baseline", "gap": "8px"}))
 
-        detail_children = [
-            html.A("View run \u2192", href="/activities", style={
-                "color": ACCENT, "fontSize": "11px", "textDecoration": "none",
-            }),
-        ]
+        # Detail: year best + top 3
+        detail_children = []
         if year_row:
             detail_children.append(year_row)
         if top3_rows:
@@ -421,6 +428,7 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                 "borderTop": f"1px solid {BORDER}",
             }))
 
+        # Summary: just distance + time/pace, clean and minimal
         card = html.Details([
             html.Summary([
                 html.Div([
@@ -433,15 +441,8 @@ def _prs_section(df: pd.DataFrame) -> html.Div:
                         "fontSize": "16px", "fontWeight": "600",
                         "color": ACCENT,
                     }),
-                    html.Span(pr["best_name"], style={
-                        "color": ACCENT, "fontSize": "12px",
-                        "marginLeft": "12px",
-                    }),
-                    html.Span(f"  {pr['best_date']}", style={
-                        "color": TEXT_MUTED, "fontSize": "12px",
-                    }),
                 ], style={"display": "flex", "alignItems": "baseline",
-                          "flexWrap": "wrap", "gap": "4px"}),
+                          "gap": "8px"}),
             ], style={"listStyle": "none", "cursor": "pointer",
                       "padding": "12px 16px"}),
             html.Div(detail_children, style={
