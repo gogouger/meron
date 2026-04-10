@@ -199,6 +199,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
     # Primary stats — type-dependent
     primary = []
     detail_content = []
+    card_extra = None  # map (runs) or lift summary (lifts) — rendered as block outside flex row
 
     dist = row.get("distance_mi", 0)
     dur = row.get("moving_time_s", 0)
@@ -255,12 +256,10 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if zone_bar:
             detail_content.append(zone_bar)
 
-        # Mini-map in summary + full route loading in detail
+        # Mini-map as separate block below stats + full route loading in detail
         filename = row.get("filename", "")
         if filename and str(filename).endswith(".fit.gz"):
-            mini_map = _svg_mini_map(str(filename))
-            if mini_map:
-                primary.append(mini_map)
+            card_extra = _svg_mini_map(str(filename))
             route_key = f"{date_id}-{idx}"
             detail_content.append(html.Button(
                 "", id={"type": "act-route-btn", "index": route_key},
@@ -306,7 +305,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             reps = row.get(reps_col, None)
             scheme = ""
             if sets and not pd.isna(sets) and reps and not pd.isna(reps):
-                scheme = f"{int(sets)}x{int(reps)}"
+                scheme = f"{int(sets)}\u00d7{int(reps)}"
 
             # Compact summary: "Bench 190 3x5"
             _lift_summary_parts.append(html.Span([
@@ -362,10 +361,14 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
 
         # Compact lift line in primary (collapsed summary)
         if _lift_summary_parts:
-            primary.append(html.Div(_lift_summary_parts, style={
+            card_extra = html.Div(_lift_summary_parts, style={
                 "display": "flex", "flexWrap": "wrap",
-                "alignItems": "baseline", "marginTop": "8px",
-            }))
+                "alignItems": "baseline", "gap": "16px",
+                "marginTop": "8px", "padding": "8px 12px",
+                "backgroundColor": "var(--surface, #1c1917)",
+                "borderRadius": "6px",
+                "border": f"1px solid {BORDER}",
+            })
 
         # Full lift grid in detail (expanded)
         if _lift_grid_items:
@@ -459,6 +462,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             html.Div(primary, style={
                 "display": "flex", "gap": "24px", "flexWrap": "wrap",
             }) if primary else None,
+            card_extra,
         ], style={"listStyle": "none", "cursor": "pointer"}),
         html.Div(detail_content, style={
             "padding": "12px 0 0 0",
