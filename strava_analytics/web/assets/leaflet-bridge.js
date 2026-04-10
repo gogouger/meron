@@ -53,8 +53,8 @@
             attributionControl: false,
         });
 
-        L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png", {
-            maxZoom: 20,
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+            maxZoom: 19, subdomains: "abcd",
         }).addTo(map);
 
         // Heat layer (if heatData provided and L.heatLayer available)

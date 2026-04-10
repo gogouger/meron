@@ -632,13 +632,13 @@ def _heatmap_section(runs: pd.DataFrame) -> html.Div:
     if not fps:
         return html.Div()
 
-    # Aggregate all GPS points from fingerprints
-    # Each point gets intensity 1.0 — overlapping points accumulate density
+    # Aggregate GPS points from fingerprints (subsample every 3rd point to keep JSON small)
     heat_data = []
     for fn, fp in fps.items():
         pts = fp.get("points", [])
-        for lat, lon in pts:
-            heat_data.append([lat, lon, 0.5])
+        for i, (lat, lon) in enumerate(pts):
+            if i % 3 == 0:
+                heat_data.append([round(lat, 5), round(lon, 5), 0.5])
 
     if len(heat_data) < 10:
         return html.Div()
