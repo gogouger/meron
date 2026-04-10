@@ -341,20 +341,22 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 **{"data-svg-icon": svg},
             )
 
-            # Volume progress bar (thin, proportional to max volume in session)
-            bar_pct = min(100, (volume / max_volume * 100)) if max_volume > 0 and volume > 0 else 0
-            progress_bar = html.Div(
-                html.Div(style={
-                    "width": f"{bar_pct}%", "height": "100%",
-                    "backgroundColor": lift_color, "opacity": "0.4",
-                    "borderRadius": "2px",
-                }),
-                style={
-                    "width": "100%", "height": "3px", "marginTop": "6px",
-                    "backgroundColor": "var(--border, #292524)",
-                    "borderRadius": "2px", "overflow": "hidden",
-                },
-            ) if volume > 0 else None
+            # Rep ladder: tiny vertical bars, one per set, height = reps
+            max_reps = 10  # scale reference (most sets are under 10 reps)
+            rep_bars = None
+            if n_sets > 0 and n_reps > 0:
+                bar_h = max(4, min(20, int(n_reps / max_reps * 20)))
+                rep_bars = html.Div([
+                    html.Div(style={
+                        "width": "6px", "height": f"{bar_h}px",
+                        "backgroundColor": lift_color, "opacity": "0.5",
+                        "borderRadius": "1px",
+                    }) for _ in range(n_sets)
+                ], style={
+                    "display": "flex", "gap": "2px",
+                    "alignItems": "flex-end",
+                    "marginTop": "6px", "height": "20px",
+                })
 
             _lift_cards.append(html.Div([
                 html.Div([
@@ -374,7 +376,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                         "color": TEXT_SECONDARY,
                     }) if scheme else None,
                 ], style={"marginTop": "2px"}),
-                progress_bar,
+                rep_bars,
             ], style={
                 "padding": "8px 10px",
                 "backgroundColor": "var(--surface, #f5f5f4)",
