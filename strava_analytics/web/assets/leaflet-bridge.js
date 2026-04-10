@@ -95,12 +95,12 @@
 
     function renderHeatmap(el) {
         if (el.getAttribute("data-maprendered")) return;
-        if (typeof L === "undefined" || typeof L.heatLayer !== "function") return;
+        if (typeof L === "undefined") return;
 
         var containerId = "run-heatmap-map";
         var container = document.getElementById(containerId);
         if (!container) return;
-        if (container.offsetHeight < 10) return; // not visible yet
+        if (container.offsetHeight < 10) return;
 
         el.setAttribute("data-maprendered", "1");
         container.style.height = "400px";
@@ -110,23 +110,35 @@
             dragging: true, attributionControl: false,
         });
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
             maxZoom: 19, subdomains: "abcd",
         }).addTo(map);
 
-        // Fetch precomputed heat data
+        // Fetch precomputed route data and draw each as a semi-transparent polyline
         fetch("/assets/heatmap-data.json")
             .then(function(r) { return r.json(); })
-            .then(function(heatData) {
-                if (!heatData || !heatData.length) return;
-                L.heatLayer(heatData, {
-                    radius: 6, blur: 10, maxZoom: 16,
-                    gradient: {0.2: "#2563eb", 0.5: "#f59e0b", 0.8: "#ef4444", 1.0: "#ffffff"},
-                }).addTo(map);
-                var bounds = L.latLngBounds(heatData.map(function(p) { return [p[0], p[1]]; }));
-                map.fitBounds(bounds, { padding: [20, 20] });
+            .then(function(data) {
+                if (!data || !data.routes || !data.routes.length) return;
+
+                // Draw each route with low opacity — overlaps accumulate brightness
+                for (var i = 0; i < data.routes.length; i++) {
+                    L.polyline(data.routes[i], {
+                        color: "#ef3c4a",
+                        weight: 2,
+                        opacity: 0.15,
+                    }).addTo(map);
+                }
+
+                // Center on the median point
+                if (data.center) {
+                    map.setView(data.center, 13);
+                } else {
+                    var allPts = [];
+                    data.routes.forEach(function(r) { allPts = allPts.concat(r); });
+                    map.fitBounds(L.latLngBounds(allPts), { padding: [20, 20] });
+                }
             })
-            .catch(function(e) { console.warn("Heatmap data fetch failed:", e); });
+            .catch(function(e) { console.warn("Route overlay fetch failed:", e); });
     }
 
     function init() {

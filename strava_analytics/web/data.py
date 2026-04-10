@@ -121,7 +121,12 @@ def get_best_efforts() -> pd.DataFrame:
 
 
 def _precompute_heatmap(export_dir: Path) -> None:
-    """Write heatmap GPS data to assets/heatmap-data.json at startup."""
+    """Write route overlay data to assets/heatmap-data.json at startup.
+
+    Stores each route as an array of [lat, lon] coords. The JS draws each
+    route as a polyline with low opacity — overlapping routes accumulate
+    brightness naturally, showing the most-run paths.
+    """
     import json
     import logging
     logger = logging.getLogger(__name__)
@@ -136,21 +141,35 @@ def _precompute_heatmap(export_dir: Path) -> None:
     except Exception:
         return
 
-    heat_data = []
+    # Each route is an array of [lat, lon] pairs
+    routes = []
+    all_lats = []
+    all_lons = []
     for fn, fp in fps.items():
         pts = fp.get("points", [])
-        for i, (lat, lon) in enumerate(pts):
-            if i % 3 == 0:
-                heat_data.append([round(lat, 5), round(lon, 5), 0.5])
+        if len(pts) < 3:
+            continue
+        route = [[round(p[0], 5), round(p[1], 5)] for p in pts]
+        routes.append(route)
+        for p in pts:
+            all_lats.append(p[0])
+            all_lons.append(p[1])
 
-    if len(heat_data) < 10:
+    if not routes:
         return
+
+    # Compute center (median, not mean — robust to outliers)
+    all_lats.sort()
+    all_lons.sort()
+    center = [all_lats[len(all_lats) // 2], all_lons[len(all_lons) // 2]]
+
+    data_out = {"routes": routes, "center": center}
 
     assets_dir = Path(__file__).parent / "assets"
     heat_path = assets_dir / "heatmap-data.json"
     try:
-        heat_path.write_text(json.dumps(heat_data, separators=(",", ":")))
-        logger.info("Heatmap: wrote %d points to %s", len(heat_data), heat_path)
+        heat_path.write_text(json.dumps(data_out, separators=(",", ":")))
+        logger.info("Heatmap: wrote %d routes to %s", len(routes), heat_path)
     except Exception as e:
         logger.warning("Heatmap: failed to write: %s", e)
 

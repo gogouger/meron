@@ -619,8 +619,8 @@ def _heatmap_section(runs: pd.DataFrame) -> html.Div:
 
     n_routes = len(runs["filename"].dropna().unique()) if "filename" in runs.columns else 0
 
-    return page_section("ROUTE HEATMAP", [
-        html.P(f"{n_routes} routes overlaid. Brighter = more frequently run.",
+    return page_section("YOUR ROUTES", [
+        html.P(f"{n_routes} runs overlaid. Brighter lines = more frequently run paths.",
                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
                       "marginBottom": "12px"}),
         html.Div(
