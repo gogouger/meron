@@ -53,16 +53,31 @@
             attributionControl: false,
         });
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
             maxZoom: 19, subdomains: "abcd",
         }).addTo(map);
 
-        var polyline = L.polyline(cfg.coords, {
-            color: cfg.color || "#ef3c4a",
-            weight: 3, opacity: 0.9,
-        }).addTo(map);
+        // Heat layer (if heatData provided and L.heatLayer available)
+        if (cfg.heatData && cfg.heatData.length && typeof L.heatLayer === "function") {
+            var heat = L.heatLayer(cfg.heatData, {
+                radius: cfg.heatRadius || 8,
+                blur: cfg.heatBlur || 12,
+                maxZoom: cfg.heatMaxZoom || 15,
+                gradient: cfg.heatGradient || {0.2: "#2563eb", 0.5: "#f59e0b", 0.8: "#ef4444", 1.0: "#ffffff"},
+            }).addTo(map);
+            // Fit to heat bounds
+            var bounds = L.latLngBounds(cfg.heatData.map(function(p) { return [p[0], p[1]]; }));
+            map.fitBounds(bounds, { padding: [20, 20] });
+        }
 
-        map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+        // Route polyline (if coords provided)
+        if (cfg.coords && cfg.coords.length) {
+            var polyline = L.polyline(cfg.coords, {
+                color: cfg.color || "#ef3c4a",
+                weight: 3, opacity: 0.9,
+            }).addTo(map);
+            map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
+        }
         _maps[containerId] = map;
     }
 

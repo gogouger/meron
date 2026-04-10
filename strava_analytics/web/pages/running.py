@@ -587,6 +587,9 @@ def layout(**_kwargs):
             _heat_pace_section(runs),
         ], alt_bg=True),
 
+        # Route Heatmap
+        _heatmap_section(runs),
+
         # CTA
         cta_section(
             "Want to see every run?",
@@ -605,6 +608,65 @@ def layout(**_kwargs):
         # Footer
         footer(),
     ])
+
+
+def _heatmap_section(runs: pd.DataFrame) -> html.Div:
+    """Route heatmap — all run GPS data overlaid on one map."""
+    import json
+    from pathlib import Path
+
+    export_dir = data.get_export_dir()
+    if export_dir is None:
+        return html.Div()
+
+    index_path = Path(export_dir) / "route_index.json"
+    if not index_path.exists():
+        return html.Div()
+
+    try:
+        raw = json.loads(index_path.read_text())
+        fps = raw.get("fingerprints", {})
+    except Exception:
+        return html.Div()
+
+    if not fps:
+        return html.Div()
+
+    # Aggregate all GPS points from fingerprints
+    # Each point gets intensity 1.0 — overlapping points accumulate density
+    heat_data = []
+    for fn, fp in fps.items():
+        pts = fp.get("points", [])
+        for lat, lon in pts:
+            heat_data.append([lat, lon, 0.5])
+
+    if len(heat_data) < 10:
+        return html.Div()
+
+    map_cfg = json.dumps({
+        "heatData": heat_data,
+        "heatRadius": 6,
+        "heatBlur": 10,
+        "heatMaxZoom": 16,
+        "height": 400,
+    })
+
+    map_id = "run-heatmap"
+
+    return page_section("ROUTE HEATMAP", [
+        html.P(f"{len(fps)} routes overlaid. Brighter = more frequently run.",
+               style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                      "marginBottom": "12px"}),
+        html.Div(
+            html.Div(id=f"{map_id}-map", className="leaflet-map-box"),
+            className="leaflet-map-wrap",
+            style={
+                "width": "100%", "borderRadius": "8px", "overflow": "hidden",
+                "border": f"1px solid {BORDER}",
+            },
+            **{"data-mapcfg": map_cfg, "data-mapid": f"{map_id}-map"},
+        ),
+    ], alt_bg=True)
 
 
 def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
