@@ -154,20 +154,9 @@ def layout(**_kwargs):
             dbc.Row(onerm_charts, className="g-3"),
         ]),
 
-        # Baseline vs Current
-        page_section("BASELINE VS CURRENT", [
-            dbc.Row([
-                dbc.Col([
-                    html.Div("START (JAN 2026)", className="metric-label",
-                             style={"marginBottom": "12px", "fontSize": "0.65rem"}),
-                    _baseline_grid(baseline),
-                ], md=6),
-                dbc.Col([
-                    html.Div("CURRENT", className="metric-label",
-                             style={"marginBottom": "12px", "fontSize": "0.65rem"}),
-                    _current_grid(baseline, end_prs),
-                ], md=6),
-            ]),
+        # Progress — single table comparing baseline to current
+        page_section("PROGRESS", [
+            _progress_table(baseline, end_prs),
         ], alt_bg=True),
 
         # Volume
@@ -188,6 +177,83 @@ def layout(**_kwargs):
         # Footer
         footer(),
     ])
+
+
+def _progress_table(baseline: dict, end_prs: dict) -> html.Div:
+    """Single table showing baseline → current → delta for each lift."""
+    lifts = [
+        ("Bench", "bench_1rm"),
+        ("Squat", "squat_1rm"),
+        ("Deadlift", "deadlift_1rm"),
+        ("OHP", "ohp_1rm"),
+        ("Pull-ups", "max_pullups"),
+    ]
+
+    rows = []
+    for label, key in lifts:
+        base_val = baseline.get(key, 0)
+        curr_val = end_prs.get(key, 0)
+        unit = "" if key == "max_pullups" else " lbs"
+
+        if base_val and curr_val and isinstance(base_val, (int, float)):
+            delta_pct = ((curr_val / base_val) - 1) * 100
+            delta_str = f"+{delta_pct:.0f}%" if delta_pct > 0 else f"{delta_pct:.0f}%"
+            delta_color = ACCENT_SLATE if delta_pct > 0 else ACCENT_RED
+        else:
+            delta_str = ""
+            delta_color = TEXT_MUTED
+
+        # Progress bar (0-100% based on gain capped at 20%)
+        bar_pct = min(100, max(0, ((curr_val / base_val) - 1) * 500)) if base_val and curr_val else 0
+
+        lift_color = LIFT_COLORS.get(label.lower(), TEXT_MUTED)
+
+        rows.append(html.Div([
+            html.Div(label, style={
+                "fontWeight": "600", "fontSize": "13px",
+                "color": lift_color, "minWidth": "80px",
+            }),
+            html.Div(f"{base_val}{unit}" if base_val else "\u2014", style={
+                "fontFamily": FONT_MONO, "fontSize": "14px",
+                "color": TEXT_MUTED, "minWidth": "70px", "textAlign": "right",
+            }),
+            html.Div("\u2192", style={
+                "color": TEXT_MUTED, "fontSize": "12px", "padding": "0 8px",
+            }),
+            html.Div(f"{curr_val}{unit}" if curr_val else "\u2014", style={
+                "fontFamily": FONT_MONO, "fontSize": "14px",
+                "fontWeight": "700", "minWidth": "70px", "textAlign": "right",
+            }),
+            html.Div(delta_str, style={
+                "fontFamily": FONT_MONO, "fontSize": "12px",
+                "fontWeight": "600", "color": delta_color,
+                "minWidth": "50px", "textAlign": "right",
+            }),
+            html.Div(
+                html.Div(style={
+                    "width": f"{bar_pct}%", "height": "100%",
+                    "backgroundColor": lift_color, "opacity": "0.4",
+                    "borderRadius": "2px",
+                }),
+                style={
+                    "flex": "1", "height": "4px", "minWidth": "60px",
+                    "backgroundColor": BORDER, "borderRadius": "2px",
+                    "overflow": "hidden", "marginLeft": "12px",
+                    "alignSelf": "center",
+                },
+            ) if bar_pct > 0 else html.Div(style={"flex": "1"}),
+        ], style={
+            "display": "flex", "alignItems": "baseline",
+            "padding": "10px 0",
+            "borderBottom": f"1px solid {BORDER}",
+        }))
+
+    return html.Div(rows, style={
+        "backgroundColor": BG_CARD,
+        "border": f"1px solid {BORDER}",
+        "borderRadius": "6px",
+        "padding": "8px 16px",
+    })
 
 
 def _baseline_grid(baseline: dict) -> html.Div:
