@@ -121,7 +121,7 @@ def _mini_map(filename: str, height: int = 140) -> html.Div | None:
 
 
 def _inline_hr_zone_bar(row) -> html.Div | None:
-    """Inline horizontal stacked bar showing HR zone distribution for one activity."""
+    """Stacked horizontal HR zone bar with labels and time for one activity."""
     zone_secs = []
     has_data = False
     for z in range(1, 6):
@@ -137,20 +137,41 @@ def _inline_hr_zone_bar(row) -> html.Div | None:
     if total <= 0:
         return None
 
+    # Stacked bar segments
     segments = []
     for z in range(5):
         pct = zone_secs[z] / total * 100
-        if pct < 0.5:
+        if pct < 1:
             continue
         color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
         mins = int(zone_secs[z] / 60)
+        label = f"Z{z+1}" if pct >= 8 else ""
         segments.append(html.Div(
-            title=f"{HR_ZONE_LABELS[z]}: {mins}m",
+            label,
+            title=f"{HR_ZONE_LABELS[z]}: {mins}m ({pct:.0f}%)",
             style={
                 "width": f"{pct}%", "height": "100%",
-                "backgroundColor": color, "display": "inline-block",
+                "backgroundColor": color,
+                "fontSize": "9px", "fontWeight": "600",
+                "color": "white", "textAlign": "center",
+                "lineHeight": "20px",
             },
         ))
+
+    # Zone legend below
+    legend = []
+    for z in range(5):
+        pct = zone_secs[z] / total * 100
+        if pct < 1:
+            continue
+        color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
+        mins = int(zone_secs[z] / 60)
+        legend.append(html.Span([
+            html.Span("\u25a0 ", style={"color": color, "fontSize": "10px"}),
+            html.Span(f"Z{z+1} {mins}m", style={
+                "fontSize": "10px", "color": TEXT_MUTED,
+            }),
+        ], style={"marginRight": "12px"}))
 
     return html.Div([
         html.Div("HR ZONES", style={
@@ -159,10 +180,11 @@ def _inline_hr_zone_bar(row) -> html.Div | None:
             "color": TEXT_MUTED, "marginBottom": "4px",
         }),
         html.Div(segments, style={
-            "height": "8px", "display": "flex",
+            "height": "20px", "display": "flex",
             "borderRadius": "4px", "overflow": "hidden",
             "backgroundColor": BORDER,
         }),
+        html.Div(legend, style={"marginTop": "4px"}),
     ], style={"marginTop": "12px", "paddingTop": "12px",
               "borderTop": f"1px solid {BORDER}"})
 
@@ -350,11 +372,18 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 bar_h = max(4, min(ladder_h, int(n_reps / max_reps_scale * ladder_h)))
                 ref_5_h = int(5 / max_reps_scale * ladder_h)  # 5-rep reference
                 rep_bars = html.Div([
-                    # Reference line at 5 reps
-                    html.Div(style={
+                    # Reference line at 5 reps with label
+                    html.Div([
+                        html.Span("5", style={
+                            "fontSize": "8px", "color": TEXT_MUTED,
+                            "position": "absolute", "right": "-12px",
+                            "top": "-5px",
+                        }),
+                    ], style={
                         "position": "absolute", "bottom": f"{ref_5_h}px",
                         "left": "0", "right": "0",
-                        "borderBottom": f"1px dashed {BORDER}",
+                        "borderBottom": f"1px solid {TEXT_MUTED}",
+                        "opacity": "0.4",
                     }),
                     # Bars
                     html.Div([
