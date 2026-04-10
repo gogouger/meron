@@ -271,93 +271,112 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if cals and not pd.isna(cals) and cals > 0:
             primary.append(stat_cell("Calories", f"{cals:.0f}"))
 
-        # Build visual lift grid for collapsed card_extra
-        _lift_cards = []
-        for full_label, wt_col, sets_col, reps_col, icon_key in [
-            ("Bench Press", "bench_weight", "bench_sets", "bench_reps", "bench"),
-            ("Squat", "squat_weight", "squat_sets", "squat_reps", "squat"),
-            ("Deadlift", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
-            ("OHP", "ohp_weight", "ohp_sets", "ohp_reps", "ohp"),
-        ]:
-            wt = row.get(wt_col, None)
-            if wt is None or pd.isna(wt):
-                continue
-            sets_val = row.get(sets_col, None)
-            reps_val = row.get(reps_col, None)
-            n_sets = int(sets_val) if sets_val and not pd.isna(sets_val) else 0
-            n_reps = int(reps_val) if reps_val and not pd.isna(reps_val) else 0
-            scheme = f"{n_sets}\u00d7{n_reps}" if n_sets and n_reps else ""
-            volume = int(wt * n_sets * n_reps) if n_sets and n_reps else 0
-            lift_color = LIFT_COLORS.get(icon_key, TEXT_MUTED)
+        # Parse ALL exercises from lift_exercises string
+        exercises_str = row.get("lift_exercises", "")
+        parsed_exercises = []
+        if exercises_str and not pd.isna(exercises_str):
+            import re
+            for ex_str in str(exercises_str).split(";"):
+                ex_str = ex_str.strip()
+                if not ex_str:
+                    continue
+                # Parse "Bench Press 3x5@190" or "Face Pull 3x5@30" or "Pull Up 1x15"
+                m = re.match(r'^(.+?)\s+(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?$', ex_str)
+                if m:
+                    parsed_exercises.append({
+                        "name": m.group(1).strip(),
+                        "sets": int(m.group(2)),
+                        "reps": int(m.group(3)),
+                        "weight": float(m.group(4)) if m.group(4) else 0,
+                    })
+                else:
+                    parsed_exercises.append({
+                        "name": ex_str, "sets": 0, "reps": 0, "weight": 0,
+                    })
 
-            # SVG icon
-            svg = _LIFT_ICONS.get(icon_key, "")
+        # Map exercise names to icon keys
+        _name_to_icon = {
+            "bench": "bench", "squat": "squat", "deadlift": "deadlift",
+            "ohp": "ohp", "overhead": "ohp",
+        }
+        # Generic dumbbell icon for exercises without a specific icon
+        _GENERIC_ICON = (
+            '<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" '
+            'stroke-width="2.5" stroke-linecap="round">'
+            '<line x1="10" y1="24" x2="38" y2="24"/>'
+            '<rect x="6" y="18" width="6" height="12" rx="1.5"/>'
+            '<rect x="36" y="18" width="6" height="12" rx="1.5"/></svg>'
+        )
+
+        # Build exercise cards for ALL exercises
+        _lift_cards = []
+        max_volume = 1  # for progress bar scaling
+        for ex in parsed_exercises:
+            vol = int(ex["weight"] * ex["sets"] * ex["reps"]) if ex["weight"] else 0
+            if vol > max_volume:
+                max_volume = vol
+
+        for ex in parsed_exercises:
+            ex_name = ex["name"]
+            n_sets = ex["sets"]
+            n_reps = ex["reps"]
+            wt = ex["weight"]
+            scheme = f"{n_sets}\u00d7{n_reps}" if n_sets and n_reps else ""
+            volume = int(wt * n_sets * n_reps) if wt and n_sets and n_reps else 0
+
+            # Find icon
+            icon_key = None
+            for keyword, key in _name_to_icon.items():
+                if keyword in ex_name.lower():
+                    icon_key = key
+                    break
+            lift_color = LIFT_COLORS.get(icon_key, TEXT_MUTED)
+            svg = _LIFT_ICONS.get(icon_key, _GENERIC_ICON)
+
             icon_div = html.Div(
                 style={
-                    "width": "28px", "height": "28px",
+                    "width": "24px", "height": "24px",
                     "color": lift_color, "flexShrink": "0",
                 },
                 **{"data-svg-icon": svg},
-            ) if svg else html.Div()
+            )
 
-            # Sets×Reps dot graphic: rows of small squares grouped by set
-            reps_svg = ""
-            if n_sets > 0 and n_reps > 0:
-                sq = 4  # square size
-                gap = 1  # gap within set
-                set_gap = 4  # gap between sets
-                total_w = n_sets * (n_reps * (sq + gap) - gap + set_gap) - set_gap
-                total_h = sq
-                rects = []
-                x = 0
-                for s in range(n_sets):
-                    for r in range(n_reps):
-                        rects.append(
-                            f'<rect x="{x}" y="0" width="{sq}" height="{sq}" '
-                            f'rx="1" fill="{lift_color}" opacity="0.5"/>'
-                        )
-                        x += sq + gap
-                    x += set_gap - gap
-                reps_svg = (
-                    f'<svg viewBox="0 0 {total_w} {total_h}" '
-                    f'xmlns="http://www.w3.org/2000/svg" '
-                    f'style="width:{min(total_w, 140)}px;height:{total_h}px">'
-                    + "".join(rects) + '</svg>'
-                )
-
-            reps_graphic = html.Div(
-                style={"marginTop": "4px", "height": "4px"},
-                **{"data-svg-icon": reps_svg},
-            ) if reps_svg else None
+            # Volume progress bar (thin, proportional to max volume in session)
+            bar_pct = min(100, (volume / max_volume * 100)) if max_volume > 0 and volume > 0 else 0
+            progress_bar = html.Div(
+                html.Div(style={
+                    "width": f"{bar_pct}%", "height": "100%",
+                    "backgroundColor": lift_color, "opacity": "0.4",
+                    "borderRadius": "2px",
+                }),
+                style={
+                    "width": "100%", "height": "3px", "marginTop": "6px",
+                    "backgroundColor": "var(--border, #292524)",
+                    "borderRadius": "2px", "overflow": "hidden",
+                },
+            ) if volume > 0 else None
 
             _lift_cards.append(html.Div([
                 html.Div([
                     icon_div,
-                    html.Div([
-                        html.Div(full_label, style={
-                            "fontSize": "10px", "fontWeight": "600",
-                            "color": lift_color, "textTransform": "uppercase",
-                            "letterSpacing": "0.04em",
-                        }),
-                        html.Div(f"{wt:.0f} lbs", style={
-                            "fontFamily": FONT_MONO,
-                            "fontSize": "18px", "fontWeight": "700",
-                        }),
-                    ]),
-                ], style={"display": "flex", "gap": "8px", "alignItems": "center"}),
+                    html.Div(ex_name, style={
+                        "fontSize": "11px", "fontWeight": "600",
+                        "color": lift_color,
+                    }),
+                ], style={"display": "flex", "gap": "6px", "alignItems": "center"}),
                 html.Div([
-                    html.Span(scheme, style={
+                    html.Span(f"{wt:.0f}", style={
+                        "fontFamily": FONT_MONO,
+                        "fontSize": "16px", "fontWeight": "700",
+                    }) if wt else None,
+                    html.Span(f" {scheme}", style={
                         "fontFamily": FONT_MONO, "fontSize": "12px",
                         "color": TEXT_SECONDARY,
                     }) if scheme else None,
-                    html.Span(f"{volume:,} vol", style={
-                        "fontSize": "11px", "color": TEXT_MUTED,
-                        "marginLeft": "8px",
-                    }) if volume else None,
                 ], style={"marginTop": "2px"}),
-                reps_graphic,
+                progress_bar,
             ], style={
-                "padding": "10px 12px",
+                "padding": "8px 10px",
                 "backgroundColor": "var(--surface, #f5f5f4)",
                 "border": f"1px solid {BORDER}",
                 "borderRadius": "6px",
@@ -367,31 +386,11 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if _lift_cards:
             card_extra = html.Div(_lift_cards, style={
                 "display": "grid",
-                "gridTemplateColumns": "repeat(auto-fill, minmax(150px, 1fr))",
-                "gap": "8px", "marginTop": "10px",
+                "gridTemplateColumns": "repeat(auto-fill, minmax(140px, 1fr))",
+                "gap": "6px", "marginTop": "10px",
             })
 
-        # Expanded detail: accessories, pullups, HR zones
-        exercises_str = row.get("lift_exercises", "")
-        if exercises_str and not pd.isna(exercises_str):
-            exercises = [e.strip() for e in str(exercises_str).split(";") if e.strip()]
-            primary_names = {"bench", "squat", "deadlift", "ohp", "overhead"}
-            extras = [e for e in exercises
-                      if not any(p in e.lower() for p in primary_names)]
-            if extras:
-                detail_content.append(html.Div([
-                    html.Div("ACCESSORIES", style={
-                        "fontSize": "10px", "fontWeight": "600",
-                        "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": TEXT_MUTED, "marginBottom": "6px",
-                    }),
-                    *[html.Div(e, style={
-                        "fontSize": "12px", "color": TEXT_SECONDARY,
-                        "padding": "2px 0",
-                    }) for e in extras],
-                ], style={"marginTop": "12px", "paddingTop": "12px",
-                          "borderTop": f"1px solid {BORDER}"}))
-
+        # Expanded detail: pullups, HR zones
         pullup_sets = row.get("pullup_sets", None)
         pullup_reps = row.get("pullup_reps", None)
         parts = []
