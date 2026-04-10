@@ -367,18 +367,12 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 bar_h = max(4, min(ladder_h, int(n_reps / max_reps_scale * ladder_h)))
                 ref_5_h = int(5 / max_reps_scale * ladder_h)  # 5-rep reference
                 rep_bars = html.Div([
-                    # Reference line at 5 reps with label
-                    html.Div([
-                        html.Span("5", style={
-                            "fontSize": "8px", "color": TEXT_MUTED,
-                            "position": "absolute", "right": "-12px",
-                            "top": "-5px",
-                        }),
-                    ], style={
+                    # Reference line at 5 reps
+                    html.Div(style={
                         "position": "absolute", "bottom": f"{ref_5_h}px",
-                        "left": "0", "right": "0",
-                        "borderBottom": f"1px solid {TEXT_MUTED}",
-                        "opacity": "0.4",
+                        "left": "-2px", "right": "-2px",
+                        "borderBottom": f"1px solid {lift_color}",
+                        "opacity": "0.25",
                     }),
                     # Bars
                     html.Div([
@@ -455,6 +449,11 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 "marginBottom": "12px",
             }))
 
+        # HR zone bar (stacked horizontal) — show before HR timeline
+        zone_bar = _inline_hr_zone_bar(row)
+        if zone_bar:
+            detail_content.append(zone_bar)
+
         # HR timeline chart (SVG sparkline from FIT HR stream)
         filename = row.get("filename", "")
         if filename and str(filename).endswith(".fit.gz"):
@@ -522,11 +521,6 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             parts.append(f"{int(pullup_reps)} reps")
         if parts:
             detail_content.append(stat_cell("Pull-ups", " / ".join(parts)))
-
-        # HR zone bar
-        zone_bar = _inline_hr_zone_bar(row)
-        if zone_bar:
-            detail_content.append(zone_bar)
 
     else:
         # Swim, Yoga, Other
