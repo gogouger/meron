@@ -261,116 +261,120 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             )
 
     elif act_type == "Weight Training":
-        # Primary stats: duration, HR, calories
+        # Stats row: duration, HR, calories (compact)
         if dur and not pd.isna(dur) and dur > 0:
             primary.append(stat_cell("Duration", duration_str(dur)))
         hr = row.get("avg_hr", 0)
         if hr and not pd.isna(hr):
             primary.append(stat_cell("Avg HR", f"{hr:.0f} bpm"))
-        max_hr_val = row.get("max_hr", 0)
-        if max_hr_val and not pd.isna(max_hr_val):
-            primary.append(stat_cell("Max HR", f"{max_hr_val:.0f} bpm"))
         cals = row.get("calories", 0)
         if cals and not pd.isna(cals) and cals > 0:
             primary.append(stat_cell("Calories", f"{cals:.0f}"))
-        rel_effort = row.get("relative_effort", None)
-        if rel_effort and not pd.isna(rel_effort):
-            primary.append(stat_cell("Effort", f"{rel_effort:.0f}"))
 
-        # Compact inline lift summary for collapsed view
-        _lift_summary_parts = []
-        _lift_grid_items = []  # full cards for expanded detail
-        for label, wt_col, sets_col, reps_col, icon_key in [
-            ("Bench", "bench_weight", "bench_sets", "bench_reps", "bench"),
+        # Build visual lift grid for collapsed card_extra
+        _lift_cards = []
+        for full_label, wt_col, sets_col, reps_col, icon_key in [
+            ("Bench Press", "bench_weight", "bench_sets", "bench_reps", "bench"),
             ("Squat", "squat_weight", "squat_sets", "squat_reps", "squat"),
-            ("DL", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
+            ("Deadlift", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
             ("OHP", "ohp_weight", "ohp_sets", "ohp_reps", "ohp"),
         ]:
             wt = row.get(wt_col, None)
             if wt is None or pd.isna(wt):
                 continue
-            sets = row.get(sets_col, None)
-            reps = row.get(reps_col, None)
-            scheme = ""
-            if sets and not pd.isna(sets) and reps and not pd.isna(reps):
-                scheme = f"{int(sets)}\u00d7{int(reps)}"
+            sets_val = row.get(sets_col, None)
+            reps_val = row.get(reps_col, None)
+            n_sets = int(sets_val) if sets_val and not pd.isna(sets_val) else 0
+            n_reps = int(reps_val) if reps_val and not pd.isna(reps_val) else 0
+            scheme = f"{n_sets}\u00d7{n_reps}" if n_sets and n_reps else ""
+            volume = int(wt * n_sets * n_reps) if n_sets and n_reps else 0
+            lift_color = LIFT_COLORS.get(icon_key, TEXT_MUTED)
 
-            # Compact summary: "Bench 190 3x5"
-            _lift_summary_parts.append(html.Span([
-                html.Span(label, style={
-                    "fontSize": "11px", "fontWeight": "600",
-                    "color": LIFT_COLORS.get(icon_key, TEXT_MUTED),
-                }),
-                html.Span(f" {wt:.0f}", style={
-                    "fontFamily": FONT_MONO, "fontSize": "13px",
-                    "fontWeight": "700",
-                }),
-                html.Span(f" {scheme}", style={
-                    "fontSize": "10px", "color": TEXT_MUTED,
-                }) if scheme else None,
-            ], style={"marginRight": "16px", "whiteSpace": "nowrap"}))
-
-            # Full card for detail view
+            # SVG icon
             svg = _LIFT_ICONS.get(icon_key, "")
             icon_div = html.Div(
                 style={
-                    "width": "32px", "height": "32px",
-                    "color": LIFT_COLORS.get(icon_key, TEXT_MUTED),
-                    "flexShrink": "0",
+                    "width": "28px", "height": "28px",
+                    "color": lift_color, "flexShrink": "0",
                 },
                 **{"data-svg-icon": svg},
             ) if svg else html.Div()
 
-            full_label = {"Bench": "Bench Press", "Squat": "Squat",
-                          "DL": "Deadlift", "OHP": "OHP"}[label]
-            _lift_grid_items.append(html.Div([
-                icon_div,
+            # Sets×Reps dot graphic: rows of small squares grouped by set
+            reps_svg = ""
+            if n_sets > 0 and n_reps > 0:
+                sq = 4  # square size
+                gap = 1  # gap within set
+                set_gap = 4  # gap between sets
+                total_w = n_sets * (n_reps * (sq + gap) - gap + set_gap) - set_gap
+                total_h = sq
+                rects = []
+                x = 0
+                for s in range(n_sets):
+                    for r in range(n_reps):
+                        rects.append(
+                            f'<rect x="{x}" y="0" width="{sq}" height="{sq}" '
+                            f'rx="1" fill="{lift_color}" opacity="0.5"/>'
+                        )
+                        x += sq + gap
+                    x += set_gap - gap
+                reps_svg = (
+                    f'<svg viewBox="0 0 {total_w} {total_h}" '
+                    f'xmlns="http://www.w3.org/2000/svg" '
+                    f'style="width:{min(total_w, 140)}px;height:{total_h}px">'
+                    + "".join(rects) + '</svg>'
+                )
+
+            reps_graphic = html.Div(
+                style={"marginTop": "4px", "height": "4px"},
+                **{"data-svg-icon": reps_svg},
+            ) if reps_svg else None
+
+            _lift_cards.append(html.Div([
                 html.Div([
-                    html.Div(full_label, style={
-                        "fontSize": "11px", "fontWeight": "600",
+                    icon_div,
+                    html.Div([
+                        html.Div(full_label, style={
+                            "fontSize": "10px", "fontWeight": "600",
+                            "color": lift_color, "textTransform": "uppercase",
+                            "letterSpacing": "0.04em",
+                        }),
+                        html.Div(f"{wt:.0f} lbs", style={
+                            "fontFamily": FONT_MONO,
+                            "fontSize": "18px", "fontWeight": "700",
+                        }),
+                    ]),
+                ], style={"display": "flex", "gap": "8px", "alignItems": "center"}),
+                html.Div([
+                    html.Span(scheme, style={
+                        "fontFamily": FONT_MONO, "fontSize": "12px",
                         "color": TEXT_SECONDARY,
-                    }),
-                    html.Div(f"{wt:.0f} lbs", style={
-                        "fontFamily": FONT_MONO,
-                        "fontSize": "16px", "fontWeight": "700",
-                        "color": TEXT_PRIMARY,
-                    }),
-                    html.Div(scheme, style={
-                        "fontSize": "11px", "color": TEXT_MUTED,
                     }) if scheme else None,
-                ]),
+                    html.Span(f"{volume:,} vol", style={
+                        "fontSize": "11px", "color": TEXT_MUTED,
+                        "marginLeft": "8px",
+                    }) if volume else None,
+                ], style={"marginTop": "2px"}),
+                reps_graphic,
             ], style={
-                "display": "flex", "gap": "10px", "alignItems": "center",
                 "padding": "10px 12px",
                 "backgroundColor": "var(--surface, #f5f5f4)",
                 "border": f"1px solid {BORDER}",
-                "borderRadius": "4px",
+                "borderRadius": "6px",
+                "borderLeft": f"3px solid {lift_color}",
             }))
 
-        # Compact lift line in primary (collapsed summary)
-        if _lift_summary_parts:
-            card_extra = html.Div(_lift_summary_parts, style={
-                "display": "flex", "flexWrap": "wrap",
-                "alignItems": "baseline", "gap": "16px",
-                "marginTop": "8px", "padding": "8px 12px",
-                "backgroundColor": "var(--surface, #1c1917)",
-                "borderRadius": "6px",
-                "border": f"1px solid {BORDER}",
+        if _lift_cards:
+            card_extra = html.Div(_lift_cards, style={
+                "display": "grid",
+                "gridTemplateColumns": "repeat(auto-fill, minmax(150px, 1fr))",
+                "gap": "8px", "marginTop": "10px",
             })
 
-        # Full lift grid in detail (expanded)
-        if _lift_grid_items:
-            detail_content.insert(0, html.Div(_lift_grid_items, style={
-                "display": "grid",
-                "gridTemplateColumns": "repeat(auto-fill, minmax(160px, 1fr))",
-                "gap": "8px", "marginBottom": "12px",
-            }))
-
-        # Additional exercises (non-primary)
+        # Expanded detail: accessories, pullups, HR zones
         exercises_str = row.get("lift_exercises", "")
         if exercises_str and not pd.isna(exercises_str):
             exercises = [e.strip() for e in str(exercises_str).split(";") if e.strip()]
-            # Filter out primary lifts already shown
             primary_names = {"bench", "squat", "deadlift", "ohp", "overhead"}
             extras = [e for e in exercises
                       if not any(p in e.lower() for p in primary_names)]
@@ -379,15 +383,15 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                     html.Div("ACCESSORIES", style={
                         "fontSize": "10px", "fontWeight": "600",
                         "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": TEXT_MUTED, "marginBottom": "4px",
+                        "color": TEXT_MUTED, "marginBottom": "6px",
                     }),
-                    html.Div(
-                        " · ".join(extras),
-                        style={"fontSize": "12px", "color": TEXT_SECONDARY},
-                    ),
-                ], style={"marginTop": "8px"}))
+                    *[html.Div(e, style={
+                        "fontSize": "12px", "color": TEXT_SECONDARY,
+                        "padding": "2px 0",
+                    }) for e in extras],
+                ], style={"marginTop": "12px", "paddingTop": "12px",
+                          "borderTop": f"1px solid {BORDER}"}))
 
-        # Pullup stats
         pullup_sets = row.get("pullup_sets", None)
         pullup_reps = row.get("pullup_reps", None)
         parts = []
@@ -398,7 +402,6 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if parts:
             detail_content.append(stat_cell("Pull-ups", " / ".join(parts)))
 
-        # HR zone bar for lifts too
         zone_bar = _inline_hr_zone_bar(row)
         if zone_bar:
             detail_content.append(zone_bar)
