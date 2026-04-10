@@ -642,21 +642,27 @@ def layout(**_kwargs):
 
         # Activity calendar with month navigation
         page_section("ACTIVITY", [
-            html.Div([
-                html.Button("\u2190", id="cal-prev", n_clicks=0, style={
-                    "background": "none", "border": f"1px solid {BORDER}",
-                    "color": TEXT_SECONDARY, "padding": "4px 12px",
-                    "cursor": "pointer", "fontSize": "16px", "borderRadius": "4px",
-                }),
-                html.Button("\u2192", id="cal-next", n_clicks=0, style={
-                    "background": "none", "border": f"1px solid {BORDER}",
-                    "color": TEXT_SECONDARY, "padding": "4px 12px",
-                    "cursor": "pointer", "fontSize": "16px", "borderRadius": "4px",
-                }),
-            ], style={"display": "flex", "gap": "8px", "justifyContent": "center",
-                      "marginBottom": "16px"}),
             dcc.Store(id="cal-offset", data=0),
             html.Div(id="cal-container", children=_activity_calendar(df, months=3, offset=0)),
+            html.Div([
+                html.Button("\u2039", id="cal-prev", n_clicks=0, style={
+                    "background": "none", "border": "none",
+                    "color": TEXT_MUTED, "padding": "0",
+                    "cursor": "pointer", "fontSize": "20px",
+                    "lineHeight": "1", "width": "28px", "height": "28px",
+                    "display": "flex", "alignItems": "center", "justifyContent": "center",
+                    "borderRadius": "50%", "transition": "color 0.15s",
+                }),
+                html.Button("\u203a", id="cal-next", n_clicks=0, style={
+                    "background": "none", "border": "none",
+                    "color": TEXT_MUTED, "padding": "0",
+                    "cursor": "pointer", "fontSize": "20px",
+                    "lineHeight": "1", "width": "28px", "height": "28px",
+                    "display": "flex", "alignItems": "center", "justifyContent": "center",
+                    "borderRadius": "50%", "transition": "color 0.15s",
+                }),
+            ], style={"display": "flex", "gap": "4px", "justifyContent": "flex-end",
+                      "marginTop": "12px"}),
         ]),
 
         # CTA
