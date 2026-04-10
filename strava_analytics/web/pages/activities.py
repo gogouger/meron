@@ -176,9 +176,14 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if zone_bar:
             detail_content.append(zone_bar)
 
-        # Lazy route loading
+        # Route indicator in summary + lazy route loading in detail
         filename = row.get("filename", "")
-        if filename:
+        if filename and str(filename).endswith(".fit.gz"):
+            primary.append(html.Span("\u2022 Route", style={
+                "fontSize": "11px", "color": ACCENT_SLATE,
+                "fontWeight": "500", "whiteSpace": "nowrap",
+                "alignSelf": "center",
+            }))
             route_key = f"{date_id}-{idx}"
             detail_content.append(html.Button(
                 "", id={"type": "act-route-btn", "index": route_key},
@@ -208,12 +213,13 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if rel_effort and not pd.isna(rel_effort):
             primary.append(stat_cell("Effort", f"{rel_effort:.0f}"))
 
-        # Detail: lift cards grid with SVG icons
-        _lift_grid_items = []
+        # Compact inline lift summary for collapsed view
+        _lift_summary_parts = []
+        _lift_grid_items = []  # full cards for expanded detail
         for label, wt_col, sets_col, reps_col, icon_key in [
-            ("Bench Press", "bench_weight", "bench_sets", "bench_reps", "bench"),
+            ("Bench", "bench_weight", "bench_sets", "bench_reps", "bench"),
             ("Squat", "squat_weight", "squat_sets", "squat_reps", "squat"),
-            ("Deadlift", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
+            ("DL", "deadlift_weight", "deadlift_sets", "deadlift_reps", "deadlift"),
             ("OHP", "ohp_weight", "ohp_sets", "ohp_reps", "ohp"),
         ]:
             wt = row.get(wt_col, None)
@@ -225,6 +231,22 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
             if sets and not pd.isna(sets) and reps and not pd.isna(reps):
                 scheme = f"{int(sets)}x{int(reps)}"
 
+            # Compact summary: "Bench 190 3x5"
+            _lift_summary_parts.append(html.Span([
+                html.Span(label, style={
+                    "fontSize": "11px", "fontWeight": "600",
+                    "color": LIFT_COLORS.get(icon_key, TEXT_MUTED),
+                }),
+                html.Span(f" {wt:.0f}", style={
+                    "fontFamily": FONT_MONO, "fontSize": "13px",
+                    "fontWeight": "700",
+                }),
+                html.Span(f" {scheme}", style={
+                    "fontSize": "10px", "color": TEXT_MUTED,
+                }) if scheme else None,
+            ], style={"marginRight": "16px", "whiteSpace": "nowrap"}))
+
+            # Full card for detail view
             svg = _LIFT_ICONS.get(icon_key, "")
             icon_div = html.Div(
                 style={
@@ -235,10 +257,12 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 **{"data-svg-icon": svg},
             ) if svg else html.Div()
 
+            full_label = {"Bench": "Bench Press", "Squat": "Squat",
+                          "DL": "Deadlift", "OHP": "OHP"}[label]
             _lift_grid_items.append(html.Div([
                 icon_div,
                 html.Div([
-                    html.Div(label, style={
+                    html.Div(full_label, style={
                         "fontSize": "11px", "fontWeight": "600",
                         "color": TEXT_SECONDARY,
                     }),
@@ -259,11 +283,19 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 "borderRadius": "4px",
             }))
 
+        # Compact lift line in primary (collapsed summary)
+        if _lift_summary_parts:
+            primary.append(html.Div(_lift_summary_parts, style={
+                "display": "flex", "flexWrap": "wrap",
+                "alignItems": "baseline", "marginTop": "8px",
+            }))
+
+        # Full lift grid in detail (expanded)
         if _lift_grid_items:
-            primary.append(html.Div(_lift_grid_items, style={
+            detail_content.insert(0, html.Div(_lift_grid_items, style={
                 "display": "grid",
                 "gridTemplateColumns": "repeat(auto-fill, minmax(160px, 1fr))",
-                "gap": "8px", "marginTop": "12px",
+                "gap": "8px", "marginBottom": "12px",
             }))
 
         # Additional exercises (non-primary)
