@@ -291,3 +291,23 @@ body.sidebar-open {
         height: 220px;
     }
 }
+
+/* --- Leaflet layer control styling ---------------------------------- */
+.leaflet-control-layers {
+    background: var(--bg-card, #1c1917) !important;
+    border: 1px solid var(--border, #292524) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+    color: var(--text-secondary, #a8a29e) !important;
+    font-size: 12px !important;
+    padding: 6px 10px !important;
+}
+.leaflet-control-layers label {
+    margin-bottom: 2px !important;
+    color: var(--text-secondary, #a8a29e) !important;
+}
+.leaflet-control-layers-toggle {
+    width: 28px !important;
+    height: 28px !important;
+    background-size: 16px 16px !important;
+}

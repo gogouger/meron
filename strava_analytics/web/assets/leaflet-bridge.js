@@ -14,6 +14,20 @@
 
     var _maps = {};
 
+    function _createBaseLayers() {
+        return {
+            "Positron": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Voyager": L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Dark Matter": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+        };
+    }
+
     function renderMap(el) {
         var raw = el.getAttribute("data-mapcfg");
         if (!raw) return;
@@ -53,21 +67,11 @@
             attributionControl: false,
         });
 
-        // Tile layers with switcher
-        var baseLayers = {
-            "Light": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-            "Dark": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-            "Street": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-        };
-        baseLayers["Light"].addTo(map);
+        // Tile layers
+        var layers = _createBaseLayers();
+        layers["Positron"].addTo(map);
         if (!isMini) {
-            L.control.layers(baseLayers, null, {position: "topright", collapsed: true}).addTo(map);
+            L.control.layers(layers, null, {position: "topright", collapsed: true}).addTo(map);
         }
 
         // Heat layer (if heatData provided and L.heatLayer available)
@@ -123,19 +127,9 @@
             dragging: true, attributionControl: false,
         });
 
-        var heatBaseLayers = {
-            "Light": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-            "Dark": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-            "Street": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-                maxZoom: 19, subdomains: "abcd",
-            }),
-        };
-        heatBaseLayers["Light"].addTo(map);
-        L.control.layers(heatBaseLayers, null, {position: "topright", collapsed: true}).addTo(map);
+        var layers = _createBaseLayers();
+        layers["Positron"].addTo(map);
+        L.control.layers(layers, null, {position: "topright", collapsed: true}).addTo(map);
 
         // Fetch precomputed route data and draw each as a semi-transparent polyline
         fetch("/assets/heatmap-data.json")
