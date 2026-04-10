@@ -120,66 +120,7 @@ def _mini_map(filename: str, height: int = 140) -> html.Div | None:
     )
 
 
-def _inline_hr_zone_bar(row) -> html.Div | None:
-    """Horizontal bar chart of HR zones — one row per zone, matching running page style."""
-    zone_secs = []
-    has_data = False
-    for z in range(1, 6):
-        val = row.get(f"zone_{z}_s", 0)
-        if pd.notna(val) and val > 0:
-            has_data = True
-        zone_secs.append(float(val) if pd.notna(val) else 0)
-
-    if not has_data:
-        return None
-
-    max_secs = max(zone_secs) or 1
-
-    rows = []
-    for z in range(5):
-        secs = zone_secs[z]
-        if secs < 30:  # skip zones with less than 30 seconds
-            continue
-        color = HR_ZONE_COLORS.get(z + 1, TEXT_MUTED)
-        mins = int(secs / 60)
-        time_label = f"{mins}m" if mins >= 1 else f"{int(secs)}s"
-        pct = secs / max_secs * 100
-        rows.append(html.Div([
-            html.Span(HR_ZONE_LABELS[z] if z < len(HR_ZONE_LABELS) else f"Z{z+1}", style={
-                "fontSize": "10px", "color": TEXT_MUTED,
-                "minWidth": "70px", "display": "inline-block",
-                "textAlign": "right", "paddingRight": "8px",
-            }),
-            html.Div(
-                html.Div(style={
-                    "width": f"{max(3, pct):.0f}%", "height": "100%",
-                    "backgroundColor": color, "borderRadius": "2px",
-                }),
-                style={
-                    "flex": "1", "height": "16px",
-                    "backgroundColor": BORDER, "borderRadius": "2px",
-                    "overflow": "hidden",
-                },
-            ),
-            html.Span(time_label, style={
-                "fontSize": "10px", "color": TEXT_MUTED,
-                "minWidth": "35px", "textAlign": "right",
-                "paddingLeft": "6px", "fontFamily": FONT_MONO,
-            }),
-        ], style={
-            "display": "flex", "alignItems": "center", "gap": "0",
-            "marginBottom": "3px",
-        }))
-
-    return html.Div([
-        html.Div("HR ZONES", style={
-            "fontSize": "10px", "fontWeight": "600",
-            "textTransform": "uppercase", "letterSpacing": "0.1em",
-            "color": TEXT_MUTED, "marginBottom": "6px",
-        }),
-        html.Div(rows),
-    ], style={"marginTop": "12px", "paddingTop": "12px",
-              "borderTop": f"1px solid {BORDER}"})
+_hr_chart_counter = 0
 
 dash.register_page(__name__, path="/activities", name="Activities")
 
@@ -457,102 +398,34 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 "marginBottom": "12px",
             }))
 
-        # HR zone bar (stacked horizontal) — show before HR timeline
-        zone_bar = _inline_hr_zone_bar(row)
-        if zone_bar:
-            detail_content.append(zone_bar)
+        # HR charts — reuse Chart.js chart functions from charts module
+        global _hr_chart_counter
+        from strava_analytics.web.components.charts import (
+            activity_hr_zone_chart, activity_hr_timeline_chart,
+        )
 
-        # HR timeline chart (SVG sparkline from FIT HR stream)
+        # HR zone distribution (same style as running page)
+        zone_secs = [float(row.get(f"zone_{z}_s", 0) or 0) for z in range(1, 6)]
+        if sum(zone_secs) > 30:
+            _hr_chart_counter += 1
+            zone_chart = activity_hr_zone_chart(
+                zone_secs, chart_id=f"lift-zones-{_hr_chart_counter}")
+            if zone_chart:
+                detail_content.append(zone_chart)
+
+        # HR timeline from FIT stream (same Chart.js style as running page)
         filename = row.get("filename", "")
         if filename and str(filename).endswith(".fit.gz"):
             from strava_analytics.routes import parse_hr_stream
             hr_pts = parse_hr_stream(data.get_export_dir() / str(filename))
             if len(hr_pts) > 10:
-                hrs = [p[1] for p in hr_pts]
-                t0 = hr_pts[0][0]
-                times_min = [(p[0] - t0).total_seconds() / 60 for p in hr_pts]
-                max_t = max(times_min) or 1
-                min_hr = min(hrs)
-                max_hr = max(hrs)
-                hr_range = max_hr - min_hr or 1
-                chart_w, chart_h = 400, 80
-
-                # Build SVG HR timeline with zone background bands
-                step = max(1, len(hrs) // 100)
-                svg_pts = []
-                for i in range(0, len(hrs), step):
-                    x = times_min[i] / max_t * chart_w
-                    y = chart_h - (hrs[i] - min_hr) / hr_range * (chart_h - 4) - 2
-                    svg_pts.append(f"{x:.1f},{y:.1f}")
-
-                # Zone background bands
+                _hr_chart_counter += 1
                 est_max_hr = row.get("estimated_max_hr", 200) or 200
-                zone_pcts = [0.60, 0.70, 0.80, 0.90, 1.00]
-                zone_colors_svg = [
-                    HR_ZONE_COLORS.get(z, "#666") for z in range(1, 6)
-                ]
-                zone_bands = ""
-                for z in range(5):
-                    lo_hr = est_max_hr * (zone_pcts[z - 1] if z > 0 else 0.50)
-                    hi_hr = est_max_hr * zone_pcts[z]
-                    # Map to SVG y coords
-                    if hi_hr < min_hr or lo_hr > max_hr:
-                        continue
-                    y_top = chart_h - (min(hi_hr, max_hr) - min_hr) / hr_range * (chart_h - 4) - 2
-                    y_bot = chart_h - (max(lo_hr, min_hr) - min_hr) / hr_range * (chart_h - 4) - 2
-                    zone_bands += (
-                        f'<rect x="0" y="{y_top:.0f}" width="{chart_w}" '
-                        f'height="{max(1, y_bot - y_top):.0f}" '
-                        f'fill="{zone_colors_svg[z]}" opacity="0.08"/>'
-                    )
-
-                # Time labels on x-axis
-                time_labels = ""
-                interval = 15  # minutes
-                t = interval
-                while t < max_t:
-                    x = t / max_t * chart_w
-                    time_labels += (
-                        f'<text x="{x:.0f}" y="{chart_h - 1}" font-size="8" '
-                        f'fill="{TEXT_MUTED}" font-family="monospace" '
-                        f'text-anchor="middle">{int(t)}m</text>'
-                    )
-                    t += interval
-
-                area_pts = svg_pts + [f"{chart_w:.1f},{chart_h}", f"0,{chart_h}"]
-                hr_svg = (
-                    f'<svg viewBox="0 0 {chart_w} {chart_h}" '
-                    f'xmlns="http://www.w3.org/2000/svg" '
-                    f'style="width:100%;height:{chart_h}px" preserveAspectRatio="none">'
-                    f'{zone_bands}'
-                    f'<polygon points="{" ".join(area_pts)}" '
-                    f'fill="{ACCENT_RED}" opacity="0.1"/>'
-                    f'<polyline points="{" ".join(svg_pts)}" fill="none" '
-                    f'stroke="{ACCENT_RED}" stroke-width="1.5" opacity="0.7"/>'
-                    f'<text x="2" y="10" font-size="9" fill="{TEXT_MUTED}" '
-                    f'font-family="monospace">{max_hr:.0f}</text>'
-                    f'<text x="2" y="{chart_h - 12}" font-size="9" fill="{TEXT_MUTED}" '
-                    f'font-family="monospace">{min_hr:.0f}</text>'
-                    f'{time_labels}'
-                    f'</svg>'
-                )
-
-                detail_content.append(html.Div([
-                    html.Div("HEART RATE", style={
-                        "fontSize": "10px", "fontWeight": "600",
-                        "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": TEXT_MUTED, "marginBottom": "4px",
-                    }),
-                    html.Div(
-                        style={
-                            "width": "100%", "height": f"{chart_h}px",
-                            "borderRadius": "4px", "overflow": "hidden",
-                            "backgroundColor": "var(--surface, #1c1917)",
-                            "border": f"1px solid {BORDER}",
-                        },
-                        **{"data-svg-icon": hr_svg},
-                    ),
-                ], style={"marginBottom": "12px"}))
+                hr_chart = activity_hr_timeline_chart(
+                    hr_pts, chart_id=f"lift-hr-{_hr_chart_counter}",
+                    max_hr=int(est_max_hr))
+                if hr_chart:
+                    detail_content.append(hr_chart)
 
         # Pullup stats
         pullup_sets = row.get("pullup_sets", None)

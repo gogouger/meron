@@ -1851,3 +1851,131 @@ def enhanced_plan_calendar(plan_rows: list[dict],
         ], style={"marginBottom": "24px"}))
 
     return html.Div(month_views, style={"marginBottom": "12px"})
+
+
+# ---------------------------------------------------------------------------
+# Single-activity HR charts (used in activity cards for lifts)
+# ---------------------------------------------------------------------------
+
+def activity_hr_zone_chart(zone_secs: list[float], chart_id: str) -> html.Div | None:
+    """Horizontal bar chart of HR zone time for a single activity.
+
+    Same style as hr_zone_distribution_chart but for one session (minutes not hours).
+    """
+    if not zone_secs or sum(zone_secs) < 30:
+        return None
+
+    mins = [round(s / 60, 1) for s in zone_secs]
+    colors = [_HR_ZONE_COLORS.get(z, TEXT_MUTED) for z in range(1, 6)]
+    max_val = max(mins) if mins else 1
+
+    cfg: dict[str, Any] = {
+        "type": "bar",
+        "data": {
+            "labels": _HR_ZONE_LABELS,
+            "datasets": [{
+                "label": "Minutes",
+                "data": mins,
+                "backgroundColor": colors,
+                "borderRadius": 2,
+            }],
+        },
+        "options": {
+            "indexAxis": "y",
+            "plugins": {
+                "title": _title_cfg("HR Zones"),
+                "legend": {"display": False},
+            },
+            "scales": {
+                "x": {
+                    "beginAtZero": True, "min": 0,
+                    "title": {"display": True, "text": "Minutes"},
+                    "max": round(max_val * 1.15, 1) if max_val > 0 else 10,
+                },
+                "y": {},
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=180)
+
+
+def activity_hr_timeline_chart(
+    hr_points: list[tuple],
+    chart_id: str,
+    max_hr: int = 200,
+    zone_pct: list[float] | None = None,
+) -> html.Div | None:
+    """Line chart of HR over time for a single activity with zone background bands.
+
+    Same Chart.js style as hr_over_time_chart but for one session's FIT HR stream.
+    """
+    if not hr_points or len(hr_points) < 10:
+        return None
+
+    if zone_pct is None:
+        zone_pct = [0.60, 0.70, 0.80, 0.90]  # Z1/Z2, Z2/Z3, Z3/Z4, Z4/Z5
+
+    t0 = hr_points[0][0]
+    # Downsample to ~150 points for performance
+    step = max(1, len(hr_points) // 150)
+    sampled = hr_points[::step]
+
+    data_pts = []
+    for ts, hr in sampled:
+        t_min = (ts - t0).total_seconds() / 60
+        data_pts.append({"x": round(t_min, 2), "y": hr})
+
+    hrs = [p[1] for p in sampled]
+    min_hr = min(hrs)
+    max_hr_val = max(hrs)
+
+    # Zone boundary annotations (horizontal colored bands)
+    boundaries = [int(max_hr * p) for p in zone_pct]
+    zone_colors = [_HR_ZONE_COLORS.get(z, "#666") for z in range(1, 6)]
+    annotations = {}
+    prev_bpm = int(max_hr * 0.50)
+    for i, bpm in enumerate(boundaries + [max_hr]):
+        annotations[f"zone{i+1}"] = {
+            "type": "box",
+            "yMin": prev_bpm, "yMax": bpm,
+            "backgroundColor": zone_colors[i].replace(")", ", 0.06)").replace("rgb", "rgba")
+                if zone_colors[i].startswith("rgb") else zone_colors[i] + "10",
+            "borderWidth": 0,
+        }
+        prev_bpm = bpm
+
+    cfg: dict[str, Any] = {
+        "type": "line",
+        "data": {
+            "datasets": [{
+                "label": "Heart Rate",
+                "data": data_pts,
+                "borderColor": ACCENT_RED,
+                "borderWidth": 1.5,
+                "pointRadius": 0,
+                "fill": True,
+                "backgroundColor": _hex_to_rgba(ACCENT_RED, 0.08),
+                "tension": 0.3,
+            }],
+        },
+        "options": {
+            "plugins": {
+                "title": _title_cfg("Heart Rate"),
+                "legend": {"display": False},
+                "annotation": {"annotations": annotations},
+            },
+            "scales": {
+                "x": {
+                    "type": "linear",
+                    "title": {"display": True, "text": "Minutes"},
+                    "ticks": {"maxRotation": 0, "maxTicksLimit": 8},
+                },
+                "y": {
+                    "title": {"display": True, "text": "BPM"},
+                    "min": max(40, min_hr - 5),
+                    "max": max_hr_val + 5,
+                },
+            },
+        },
+    }
+    return _chart_wrap(chart_id, cfg, height=200)
