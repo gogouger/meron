@@ -40,10 +40,16 @@
             delete _maps[containerId];
         }
 
+        // Mini maps (height <= 160) are static previews — no interaction
+        var isMini = (cfg.height || 300) <= 160;
         var map = L.map(container, {
-            zoomControl: true,
-            scrollWheelZoom: true,
-            dragging: true,
+            zoomControl: !isMini,
+            scrollWheelZoom: !isMini,
+            dragging: !isMini,
+            doubleClickZoom: !isMini,
+            touchZoom: !isMini,
+            boxZoom: !isMini,
+            keyboard: !isMini,
             attributionControl: false,
         });
 
