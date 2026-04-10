@@ -238,7 +238,10 @@ def layout(**_kwargs):
         page_section("STRENGTH PROJECTION", [
             html.Div([
                 html.Div([
-                    strength_progression_chart(lift, prog_df),
+                    strength_progression_chart(
+                        lift, prog_df,
+                        projected=_build_1rm_projection(lift, str_proj, plan),
+                    ),
                 ], style={"flex": "1", "minWidth": "300px"})
                 for lift, prog_df in strength_trends.items()
             ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap"})
@@ -296,6 +299,26 @@ def layout(**_kwargs):
         cta_section("Now stop reading and go train."),
         footer(),
     ])
+
+
+def _build_1rm_projection(lift: str, str_proj: dict, plan_weeks: list) -> list:
+    """Build projected 1RM data points for the plan period (weekly)."""
+    import pandas as pd
+    proj = str_proj.get(lift, {})
+    current = proj.get("current", 0)
+    projected = proj.get("projected", 0)
+    if not current or not projected or not plan_weeks:
+        return []
+
+    n_weeks = len(plan_weeks)
+    points = []
+    for i, week in enumerate(plan_weeks):
+        # Linear interpolation from current to projected over build weeks
+        t = (i + 1) / n_weeks
+        val = current + (projected - current) * t
+        week_date = pd.Timestamp(week.start_date)
+        points.append({"date": week_date, "value": round(val, 1)})
+    return points
 
 
 def _now_vs_raceday_table(

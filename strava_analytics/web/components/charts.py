@@ -1561,8 +1561,12 @@ def mileage_progression_chart(mileage_df: pd.DataFrame,
 
 def strength_progression_chart(lift_name: str,
                                 progression_df: pd.DataFrame,
-                                chart_id: str | None = None) -> html.Div:
-    """1RM trend line for a single lift."""
+                                chart_id: str | None = None,
+                                projected: list | None = None) -> html.Div:
+    """1RM trend line for a single lift, with optional projected dashed line.
+
+    projected: list of {"date": Timestamp, "value": float} for future projections.
+    """
     if progression_df.empty:
         return _empty_chart(f"No {lift_name} data")
 
@@ -1574,11 +1578,10 @@ def strength_progression_chart(lift_name: str,
 
     # Tested maxes as larger dots
     tested = progression_df[progression_df["is_test"]]
-    estimated = progression_df[~progression_df["is_test"]]
 
     datasets = [
         {
-            "label": f"Estimated 1RM",
+            "label": "Estimated 1RM",
             "data": [
                 {"x": _ts(r["date"]), "y": round(r["estimated_1rm"], 1)}
                 for _, r in progression_df.iterrows()
@@ -1606,6 +1609,24 @@ def strength_progression_chart(lift_name: str,
             "pointHoverRadius": 8,
             "showLine": False,
             "pointStyle": "triangle",
+        })
+
+    # Projected dashed line (future estimates)
+    if projected:
+        # Connect from last real data point to projection
+        last_real = progression_df.iloc[-1]
+        proj_pts = [{"x": _ts(last_real["date"]), "y": round(last_real["estimated_1rm"], 1)}]
+        proj_pts += [{"x": _ts(p["date"]), "y": round(p["value"], 1)} for p in projected]
+        datasets.append({
+            "label": "Projected",
+            "data": proj_pts,
+            "borderColor": color,
+            "borderWidth": 2,
+            "borderDash": [6, 4],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
         })
 
     cfg = {
