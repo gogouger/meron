@@ -124,7 +124,7 @@ _hr_chart_counter = 0
 
 dash.register_page(__name__, path="/activities", name="Activities")
 
-_PAGE_SIZE = 50
+_PAGE_SIZE = 15
 
 
 # ── Card builders ─────────────────────────────────────────────────────
@@ -567,13 +567,10 @@ def layout(**_kwargs):
                 f"Show All ({len(hidden)} more)",
                 id="show-all-activities-btn",
                 n_clicks=0,
+                className="btn-ghost",
                 style={
                     "display": "block" if hidden else "none",
                     "margin": "20px auto",
-                    "padding": "10px 24px",
-                    "fontSize": "14px", "fontWeight": "600",
-                    "color": TEXT_PRIMARY, "backgroundColor": BG_CARD,
-                    "border": f"1px solid {BORDER}", "cursor": "pointer",
                 },
             ),
         ]),
