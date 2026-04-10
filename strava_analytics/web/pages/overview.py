@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html, dcc, callback, Output, Input, State
 import pandas as pd
 
 from strava_analytics.web import data
@@ -237,11 +237,13 @@ def _build_month(year: int, month: int, daily: dict, latest, month_label_text: s
     })
 
 
-def _activity_calendar(df: pd.DataFrame, months: int = 3) -> html.Div:
-    """Strava-style HTML/CSS activity calendar — outlined circles with accent dots."""
+def _activity_calendar(df: pd.DataFrame, months: int = 3, offset: int = 0) -> html.Div:
+    """Strava-style HTML/CSS activity calendar — outlined circles with accent dots.
+
+    offset: number of months to shift back from the latest month (0 = current).
+    """
     if df.empty:
         return html.P("No activity data.", style={"color": TEXT_MUTED})
-
 
     daily = {}
     for _, row in df.iterrows():
@@ -256,9 +258,12 @@ def _activity_calendar(df: pd.DataFrame, months: int = 3) -> html.Div:
 
     latest = df["date"].max().date() if hasattr(df["date"].max(), "date") else df["date"].max()
 
-    # Collect month starts (most recent N)
+    # Collect month starts (most recent N, shifted by offset)
     month_starts = []
     d = date(latest.year, latest.month, 1)
+    # Shift back by offset months
+    for _ in range(offset):
+        d = (d - timedelta(days=1)).replace(day=1)
     for _ in range(months):
         month_starts.append(d)
         d = (d - timedelta(days=1)).replace(day=1)
@@ -635,9 +640,23 @@ def layout(**_kwargs):
         # Year in Review
         _year_section(df),
 
-        # Activity calendar
+        # Activity calendar with month navigation
         page_section("ACTIVITY", [
-            _activity_calendar(df),
+            html.Div([
+                html.Button("\u2190", id="cal-prev", n_clicks=0, style={
+                    "background": "none", "border": f"1px solid {BORDER}",
+                    "color": TEXT_SECONDARY, "padding": "4px 12px",
+                    "cursor": "pointer", "fontSize": "16px", "borderRadius": "4px",
+                }),
+                html.Button("\u2192", id="cal-next", n_clicks=0, style={
+                    "background": "none", "border": f"1px solid {BORDER}",
+                    "color": TEXT_SECONDARY, "padding": "4px 12px",
+                    "cursor": "pointer", "fontSize": "16px", "borderRadius": "4px",
+                }),
+            ], style={"display": "flex", "gap": "8px", "justifyContent": "center",
+                      "marginBottom": "16px"}),
+            dcc.Store(id="cal-offset", data=0),
+            html.Div(id="cal-container", children=_activity_calendar(df, months=3, offset=0)),
         ]),
 
         # CTA
@@ -653,3 +672,25 @@ def layout(**_kwargs):
 
 
 charts.register_chart_callback("fatigue")
+
+
+# Calendar month navigation
+@callback(
+    Output("cal-container", "children"),
+    Output("cal-offset", "data"),
+    Input("cal-prev", "n_clicks"),
+    Input("cal-next", "n_clicks"),
+    State("cal-offset", "data"),
+    prevent_initial_call=True,
+)
+def navigate_calendar(prev_clicks, next_clicks, current_offset):
+    from dash import ctx
+    triggered = ctx.triggered_id
+    if triggered == "cal-prev":
+        new_offset = current_offset + 1
+    elif triggered == "cal-next":
+        new_offset = max(0, current_offset - 1)
+    else:
+        new_offset = current_offset
+    df = data.get_df()
+    return _activity_calendar(df, months=3, offset=new_offset), new_offset
