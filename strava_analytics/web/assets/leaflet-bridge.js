@@ -84,6 +84,49 @@
     function scanMaps() {
         var els = document.querySelectorAll("[data-mapcfg]:not([data-maprendered])");
         for (var i = 0; i < els.length; i++) renderMap(els[i]);
+        // Also scan for standalone heatmaps
+        scanHeatmaps();
+    }
+
+    function scanHeatmaps() {
+        var els = document.querySelectorAll("[data-heatmap]:not([data-maprendered])");
+        for (var i = 0; i < els.length; i++) renderHeatmap(els[i]);
+    }
+
+    function renderHeatmap(el) {
+        if (el.getAttribute("data-maprendered")) return;
+        if (typeof L === "undefined" || typeof L.heatLayer !== "function") return;
+
+        var containerId = "run-heatmap-map";
+        var container = document.getElementById(containerId);
+        if (!container) return;
+        if (container.offsetHeight < 10) return; // not visible yet
+
+        el.setAttribute("data-maprendered", "1");
+        container.style.height = "400px";
+
+        var map = L.map(container, {
+            zoomControl: true, scrollWheelZoom: true,
+            dragging: true, attributionControl: false,
+        });
+
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+            maxZoom: 19, subdomains: "abcd",
+        }).addTo(map);
+
+        // Fetch precomputed heat data
+        fetch("/assets/heatmap-data.json")
+            .then(function(r) { return r.json(); })
+            .then(function(heatData) {
+                if (!heatData || !heatData.length) return;
+                L.heatLayer(heatData, {
+                    radius: 6, blur: 10, maxZoom: 16,
+                    gradient: {0.2: "#2563eb", 0.5: "#f59e0b", 0.8: "#ef4444", 1.0: "#ffffff"},
+                }).addTo(map);
+                var bounds = L.latLngBounds(heatData.map(function(p) { return [p[0], p[1]]; }));
+                map.fitBounds(bounds, { padding: [20, 20] });
+            })
+            .catch(function(e) { console.warn("Heatmap data fetch failed:", e); });
     }
 
     function init() {

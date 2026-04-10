@@ -611,7 +611,7 @@ def layout(**_kwargs):
 
 
 def _heatmap_section(runs: pd.DataFrame) -> html.Div:
-    """Route heatmap — all run GPS data overlaid on one map."""
+    """Route heatmap — precompute heat data to a static JSON file, load via JS."""
     import json
     from pathlib import Path
 
@@ -632,7 +632,7 @@ def _heatmap_section(runs: pd.DataFrame) -> html.Div:
     if not fps:
         return html.Div()
 
-    # Aggregate GPS points from fingerprints (subsample every 3rd point to keep JSON small)
+    # Precompute heat data and write to assets folder as static JSON
     heat_data = []
     for fn, fp in fps.items():
         pts = fp.get("points", [])
@@ -643,28 +643,28 @@ def _heatmap_section(runs: pd.DataFrame) -> html.Div:
     if len(heat_data) < 10:
         return html.Div()
 
-    map_cfg = json.dumps({
-        "heatData": heat_data,
-        "heatRadius": 6,
-        "heatBlur": 10,
-        "heatMaxZoom": 16,
-        "height": 400,
-    })
-
-    map_id = "run-heatmap"
+    # Write to assets so JS can fetch it
+    assets_dir = Path(__file__).parent.parent / "assets"
+    heat_path = assets_dir / "heatmap-data.json"
+    try:
+        heat_path.write_text(json.dumps(heat_data, separators=(",", ":")))
+    except Exception:
+        return html.Div()
 
     return page_section("ROUTE HEATMAP", [
         html.P(f"{len(fps)} routes overlaid. Brighter = more frequently run.",
                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
                       "marginBottom": "12px"}),
         html.Div(
-            html.Div(id=f"{map_id}-map", className="leaflet-map-box"),
+            html.Div(id="run-heatmap-map", className="leaflet-map-box",
+                     style={"height": "400px"}),
+            id="run-heatmap-wrap",
             className="leaflet-map-wrap",
             style={
                 "width": "100%", "borderRadius": "8px", "overflow": "hidden",
                 "border": f"1px solid {BORDER}",
             },
-            **{"data-mapcfg": map_cfg, "data-mapid": f"{map_id}-map"},
+            **{"data-heatmap": "true"},
         ),
     ], alt_bg=True)
 
