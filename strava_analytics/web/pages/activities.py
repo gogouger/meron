@@ -53,6 +53,88 @@ def _lift_icon(lift_name: str, size: int = 28) -> html.Div:
     )
 
 
+# ── SVG Mini-map from cached route fingerprints ─────────────────────
+
+_route_fingerprints: dict | None = None
+
+
+def _load_route_fingerprints() -> dict:
+    """Load cached route fingerprints (50-point GPS coords per route)."""
+    global _route_fingerprints
+    if _route_fingerprints is not None:
+        return _route_fingerprints
+
+    import json
+    export_dir = data.get_export_dir()
+    if export_dir is None:
+        _route_fingerprints = {}
+        return _route_fingerprints
+
+    index_path = export_dir / "route_index.json"
+    if not index_path.exists():
+        _route_fingerprints = {}
+        return _route_fingerprints
+
+    try:
+        raw = json.loads(index_path.read_text())
+        _route_fingerprints = raw.get("fingerprints", {})
+    except Exception:
+        _route_fingerprints = {}
+    return _route_fingerprints
+
+
+def _svg_mini_map(filename: str, width: int = 120, height: int = 80) -> html.Div | None:
+    """Render a tiny SVG polyline map from cached route fingerprint."""
+    fps = _load_route_fingerprints()
+    fp = fps.get(filename)
+    if not fp or not fp.get("points"):
+        return None
+
+    pts = fp["points"]  # [[lat, lon], ...]
+    if len(pts) < 3:
+        return None
+
+    # Project lat/lon to simple x/y (equirectangular, good enough for mini-map)
+    lats = [p[0] for p in pts]
+    lons = [p[1] for p in pts]
+    min_lat, max_lat = min(lats), max(lats)
+    min_lon, max_lon = min(lons), max(lons)
+
+    # Add padding
+    pad = 0.1
+    lat_range = max_lat - min_lat or 0.001
+    lon_range = max_lon - min_lon or 0.001
+
+    # Scale to SVG viewport with padding
+    svg_points = []
+    for lat, lon in pts:
+        x = pad * width + (lon - min_lon) / lon_range * width * (1 - 2 * pad)
+        y = pad * height + (1 - (lat - min_lat) / lat_range) * height * (1 - 2 * pad)
+        svg_points.append(f"{x:.1f},{y:.1f}")
+
+    polyline = " ".join(svg_points)
+    svg = (
+        f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg"'
+        f' style="width:{width}px;height:{height}px">'
+        f'<polyline points="{polyline}" fill="none" '
+        f'stroke="{ACCENT_SLATE}" stroke-width="1.5" stroke-linecap="round" '
+        f'stroke-linejoin="round" opacity="0.8"/>'
+        f'</svg>'
+    )
+
+    return html.Div(
+        style={
+            "width": f"{width}px", "height": f"{height}px",
+            "flexShrink": "0", "opacity": "0.7",
+            "borderRadius": "4px",
+            "backgroundColor": "var(--surface, #1c1917)",
+            "border": f"1px solid {BORDER}",
+            "overflow": "hidden",
+        },
+        **{"data-svg-icon": svg},
+    )
+
+
 def _inline_hr_zone_bar(row) -> html.Div | None:
     """Inline horizontal stacked bar showing HR zone distribution for one activity."""
     zone_secs = []
@@ -176,14 +258,12 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         if zone_bar:
             detail_content.append(zone_bar)
 
-        # Route indicator in summary + lazy route loading in detail
+        # Mini-map in summary + full route loading in detail
         filename = row.get("filename", "")
         if filename and str(filename).endswith(".fit.gz"):
-            primary.append(html.Span("\u2022 Route", style={
-                "fontSize": "11px", "color": ACCENT_SLATE,
-                "fontWeight": "500", "whiteSpace": "nowrap",
-                "alignSelf": "center",
-            }))
+            mini_map = _svg_mini_map(str(filename))
+            if mini_map:
+                primary.append(mini_map)
             route_key = f"{date_id}-{idx}"
             detail_content.append(html.Button(
                 "", id={"type": "act-route-btn", "index": route_key},
