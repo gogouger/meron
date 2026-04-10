@@ -1095,6 +1095,12 @@ def _single_race_chart(
     y_lim = _val_limits(edf["est_time_min"], pad_frac=0.05)
     y_label = f"{label} Time (min)" if target_m <= 10_000 else f"{label} Time (hr:min)"
 
+    # Extend x-axis to include projected dates if present
+    all_dates = edf["date"]
+    if projected:
+        proj_dates = pd.Series([p["date"] for p in projected])
+        all_dates = pd.concat([all_dates, proj_dates])
+
     cfg: dict[str, Any] = {
         "type": "scatter",
         "data": {"datasets": datasets},
@@ -1108,7 +1114,7 @@ def _single_race_chart(
                 "x": {
                     "type": "time", "time": {"unit": "month"},
                     "ticks": {"maxRotation": 0, "maxTicksLimit": 10},
-                    **_time_limits(edf["date"]),
+                    **_time_limits(all_dates),
                 },
                 "y": {
                     "reverse": True,
