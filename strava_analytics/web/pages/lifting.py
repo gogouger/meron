@@ -203,9 +203,6 @@ def _progress_table(baseline: dict, end_prs: dict) -> html.Div:
             delta_str = ""
             delta_color = TEXT_MUTED
 
-        # Progress bar (0-100% based on gain capped at 20%)
-        bar_pct = min(100, max(0, ((curr_val / base_val) - 1) * 500)) if base_val and curr_val else 0
-
         lift_color = LIFT_COLORS.get(label.lower(), TEXT_MUTED)
 
         rows.append(html.Div([
@@ -229,19 +226,6 @@ def _progress_table(baseline: dict, end_prs: dict) -> html.Div:
                 "fontWeight": "600", "color": delta_color,
                 "minWidth": "50px", "textAlign": "right",
             }),
-            html.Div(
-                html.Div(style={
-                    "width": f"{bar_pct}%", "height": "100%",
-                    "backgroundColor": lift_color, "opacity": "0.4",
-                    "borderRadius": "2px",
-                }),
-                style={
-                    "flex": "1", "height": "4px", "minWidth": "60px",
-                    "backgroundColor": BORDER, "borderRadius": "2px",
-                    "overflow": "hidden", "marginLeft": "12px",
-                    "alignSelf": "center",
-                },
-            ) if bar_pct > 0 else html.Div(style={"flex": "1"}),
         ], style={
             "display": "flex", "alignItems": "baseline",
             "padding": "10px 0",
