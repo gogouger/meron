@@ -53,9 +53,22 @@
             attributionControl: false,
         });
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
-            maxZoom: 19, subdomains: "abcd",
-        }).addTo(map);
+        // Tile layers with switcher
+        var baseLayers = {
+            "Light": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Dark": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Street": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+        };
+        baseLayers["Light"].addTo(map);
+        if (!isMini) {
+            L.control.layers(baseLayers, null, {position: "topright", collapsed: true}).addTo(map);
+        }
 
         // Heat layer (if heatData provided and L.heatLayer available)
         if (cfg.heatData && cfg.heatData.length && typeof L.heatLayer === "function") {
@@ -110,9 +123,19 @@
             dragging: true, attributionControl: false,
         });
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
-            maxZoom: 19, subdomains: "abcd",
-        }).addTo(map);
+        var heatBaseLayers = {
+            "Light": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Dark": L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+            "Street": L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+                maxZoom: 19, subdomains: "abcd",
+            }),
+        };
+        heatBaseLayers["Light"].addTo(map);
+        L.control.layers(heatBaseLayers, null, {position: "topright", collapsed: true}).addTo(map);
 
         // Fetch precomputed route data and draw each as a semi-transparent polyline
         fetch("/assets/heatmap-data.json")
