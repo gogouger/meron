@@ -380,77 +380,78 @@ def generate_training_plan(
     race1_date: date,
     race2_date: date,
     current_1rms: dict | None = None,
-    current_weekly_miles: float = 17.0,
+    current_weekly_miles: float = 20.0,
+    target_peak_miles: float = 27.0,
     current_ctl: float | None = None,
     target_ctl: float | None = None,
 ) -> list[TrainingWeek]:
-    """Generate the full 8-week periodized training plan.
+    """Generate an 8-week periodized plan with deload weeks.
 
-    When current_ctl and target_ctl are provided, uses CTL-target-driven
-    mileage progression. Otherwise falls back to percentage-based scaling.
-    Weekly mileage increase is capped at 10% (injury prevention).
+    Progression: Build → Build → Deload → Build → Peak → Taper → Taper → Race
+
+    Mileage builds from current level to target_peak_miles with a deload
+    week every 3rd week (3:1 build-to-deload ratio). Lifting maintains
+    or builds slightly during build weeks, reduces during deload and taper.
 
     Args:
         start_date: First day of the plan.
-        race1_date: First race date.
-        race2_date: Second race date.
+        race1_date: First race date (Boulder Bolder 10K).
+        race2_date: Second race date (Spartan Beast).
         current_1rms: Current estimated 1RM for each lift.
         current_weekly_miles: Current weekly running volume.
-        current_ctl: Current CTL (chronic training load). Optional.
-        target_ctl: Desired CTL at peak build. Optional.
+        target_peak_miles: Peak weekly mileage target.
+        current_ctl: Current CTL (optional, used for projections).
+        target_ctl: Target CTL (optional).
     """
     if current_1rms is None:
         current_1rms = {"bench": 225, "squat": 305, "deadlift": 405, "ohp": 110}
 
+    # 8-week structure with deload and taper
+    # Phase: build, build, deload, build, peak, taper, taper, race
+    base = current_weekly_miles
+    peak = target_peak_miles
+
+    week_plan = [
+        # (phase,  miles,                    lift_pct, lift_sets, lift_reps, template)
+        ("build1", round(base * 1.05, 1),    0.80,     3,         5,        "build1"),   # Wk 1
+        ("build1", round(base * 1.15, 1),    0.82,     3,         5,        "build1"),   # Wk 2
+        ("deload", round(base * 0.85, 1),    0.70,     2,         5,        "build1"),   # Wk 3: deload
+        ("build2", round(peak * 0.93, 1),    0.82,     3,         4,        "build2"),   # Wk 4
+        ("build2", round(peak, 1),           0.80,     2,         4,        "build2"),   # Wk 5: peak
+        ("taper",  round(peak * 0.70, 1),    0.75,     2,         3,        "taper"),    # Wk 6
+        ("taper",  round(peak * 0.45, 1),    0.70,     1,         3,        "taper"),    # Wk 7
+        ("race",   8.0,                      0.60,     0,         0,        "race"),     # Wk 8
+    ]
+
     weeks = []
-
-    # Compute build mileage progression
-    if current_ctl is not None and target_ctl is not None:
-        # CTL-driven: derive mileage from target CTL
-        build_mileages = _compute_build_mileage(
-            current_weekly_miles, current_ctl, target_ctl, n_build_weeks=5,
-        )
-        # Pad if needed
-        while len(build_mileages) < 5:
-            build_mileages.append(build_mileages[-1] if build_mileages else current_weekly_miles)
-    else:
-        # Fallback: percentage-based (original logic, capped at 10%)
-        build_mileages = []
-        prev = current_weekly_miles
-        for i in range(3):
-            target = current_weekly_miles * (1.0 + 0.06 * i)
-            target = min(target, prev * (1 + _MAX_WEEKLY_INCREASE_PCT))
-            build_mileages.append(round(target, 1))
-            prev = target
-        # Build 2: peak then hold
-        for i in range(2):
-            target = current_weekly_miles * (1.12 - 0.02 * i)
-            target = min(target, prev * (1 + _MAX_WEEKLY_INCREASE_PCT))
-            build_mileages.append(round(target, 1))
-            prev = target
-
-    peak_miles = max(build_mileages) if build_mileages else current_weekly_miles
-
-    # Build 1: weeks 1-3
-    for i in range(3):
+    for i, (phase, miles, lift_pct, lift_sets, lift_reps, template) in enumerate(week_plan):
         week_start = start_date + timedelta(weeks=i)
-        miles = build_mileages[i]
-        weeks.append(_build1_week(i + 1, week_start, current_1rms, miles))
+        week_num = i + 1
 
-    # Build 2: weeks 4-5
-    for i in range(2):
-        week_start = start_date + timedelta(weeks=3 + i)
-        miles = build_mileages[3 + i]
-        weeks.append(_build2_week(4 + i, week_start, current_1rms, miles))
+        # Override lift calculations for this week
+        override_1rms = {}
+        for lift, max_val in current_1rms.items():
+            wt = round(max_val * lift_pct / 5) * 5
+            override_1rms[lift] = {"pct": lift_pct, "working_weight": wt,
+                                   "sets": lift_sets, "reps": lift_reps}
 
-    # Taper: weeks 6-7 — Mujika & Padilla (2003): 60-90% volume reduction
-    for i in range(2):
-        week_start = start_date + timedelta(weeks=5 + i)
-        miles = peak_miles * (0.60 - 0.20 * i)  # ~60% → ~40% of peak
-        weeks.append(_taper_week(6 + i, week_start, current_1rms, miles, i + 1))
+        if template == "build1":
+            tw = _build1_week(week_num, week_start, current_1rms, miles)
+            tw.phase = phase
+            if phase == "deload":
+                tw.phase_label = "Deload — Recovery Week"
+                tw.lift_sessions = 2
+        elif template == "build2":
+            tw = _build2_week(week_num, week_start, current_1rms, miles)
+            tw.phase = phase
+        elif template == "taper":
+            tw = _taper_week(week_num, week_start, current_1rms, miles, i - 4)
+            tw.phase = phase
+        else:
+            tw = _race_week(week_num, week_start)
 
-    # Race week 8
-    weeks.append(_race_week(8, start_date + timedelta(weeks=7)))
+        tw.target_miles = miles
+        weeks.append(tw)
 
     return weeks
 
