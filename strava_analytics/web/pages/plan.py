@@ -220,73 +220,22 @@ def layout(**_kwargs):
         dcc.Download(id="ics-download"),
         dcc.Store(id="ics-store", data=ics_content),
 
-        # ── WHERE YOU ARE NOW vs WHERE YOU'LL BE ──
+        # ── NOW vs RACE DAY (compact table) ──
         page_section("NOW \u2192 RACE DAY", [
-            html.Div([
-                # Current state
-                html.Div([
-                    html.Div("NOW", style={
-                        "fontSize": "10px", "fontWeight": "600",
-                        "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": TEXT_MUTED, "marginBottom": "12px",
-                    }),
-                    _metric_row("Weekly Miles", f"{current_miles:.0f}", "mi"),
-                    _metric_row("10K", _fmt_time(cs_10k_s / 60) if cs_10k_s else "--", ""),
-                    _metric_row("5K", _fmt_time(cs_5k_s / 60) if cs_5k_s else "--", ""),
-                    _metric_row("Bench", f"{current_1rms.get('bench', 0)}", "lb"),
-                    _metric_row("Squat", f"{current_1rms.get('squat', 0)}", "lb"),
-                    _metric_row("CTL", f"{fitness['ctl']:.0f}", ""),
-                    _metric_row("TSB", f"{fitness['tsb']:+.0f}", fitness["label"]),
-                ], style={"flex": "1", "minWidth": "200px"}),
-
-                # Arrow
-                html.Div("\u2192", style={
-                    "fontSize": "32px", "color": TEXT_MUTED,
-                    "display": "flex", "alignItems": "center",
-                    "padding": "0 24px",
-                }),
-
-                # Projected state
-                html.Div([
-                    html.Div("RACE DAY", style={
-                        "fontSize": "10px", "fontWeight": "600",
-                        "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": ACCENT, "marginBottom": "12px",
-                    }),
-                    _metric_row("Peak Miles", f"{target_peak:.0f}", "mi"),
-                    _metric_row("10K", _fmt_time(proj_10k.get("projected_min", 0)) if proj_10k else "--",
-                                f"{proj_10k.get('delta_pct', 0):+.1f}%" if proj_10k else ""),
-                    _metric_row("5K", _fmt_time(proj_5k.get("projected_min", 0)) if proj_5k else "--",
-                                f"{proj_5k.get('delta_pct', 0):+.1f}%" if proj_5k else ""),
-                    _metric_row("Bench", f"{str_proj.get('bench', {}).get('projected', 0)}", "lb"),
-                    _metric_row("Squat", f"{str_proj.get('squat', {}).get('projected', 0)}", "lb"),
-                    _metric_row("CTL", f"{rd1.get('ctl', 0):.0f}" if rd1 else "--", ""),
-                    _metric_row("TSB", f"{rd1.get('tsb', 0):+.0f}" if rd1 else "--",
-                                rd1.get("readiness_label", "") if rd1 else ""),
-                ], style={"flex": "1", "minWidth": "200px"}),
-            ], style={
-                "display": "flex", "gap": "0", "justifyContent": "center",
-                "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-                "padding": "24px", "borderRadius": "6px",
-            }),
+            _now_vs_raceday_table(
+                current_miles, target_peak, cs_5k_s, cs_10k_s,
+                proj_5k, proj_10k, current_1rms, str_proj,
+                fitness, rd1,
+            ),
         ]),
 
         # ── MILEAGE BUILD ──
         page_section("MILEAGE BUILD", [
-            html.P(f"Progressive build with deload week 3. Peak at {target_peak:.0f} mi, taper to 8.",
-                   style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "12px"}),
             mileage_progression_chart(mileage),
         ], alt_bg=True),
 
-        # ── FITNESS & FRESHNESS ──
-        page_section("FITNESS & FRESHNESS", [
-            fitness_freshness_chart(projected, race_dates=[_RACE1_DATE, _RACE2_DATE]),
-        ]),
-
-        # ── STRENGTH TRENDS ──
+        # ── STRENGTH PROJECTION ──
         page_section("STRENGTH PROJECTION", [
-            html.P("Maintaining/building slightly while increasing running volume.",
-                   style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "12px"}),
             html.Div([
                 html.Div([
                     strength_progression_chart(lift, prog_df),
@@ -295,7 +244,7 @@ def layout(**_kwargs):
             ], style={"display": "flex", "gap": "16px", "flexWrap": "wrap"})
             if strength_trends else
             html.P("No lifting data.", style={"color": TEXT_MUTED}),
-        ], alt_bg=True),
+        ]),
 
         # ── RACE READINESS ──
         page_section("RACE READINESS", [
@@ -305,13 +254,13 @@ def layout(**_kwargs):
                 ],
                 style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
             ),
-        ]),
+        ], alt_bg=True),
 
         # ── COMPLIANCE ──
         *(
             [page_section("COMPLIANCE", [
                 compliance_bar(compliance_data["pct"]),
-            ], alt_bg=True)]
+            ])]
             if compliance_data["total_planned"] > 0 else []
         ),
 
@@ -319,11 +268,16 @@ def layout(**_kwargs):
         page_section("THE PLAN", [
             enhanced_plan_calendar(flat, compliance_data),
             _legend(),
-        ]),
+        ], alt_bg=True),
 
         # ── WEEK BY WEEK ──
         page_section("WEEK BY WEEK", [
             *[_phase_section(week, today) for week in plan],
+        ]),
+
+        # ── FITNESS & FRESHNESS (last — supplementary detail) ──
+        page_section("FITNESS & FRESHNESS", [
+            fitness_freshness_chart(projected, race_dates=[_RACE1_DATE, _RACE2_DATE]),
         ], alt_bg=True),
 
         # Science
@@ -342,6 +296,79 @@ def layout(**_kwargs):
         cta_section("Now stop reading and go train."),
         footer(),
     ])
+
+
+def _now_vs_raceday_table(
+    current_miles, target_peak, cs_5k_s, cs_10k_s,
+    proj_5k, proj_10k, current_1rms, str_proj,
+    fitness, rd1,
+) -> html.Div:
+    """Compact table: metric | now | race day | delta."""
+    rows_data = [
+        ("Weekly Miles", f"{current_miles:.0f} mi", f"{target_peak:.0f} mi",
+         f"+{((target_peak / current_miles) - 1) * 100:.0f}%" if current_miles else ""),
+        ("5K", _fmt_time(cs_5k_s / 60) if cs_5k_s else "--",
+         _fmt_time(proj_5k.get("projected_min", 0)) if proj_5k else "--",
+         f"{proj_5k.get('delta_pct', 0):+.1f}%" if proj_5k else ""),
+        ("10K", _fmt_time(cs_10k_s / 60) if cs_10k_s else "--",
+         _fmt_time(proj_10k.get("projected_min", 0)) if proj_10k else "--",
+         f"{proj_10k.get('delta_pct', 0):+.1f}%" if proj_10k else ""),
+        ("Bench", f"{current_1rms.get('bench', 0)} lb",
+         f"{str_proj.get('bench', {}).get('projected', 0)} lb",
+         f"{str_proj.get('bench', {}).get('delta_pct', 0):+.1f}%"),
+        ("Squat", f"{current_1rms.get('squat', 0)} lb",
+         f"{str_proj.get('squat', {}).get('projected', 0)} lb",
+         f"{str_proj.get('squat', {}).get('delta_pct', 0):+.1f}%"),
+        ("Fitness (CTL)", f"{fitness['ctl']:.0f}",
+         f"{rd1.get('ctl', 0):.0f}" if rd1 else "--", ""),
+        ("Form (TSB)", f"{fitness['tsb']:+.0f} ({fitness['label']})",
+         f"{rd1.get('tsb', 0):+.0f} ({rd1.get('readiness_label', '')})" if rd1 else "--", ""),
+    ]
+
+    header = html.Div([
+        html.Span("", style={"flex": "2"}),
+        html.Span("Now", style={
+            "flex": "2", "fontSize": "10px", "fontWeight": "600",
+            "textTransform": "uppercase", "letterSpacing": "0.08em",
+            "color": TEXT_MUTED, "textAlign": "right",
+        }),
+        html.Span("Race Day", style={
+            "flex": "2", "fontSize": "10px", "fontWeight": "600",
+            "textTransform": "uppercase", "letterSpacing": "0.08em",
+            "color": ACCENT, "textAlign": "right",
+        }),
+        html.Span("", style={"flex": "1"}),
+    ], style={"display": "flex", "padding": "0 0 8px 0",
+              "borderBottom": f"1px solid {BORDER}"})
+
+    rows = []
+    for label, now_val, proj_val, delta in rows_data:
+        is_positive = delta.startswith("+") if delta else False
+        delta_color = ACCENT_SLATE if is_positive else ACCENT_RED if delta.startswith("-") else TEXT_MUTED
+        rows.append(html.Div([
+            html.Span(label, style={
+                "flex": "2", "fontSize": "12px", "color": TEXT_SECONDARY,
+            }),
+            html.Span(now_val, style={
+                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "13px",
+                "textAlign": "right", "color": TEXT_MUTED,
+            }),
+            html.Span(proj_val, style={
+                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "13px",
+                "fontWeight": "600", "textAlign": "right",
+            }),
+            html.Span(delta, style={
+                "flex": "1", "fontFamily": FONT_MONO, "fontSize": "11px",
+                "color": delta_color, "textAlign": "right",
+            }),
+        ], style={"display": "flex", "padding": "6px 0",
+                  "borderBottom": f"1px solid {BORDER}",
+                  "alignItems": "baseline"}))
+
+    return html.Div([header, *rows], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "borderRadius": "6px", "padding": "12px 16px",
+    })
 
 
 def _metric_row(label: str, value: str, unit: str) -> html.Div:
