@@ -261,11 +261,6 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
                 "marginTop": "12px", "fontStyle": "italic",
             }))
 
-        # Inline HR zone bar for this run
-        zone_bar = _inline_hr_zone_bar(row)
-        if zone_bar:
-            detail_content.append(zone_bar)
-
         # Mini-map as separate block below stats + full route loading in detail
         filename = row.get("filename", "")
         if filename and str(filename).endswith(".fit.gz"):
