@@ -982,8 +982,13 @@ _RACE_DISTANCES = [
 def _single_race_chart(
     runs: pd.DataFrame, target_m: int, label: str, chart_id: str,
     best_efforts: pd.DataFrame | None = None,
+    projected: list | None = None,
 ) -> html.Div:
-    """Build a race prediction chart using Critical Speed model + best efforts."""
+    """Build a race prediction chart using Critical Speed model + best efforts.
+
+    projected: optional list of {"date": Timestamp, "time_min": float} for
+    future race time projections (rendered as dashed line).
+    """
     from strava_analytics.critical_speed import fit_critical_speed, predict_time_cs
     from strava_analytics.vo2max import daniels_vdot, vdot_to_race_time
 
@@ -1066,6 +1071,25 @@ def _single_race_chart(
             "showLine": True,
             "fill": False,
             "tension": 0.4,
+        })
+
+    # Projected dashed line (future race time estimates)
+    if projected:
+        # Connect from last trend point to projection
+        last_date = edf["date"].max()
+        last_trend_val = trend.iloc[-1]["rolling_best"] if not trend.empty else edf["est_time_min"].median()
+        proj_pts = [{"x": _ts(last_date), "y": round(last_trend_val, 2)}]
+        proj_pts += [{"x": _ts(p["date"]), "y": round(p["time_min"], 2)} for p in projected]
+        datasets.append({
+            "label": "Projected",
+            "data": proj_pts,
+            "borderColor": ACCENT,
+            "borderWidth": 2,
+            "borderDash": [6, 4],
+            "pointRadius": 0,
+            "showLine": True,
+            "fill": False,
+            "tension": 0.3,
         })
 
     y_lim = _val_limits(edf["est_time_min"], pad_frac=0.05)
@@ -1697,7 +1721,27 @@ def enhanced_plan_calendar(plan_rows: list[dict],
             compliance_map[key] = entry["completed"]
 
     today = date_type.today()
-    day_names = ["M", "T", "W", "T", "F", "S", "S"]
+    day_names = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+
+    # Pre-compute weekly summary data (miles planned + lifts per week)
+    week_summary = {}
+    for row in plan_rows:
+        d = row["date"]
+        if hasattr(d, "isocalendar"):
+            wk = d.isocalendar()[1]
+        else:
+            import datetime as _dt
+            wk = _dt.date.fromisoformat(str(d)).isocalendar()[1]
+        if wk not in week_summary:
+            week_summary[wk] = {"miles": 0.0, "lifts": 0}
+        if row.get("type") == "lift":
+            week_summary[wk]["lifts"] += 1
+        # Estimate miles from title (e.g., "Easy Run — 2.5 mi")
+        title = row.get("title", "")
+        import re as _re
+        m = _re.search(r'([\d.]+)\s*mi', title)
+        if m and row.get("type") == "run":
+            week_summary[wk]["miles"] += float(m.group(1))
 
     # Get unique months in plan
     df["month_key"] = df["date"].dt.to_period("M")
@@ -1714,15 +1758,20 @@ def enhanced_plan_calendar(plan_rows: list[dict],
         # Find the weekday of the 1st (0=Mon)
         first_weekday = date_type(year, mo, 1).weekday()
 
-        # Header
-        header = html.Div([
+        # Header with 8th summary column
+        header_cells = [
             html.Div(day_names[i], style={
                 "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
                 "color": TEXT_MUTED, "padding": "6px 0",
                 "letterSpacing": "0.08em",
             }) for i in range(7)
-        ], style={
-            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+        ]
+        header_cells.append(html.Div("Wk", style={
+            "textAlign": "center", "fontSize": "10px", "fontWeight": "600",
+            "color": TEXT_MUTED, "padding": "6px 0",
+        }))
+        header = html.Div(header_cells, style={
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr) 56px",
             "gap": "3px",
         })
 
@@ -1850,14 +1899,58 @@ def enhanced_plan_calendar(plan_rows: list[dict],
                 strip,
             ], style=cell_style))
 
-        # Trailing empty cells
+        # Trailing empty cells to complete last week row
         total_cells = first_weekday + days_in_month
         trailing = (7 - total_cells % 7) % 7
         for _ in range(trailing):
             cells.append(html.Div(style={"minHeight": "72px"}))
 
-        grid = html.Div(cells, style={
-            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr)",
+        # Insert weekly summary cells (8th column) after every 7 day cells
+        grid_cells = []
+        for i in range(0, len(cells), 7):
+            week_row = cells[i:i+7]
+            grid_cells.extend(week_row)
+
+            # Compute week summary from plan data for these 7 days
+            wk_miles = 0.0
+            wk_lifts = 0
+            for cell_idx in range(i, min(i + 7, len(cells))):
+                # Map cell index back to actual date
+                day_num = cell_idx - first_weekday + 1
+                if 1 <= day_num <= days_in_month:
+                    d = date_type(year, mo, day_num)
+                    day_wk = month_df[month_df["date"].dt.date == d]
+                    for _, wr in day_wk.iterrows():
+                        if wr["type"] == "lift":
+                            wk_lifts += 1
+                        if wr["type"] == "run":
+                            title = wr.get("title", "")
+                            import re as _re2
+                            m2 = _re2.search(r'([\d.]+)\s*mi', title)
+                            if m2:
+                                wk_miles += float(m2.group(1))
+
+            summary_text = []
+            if wk_miles > 0:
+                summary_text.append(f"{wk_miles:.0f} mi")
+            if wk_lifts > 0:
+                summary_text.append(f"{wk_lifts} lift{'s' if wk_lifts > 1 else ''}")
+
+            grid_cells.append(html.Div(
+                html.Div("\n".join(summary_text) if summary_text else "", style={
+                    "fontSize": "9px", "color": TEXT_MUTED,
+                    "fontFamily": FONT_MONO, "lineHeight": "1.4",
+                    "whiteSpace": "pre-line",
+                }),
+                style={
+                    "minHeight": "72px", "padding": "4px",
+                    "display": "flex", "alignItems": "center",
+                    "justifyContent": "center", "textAlign": "center",
+                },
+            ))
+
+        grid = html.Div(grid_cells, style={
+            "display": "grid", "gridTemplateColumns": "repeat(7, 1fr) 56px",
             "gap": "3px",
         })
 

@@ -234,6 +234,13 @@ def layout(**_kwargs):
             mileage_progression_chart(mileage),
         ], alt_bg=True),
 
+        # ── RACE PROJECTION ──
+        page_section("RACE PROJECTION", [
+            html.P("Estimated race times based on current fitness + plan improvements.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "12px"}),
+            _race_projection_chart(runs, best_efforts_df, race_proj, plan),
+        ]),
+
         # ── STRENGTH PROJECTION ──
         page_section("STRENGTH PROJECTION", [
             html.Div([
@@ -299,6 +306,35 @@ def layout(**_kwargs):
         cta_section("Now stop reading and go train."),
         footer(),
     ])
+
+
+def _race_projection_chart(runs, best_efforts_df, race_proj, plan_weeks) -> html.Div:
+    """Build a 10K race prediction chart with projected dashed line."""
+    from strava_analytics.web.components.charts import _single_race_chart
+    import pandas as pd
+
+    proj_10k = race_proj.get("10K", {})
+    if not proj_10k:
+        return html.P("Insufficient data for race projection.", style={"color": TEXT_MUTED})
+
+    # Build projected points: linear from current to projected over plan weeks
+    current_min = proj_10k.get("current_min", 0)
+    projected_min = proj_10k.get("projected_min", 0)
+    if not current_min or not projected_min or not plan_weeks:
+        return html.P("Insufficient data.", style={"color": TEXT_MUTED})
+
+    n = len(plan_weeks)
+    proj_points = []
+    for i, week in enumerate(plan_weeks):
+        t = (i + 1) / n
+        val = current_min + (projected_min - current_min) * t
+        proj_points.append({"date": pd.Timestamp(week.start_date), "time_min": round(val, 2)})
+
+    return _single_race_chart(
+        runs, 10000, "10K Projection", "plan-race-10k",
+        best_efforts=best_efforts_df,
+        projected=proj_points,
+    )
 
 
 def _build_1rm_projection(lift: str, str_proj: dict, plan_weeks: list) -> list:
@@ -370,27 +406,27 @@ def _now_vs_raceday_table(
         delta_color = ACCENT_SLATE if is_positive else ACCENT_RED if delta.startswith("-") else TEXT_MUTED
         rows.append(html.Div([
             html.Span(label, style={
-                "flex": "2", "fontSize": "12px", "color": TEXT_SECONDARY,
+                "flex": "2", "fontSize": "11px", "color": TEXT_SECONDARY,
             }),
             html.Span(now_val, style={
-                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "13px",
+                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "12px",
                 "textAlign": "right", "color": TEXT_MUTED,
             }),
             html.Span(proj_val, style={
-                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "13px",
+                "flex": "2", "fontFamily": FONT_MONO, "fontSize": "12px",
                 "fontWeight": "600", "textAlign": "right",
             }),
             html.Span(delta, style={
-                "flex": "1", "fontFamily": FONT_MONO, "fontSize": "11px",
+                "flex": "1", "fontFamily": FONT_MONO, "fontSize": "10px",
                 "color": delta_color, "textAlign": "right",
             }),
-        ], style={"display": "flex", "padding": "6px 0",
+        ], style={"display": "flex", "padding": "3px 0",
                   "borderBottom": f"1px solid {BORDER}",
                   "alignItems": "baseline"}))
 
     return html.Div([header, *rows], style={
         "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-        "borderRadius": "6px", "padding": "12px 16px",
+        "borderRadius": "6px", "padding": "8px 12px",
     })
 
 
