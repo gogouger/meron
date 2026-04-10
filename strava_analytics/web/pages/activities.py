@@ -83,8 +83,8 @@ def _load_route_fingerprints() -> dict:
     return _route_fingerprints
 
 
-def _svg_mini_map(filename: str, width: int = 120, height: int = 80) -> html.Div | None:
-    """Render a tiny SVG polyline map from cached route fingerprint."""
+def _svg_mini_map(filename: str, width: int = 300, height: int = 120) -> html.Div | None:
+    """Render an SVG polyline route map from cached fingerprint data."""
     fps = _load_route_fingerprints()
     fp = fps.get(filename)
     if not fp or not fp.get("points"):
@@ -94,18 +94,15 @@ def _svg_mini_map(filename: str, width: int = 120, height: int = 80) -> html.Div
     if len(pts) < 3:
         return None
 
-    # Project lat/lon to simple x/y (equirectangular, good enough for mini-map)
     lats = [p[0] for p in pts]
     lons = [p[1] for p in pts]
     min_lat, max_lat = min(lats), max(lats)
     min_lon, max_lon = min(lons), max(lons)
 
-    # Add padding
-    pad = 0.1
+    pad = 0.08
     lat_range = max_lat - min_lat or 0.001
     lon_range = max_lon - min_lon or 0.001
 
-    # Scale to SVG viewport with padding
     svg_points = []
     for lat, lon in pts:
         x = pad * width + (lon - min_lon) / lon_range * width * (1 - 2 * pad)
@@ -115,18 +112,18 @@ def _svg_mini_map(filename: str, width: int = 120, height: int = 80) -> html.Div
     polyline = " ".join(svg_points)
     svg = (
         f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg"'
-        f' style="width:{width}px;height:{height}px">'
+        f' style="width:100%;height:100%">'
         f'<polyline points="{polyline}" fill="none" '
-        f'stroke="{ACCENT_SLATE}" stroke-width="1.5" stroke-linecap="round" '
-        f'stroke-linejoin="round" opacity="0.8"/>'
+        f'stroke="{ACCENT_SLATE}" stroke-width="2" stroke-linecap="round" '
+        f'stroke-linejoin="round" opacity="0.7"/>'
         f'</svg>'
     )
 
     return html.Div(
         style={
-            "width": f"{width}px", "height": f"{height}px",
-            "flexShrink": "0", "opacity": "0.7",
-            "borderRadius": "4px",
+            "width": "100%", "height": f"{height}px",
+            "marginTop": "12px",
+            "borderRadius": "6px",
             "backgroundColor": "var(--surface, #1c1917)",
             "border": f"1px solid {BORDER}",
             "overflow": "hidden",
