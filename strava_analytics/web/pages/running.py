@@ -1,4 +1,4 @@
-"""Running analytics page — ozniai.com subpage pattern."""
+"""Running analytics page — MERON subpage pattern."""
 
 import json
 
@@ -49,132 +49,29 @@ _ROUTE_CACHE_MAX = 32
 
 
 def _run_card(run, idx):
-    """Build a single expandable run card using HTML <details> (no Dash callbacks)."""
-    run_type = run.get("run_type", "")
-    type_color = _TYPE_COLORS.get(run_type, TEXT_MUTED)
-    date_str = run["date"].strftime("%b %d, %Y")
-    day_str = run["date"].strftime("%A")
-    name = run.get("name", "Run")
-    dist = run.get("distance_mi", 0)
-    pace = format_pace(run.get("pace_min_per_mi"))
-    duration = _duration_str(run.get("moving_time_s", 0))
-    hr = run.get("avg_hr", 0)
-    max_hr_val = run.get("max_hr", 0)
-    elev = run.get("elevation_gain_ft", 0) or 0
-    calories = run.get("calories", 0) or 0
-    weather = run.get("weather_condition", "")
-    temp_f = run.get("weather_temp_f", None)
-    description = run.get("description", "")
+    """Build a single expandable run card using the shared builder."""
+    from strava_analytics.web.components.cards import activity_card_body
 
-    badge = html.Span(
-        run_type or "run",
-        style={
-            "backgroundColor": type_color, "color": "white",
-            "fontSize": "10px", "fontWeight": "600",
-            "textTransform": "uppercase", "letterSpacing": "0.05em",
-            "padding": "2px 8px", "marginLeft": "8px",
-            "display": "inline-block",
-        },
-    )
-
-    # Primary stats
-    primary_stats = [
-        _stat_cell("Distance", f"{dist:.1f} mi"),
-        _stat_cell("Pace", f"{pace} /mi"),
-        _stat_cell("Duration", duration),
-    ]
-    if hr and not pd.isna(hr):
-        primary_stats.append(_stat_cell("Avg HR", f"{hr:.0f} bpm"))
-    rel_effort = run.get("relative_effort", None)
-    if rel_effort and not pd.isna(rel_effort):
-        primary_stats.append(_stat_cell("Effort", f"{rel_effort:.0f}"))
-    if elev > 0:
-        primary_stats.append(_stat_cell("Elevation", f"\u2191{elev:.0f} ft"))
-
-    # Secondary stats (shown when expanded)
-    secondary = []
-    if max_hr_val and not pd.isna(max_hr_val):
-        secondary.append(_stat_cell("Max HR", f"{max_hr_val:.0f} bpm"))
-    if calories and not pd.isna(calories) and calories > 0:
-        secondary.append(_stat_cell("Calories", f"{calories:.0f}"))
-    if temp_f is not None and not pd.isna(temp_f):
-        secondary.append(_stat_cell("Temp", f"{temp_f:.0f}\u00b0F"))
-    if weather and isinstance(weather, str) and weather.strip():
-        secondary.append(_stat_cell("Weather", weather[:20]))
-
-    # Build expandable detail content
-    detail_content = []
-    if secondary:
-        detail_content.append(html.Div(secondary, style={
-            "display": "flex", "gap": "24px", "flexWrap": "wrap",
-            "marginTop": "12px", "paddingTop": "12px",
-            "borderTop": f"1px solid {BORDER}",
-        }))
-    if description and isinstance(description, str) and description.strip():
-        detail_content.append(html.P(description.strip(), style={
-            "color": TEXT_SECONDARY, "fontSize": "13px",
-            "marginTop": "12px", "fontStyle": "italic",
-        }))
-
-    date_id = run["date"].strftime("%Y-%m-%d")
-    filename = run.get("filename", "")
-
-    # Route button + lazy container (only when a FIT file exists)
-    if filename:
-        route_key = f"{date_id}-{idx}"
-        detail_content.append(html.Button(
-            "",
-            id={"type": "route-btn", "index": route_key},
-            n_clicks=0,
-            style={"display": "none"},  # hidden — auto-triggered on card open
-        ))
-        detail_content.append(
-            dcc.Loading(
-                html.Div(
-                    id={"type": "route-container", "index": route_key},
-                ),
-                type="dot",
-            )
-        )
+    parts = activity_card_body(run, route_mode="lazy", card_id_prefix="", idx=idx)
 
     return html.Details([
         html.Summary([
-            # Header row
-            html.Div([
-                html.Div([
-                    html.Div([
-                        html.Span(date_str, style={
-                            "fontWeight": "600", "fontSize": "14px",
-                            "color": TEXT_PRIMARY,
-                        }),
-                        html.Span(f" {day_str}", style={
-                            "color": TEXT_MUTED, "fontSize": "13px",
-                        }),
-                        badge,
-                    ]),
-                    html.Div(name, style={
-                        "fontSize": "13px", "color": TEXT_SECONDARY,
-                        "marginTop": "2px",
-                    }),
-                ]),
-            ], style={"marginBottom": "12px"}),
-            # Primary stats
-            html.Div(primary_stats, style={
+            parts["header"],
+            html.Div(parts["primary"], style={
                 "display": "flex", "gap": "24px", "flexWrap": "wrap",
             }),
         ], style={"listStyle": "none", "cursor": "pointer"}),
-        # Detail content (shown when expanded)
-        html.Div(detail_content) if detail_content else None,
-    ], id=f"run-card-{date_id}-{idx}",
+        html.Div(parts["detail"]) if parts["detail"] else None,
+    ], id=f"run-card-{parts['date_id']}-{idx}",
        style={
         "backgroundColor": BG_CARD,
         "border": f"1px solid {BORDER}",
         "padding": "20px 24px", "marginBottom": "8px",
-        "borderLeft": f"3px solid {type_color}",
+        "borderLeft": f"3px solid {parts['color']}",
     })
 
 
-def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
+def _stroller_comparison_section(runs: pd.DataFrame, run_meta: dict | None = None) -> html.Div:
     """Side-by-side comparison of stroller vs non-stroller runs."""
     if "with_kid" not in runs.columns:
         return html.Div()
@@ -262,13 +159,13 @@ def _stroller_comparison_section(runs: pd.DataFrame) -> html.Div:
         note_row,
         stat_grid,
         html.Div(
-            charts.stroller_pace_chart(runs, chart_id="stroller-pace"),
+            charts.stroller_pace_chart(runs, chart_id="stroller-pace", run_meta=run_meta),
             style={"marginTop": "8px"},
         ),
     ])
 
 
-def _heat_pace_section(runs: pd.DataFrame) -> html.Div:
+def _heat_pace_section(runs: pd.DataFrame, run_meta: dict | None = None) -> html.Div:
     """Temperature impact on running pace."""
     if "weather_temp_f" not in runs.columns:
         return html.Div()
@@ -318,7 +215,7 @@ def _heat_pace_section(runs: pd.DataFrame) -> html.Div:
             "fontFamily": FONT_MONO,
             "marginBottom": "16px",
         }))
-    children.append(charts.heat_vs_pace_chart(runs, chart_id="heat-pace"))
+    children.append(charts.heat_vs_pace_chart(runs, chart_id="heat-pace", run_meta=run_meta))
 
     return html.Div(children)
 
@@ -439,7 +336,7 @@ def layout(**_kwargs):
             "duration": _duration_str(r.get("moving_time_s", 0)),
             "hr": f"{r['avg_hr']:.0f} bpm" if not pd.isna(r.get("avg_hr", None)) else "",
             "type": r.get("run_type", ""),
-            "filename": r.get("filename", ""),
+            "filename": r.get("filename", "") if not pd.isna(r.get("filename", "")) else "",
         }
 
     # Build run cards (most recent first) — lightweight, no Plotly graphs
@@ -529,18 +426,6 @@ def layout(**_kwargs):
                    style={"color": TEXT_MUTED, "fontSize": "12px",
                           "marginBottom": "8px"}),
             html.Div(id="pace-trend-container"),
-            # Floating hover tooltip — follows mouse
-            html.Div(id="run-hover-card", style={
-                "display": "none",
-                "position": "fixed",
-                "zIndex": "1000",
-                "backgroundColor": "var(--bg-card)",
-                "border": f"1px solid {BORDER}",
-                "boxShadow": "0 8px 24px rgba(0,0,0,0.12)",
-                "padding": "12px",
-                "width": "260px",
-                "pointerEvents": "none",
-            }),
         ]),
 
         # Race Predictions — Critical Speed model
@@ -577,14 +462,14 @@ def layout(**_kwargs):
         page_section("STROLLER IMPACT", [
             html.P("How much does the double stroller actually slow you down?",
                    style={"color": TEXT_SECONDARY, "fontSize": "0.9rem", "marginBottom": "20px"}),
-            _stroller_comparison_section(runs),
+            _stroller_comparison_section(runs, run_meta=run_meta),
         ]),
 
         # Heat & Pace
         page_section("HEAT & PACE", [
             html.P("How temperature affects your running pace.",
                    style={"color": TEXT_SECONDARY, "fontSize": "0.9rem", "marginBottom": "20px"}),
-            _heat_pace_section(runs),
+            _heat_pace_section(runs, run_meta=run_meta),
         ], alt_bg=True),
 
         # Route Heatmap
@@ -637,7 +522,7 @@ def _heatmap_section(runs: pd.DataFrame) -> html.Div:
     ], alt_bg=True)
 
 
-def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
+def _adjusted_hr_section(runs: pd.DataFrame, run_meta: dict | None = None) -> html.Div:
     if "adjusted_hr" not in runs.columns or "hr_adjustment" not in runs.columns:
         return html.P("No HR adjustment data.",
                        style={"color": TEXT_SECONDARY})
@@ -687,7 +572,7 @@ def _adjusted_hr_section(runs: pd.DataFrame) -> html.Div:
 
     chart_row = dbc.Row([
         dbc.Col(charts.hr_zone_distribution_chart(hr_runs, chart_id="hr-zones"), md=5),
-        dbc.Col(charts.hr_over_time_chart(hr_runs, chart_id="hr-trend"), md=7),
+        dbc.Col(charts.hr_over_time_chart(hr_runs, chart_id="hr-trend", run_meta=run_meta), md=7),
     ])
 
     return html.Div([metrics_row, *text_items, chart_row])
@@ -755,7 +640,7 @@ def update_charts(run_types, time_range, _data_version, run_meta):
         charts.aerobic_efficiency_chart(runs, chart_id="hr-vs-pace", run_meta=run_meta),
         charts.race_predictions_chart(runs, chart_id="race-pred",
                                       best_efforts=data.get_best_efforts()),
-        _adjusted_hr_section(runs),
+        _adjusted_hr_section(runs, run_meta=run_meta),
         charts.weekly_training_load_chart(runs, chart_id="weekly-load"),
     )
 

@@ -1,7 +1,8 @@
-"""Dash web application — Ozni AI brand-matched layout."""
+"""Dash web application — MERON brand layout."""
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 import dash
@@ -10,15 +11,75 @@ from dash import html, dcc, page_container, Input, Output, State, callback, clie
 import pandas as pd
 
 from strava_analytics.web import data
-from strava_analytics.web.theme import (
-    ACCENT, ACCENT_SLATE, ACCENT_RED, TEXT_PRIMARY, TEXT_SECONDARY,
-    TEXT_MUTED, BG_CARD, BORDER, ACTIVITY_TYPE_COLORS, RUN_TYPE_COLORS,
-    LIFT_COLORS,
-)
-from strava_analytics.metrics import format_pace
-from strava_analytics.web.components.cards import stat_cell, duration_str, activity_type_badge
-from strava_analytics.web.components.routes import build_route_charts
 from strava_analytics.web.api import register_api
+
+
+# Canonical site URL for OpenGraph / Twitter metadata. Leave empty for local dev
+# (relative /assets paths work fine locally); set MERON_SITE_URL=https://... when
+# the site is publicly deployed so social scrapers can resolve the share image.
+SITE_URL = os.environ.get("MERON_SITE_URL", "").rstrip("/")
+OG_IMAGE = (f"{SITE_URL}/assets/meron-logo-dark-bg.png"
+            if SITE_URL else "/assets/meron-logo-dark-bg.png")
+
+
+MERON_INDEX_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="description" content="MERON \u2014 personal fitness intelligence. Strength. Endurance. Elevation.">
+
+        <!-- Favicons -->
+        <link rel="icon" type="image/svg+xml" href="/assets/meron-icon.svg">
+        <link rel="icon" type="image/png" sizes="32x32" href="/assets/meron-icon.png">
+
+        <!-- Apple touch icons (iOS home screen) -->
+        <link rel="apple-touch-icon" sizes="180x180" href="/assets/meron-app-icon.png">
+        <link rel="apple-touch-icon" sizes="152x152" href="/assets/meron-app-icon.png">
+        <link rel="apple-touch-icon" sizes="120x120" href="/assets/meron-app-icon.png">
+
+        <!-- Standalone iOS / Android web-app -->
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="MERON">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="application-name" content="MERON">
+
+        <!-- Theme color (mobile browser chrome) -->
+        <meta name="theme-color" content="#f8f9fc" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#0A1B33" media="(prefers-color-scheme: dark)">
+
+        <!-- PWA manifest -->
+        <link rel="manifest" href="/assets/manifest.json">
+
+        <!-- OpenGraph -->
+        <meta property="og:type" content="website">
+        <meta property="og:site_name" content="MERON">
+        <meta property="og:title" content="MERON">
+        <meta property="og:description" content="Personal fitness intelligence. Strength. Endurance. Elevation.">
+        <meta property="og:image" content="__OG_IMAGE__">
+        __OG_URL__
+
+        <!-- Twitter Card -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="MERON">
+        <meta name="twitter:description" content="Personal fitness intelligence. Strength. Endurance. Elevation.">
+        <meta name="twitter:image" content="__OG_IMAGE__">
+
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>"""
 
 
 def create_app() -> dash.Dash:
@@ -39,8 +100,17 @@ def create_app() -> dash.Dash:
             "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
         ],
         suppress_callback_exceptions=True,
-        title="Strava Analytics — Ozni AI",
+        title="MERON",
         update_title=None,
+    )
+
+    # Inject branded <head> (favicons, OG, Twitter, manifest, PWA meta)
+    og_url_tag = (f'<meta property="og:url" content="{SITE_URL}/">'
+                  if SITE_URL else "")
+    app.index_string = (
+        MERON_INDEX_TEMPLATE
+        .replace("__OG_IMAGE__", OG_IMAGE)
+        .replace("__OG_URL__", og_url_tag)
     )
 
     # Hamburger icon (three-line SVG)
@@ -53,15 +123,15 @@ def create_app() -> dash.Dash:
         ),
     )
 
-    # Navbar — matches ozniai.com fixed nav pattern (mobile-responsive)
+    # Navbar — MERON brand (mobile-responsive)
     navbar = html.Nav([
         html.Div([
             html.Div([
                 # Brand
-                dcc.Link(
-                    html.Span("Strava Analytics", className="brand-text"),
-                    href="/", className="brand-link",
-                ),
+                dcc.Link([
+                    html.Img(src="/assets/meron-icon.svg", className="brand-icon", alt="MERON"),
+                    html.Span("MERON", className="brand-text"),
+                ], href="/", className="brand-link"),
                 # Mobile hamburger toggle
                 html.Button(
                     hamburger_svg,
@@ -71,18 +141,18 @@ def create_app() -> dash.Dash:
                 ),
                 # Nav links
                 html.Div([
-                    dcc.Link("Overview", href="/", className="ozni-nav-link"),
-                    dcc.Link("Running", href="/running", className="ozni-nav-link"),
-                    dcc.Link("Lifting", href="/lifting", className="ozni-nav-link"),
-                    dcc.Link("Activities", href="/activities", className="ozni-nav-link"),
-                    dcc.Link("Plan", href="/plan", className="ozni-nav-link"),
-                    dcc.Link("\u2699", href="/settings", className="ozni-nav-link",
+                    dcc.Link("Overview", href="/", className="meron-nav-link"),
+                    dcc.Link("Running", href="/running", className="meron-nav-link"),
+                    dcc.Link("Lifting", href="/lifting", className="meron-nav-link"),
+                    dcc.Link("Activities", href="/activities", className="meron-nav-link"),
+                    dcc.Link("Plan", href="/plan", className="meron-nav-link"),
+                    dcc.Link("\u2699", href="/settings", className="meron-nav-link",
                              style={"fontSize": "18px", "opacity": "0.6"},
                              title="Settings"),
                 ], id="nav-links", className="nav-links"),
             ], className="nav-inner"),
         ], className="nav-container"),
-    ], className="ozni-navbar")
+    ], className="meron-navbar")
 
     app.layout = html.Div([
         dcc.Location(id="url"),
@@ -97,6 +167,18 @@ def create_app() -> dash.Dash:
         ]),
         # Activity modal overlay — rendered by server callback
         html.Div(id="activity-modal-container"),
+        # Global hover card — follows mouse, used by all chart pages
+        html.Div(id="hover-card", style={
+            "display": "none",
+            "position": "fixed",
+            "zIndex": "1000",
+            "backgroundColor": "var(--bg-card)",
+            "border": "1px solid var(--border)",
+            "boxShadow": "0 8px 24px rgba(0,0,0,0.12)",
+            "padding": "12px",
+            "width": "260px",
+            "pointerEvents": "none",
+        }),
     ])
 
     # Register REST API endpoints on the underlying Flask server
@@ -116,7 +198,7 @@ def create_app() -> dash.Dash:
                 "/settings": "Settings"
             };
             var page = titles[pathname] || "Overview";
-            document.title = "Strava Analytics \u2014 " + page;
+            document.title = "MERON \u2014 " + page;
             return "";
         }
         """,
@@ -186,129 +268,32 @@ def create_app() -> dash.Dash:
 )
 def render_activity_modal(modal_data):
     """Render the activity modal overlay when triggered by a chart click."""
+    from strava_analytics.web.components.cards import activity_card_body
+
     if not modal_data or not modal_data.get("date"):
         return html.Div()
 
     date_str = modal_data["date"]
     df = data.get_df()
 
-    # Find activity by date string
     matches = df[df["date"].dt.strftime("%Y-%m-%d") == date_str]
     if matches.empty:
         return html.Div()
 
     row = matches.iloc[0]
-    act_type = row.get("type", "")
-    color = ACTIVITY_TYPE_COLORS.get(act_type, TEXT_MUTED)
-    name = row.get("name", act_type or "Activity")
-    date_display = row["date"].strftime("%b %d, %Y — %A")
-
-    # Build stats
-    stats = []
-    dist = row.get("distance_mi", 0)
-    dur = row.get("moving_time_s", 0)
-    pace = row.get("pace_min_per_mi", None)
-    hr = row.get("avg_hr", 0)
-    max_hr = row.get("max_hr", 0)
-    elev = row.get("elevation_gain_ft", 0) or 0
-    cals = row.get("calories", 0)
-
-    if dist and not pd.isna(dist) and dist > 0:
-        stats.append(stat_cell("Distance", f"{dist:.1f} mi"))
-    if pace and not pd.isna(pace) and pace > 0:
-        stats.append(stat_cell("Pace", f"{format_pace(pace)} /mi"))
-    if dur and not pd.isna(dur) and dur > 0:
-        stats.append(stat_cell("Duration", duration_str(dur)))
-    if hr and not pd.isna(hr):
-        stats.append(stat_cell("Avg HR", f"{hr:.0f} bpm"))
-    if max_hr and not pd.isna(max_hr):
-        stats.append(stat_cell("Max HR", f"{max_hr:.0f} bpm"))
-    if elev > 0:
-        stats.append(stat_cell("Elevation", f"\u2191{elev:.0f} ft"))
-    if cals and not pd.isna(cals) and cals > 0:
-        stats.append(stat_cell("Calories", f"{cals:.0f}"))
-
-    # Lift-specific stats
-    if act_type == "Weight Training":
-        for label, col in [("Bench", "bench_weight"), ("Squat", "squat_weight"),
-                            ("Deadlift", "deadlift_weight"), ("OHP", "ohp_weight")]:
-            val = row.get(col, None)
-            if val is not None and not pd.isna(val):
-                stats.append(stat_cell(label, f"{val:.0f} lbs"))
-
-    # Description
-    desc = row.get("description", "")
-    desc_el = None
-    if desc and isinstance(desc, str) and desc.strip():
-        desc_el = html.P(desc.strip(), style={
-            "color": TEXT_SECONDARY, "fontSize": "13px",
-            "marginTop": "16px", "fontStyle": "italic",
-            "borderTop": f"1px solid {BORDER}", "paddingTop": "12px",
-        })
-
-    # Route charts (eager load in modal since user explicitly clicked)
-    route_el = None
-    filename = row.get("filename", "")
-    if filename and act_type in ("Run", "Walk", "Hike", "Ride"):
-        route_el = html.Div(
-            build_route_charts(filename, df=data.get_df()),
-            style={"marginTop": "16px", "borderTop": f"1px solid {BORDER}",
-                   "paddingTop": "12px"},
-        )
-
-    # Lift exercises
-    exercises_el = None
-    if act_type == "Weight Training":
-        exercises_str = row.get("lift_exercises", "")
-        if exercises_str and not pd.isna(exercises_str):
-            exercises = [e.strip() for e in str(exercises_str).split(";") if e.strip()]
-            if exercises:
-                exercises_el = html.Div([
-                    html.Div("EXERCISES", style={
-                        "fontSize": "10px", "fontWeight": "600",
-                        "textTransform": "uppercase", "letterSpacing": "0.1em",
-                        "color": TEXT_MUTED, "marginBottom": "6px",
-                    }),
-                    html.Ul([
-                        html.Li(ex, style={"fontSize": "13px", "color": TEXT_SECONDARY,
-                                           "padding": "2px 0"})
-                        for ex in exercises
-                    ], style={"listStyleType": "disc", "paddingLeft": "18px", "margin": "0"}),
-                ], style={"marginTop": "16px", "borderTop": f"1px solid {BORDER}",
-                          "paddingTop": "12px"})
-
-    # Type badge
-    badge = activity_type_badge(act_type, color)
-    run_type = row.get("run_type", "")
-    run_badge = None
-    if act_type == "Run" and run_type:
-        rt_color = RUN_TYPE_COLORS.get(run_type, TEXT_MUTED)
-        run_badge = activity_type_badge(run_type, rt_color)
+    parts = activity_card_body(row, route_mode="eager")
 
     return html.Div([
-        # Backdrop
         html.Div(id="modal-backdrop"),
-        # Content
         html.Div([
             html.Button("\u00d7", id="modal-close-btn"),
             html.Div([
-                html.Div([
-                    html.Span(date_display, style={
-                        "fontSize": "12px", "color": TEXT_MUTED,
-                    }),
-                    badge,
-                    run_badge,
-                ]),
-                html.H4(name, style={
-                    "fontSize": "18px", "fontWeight": "700",
-                    "color": TEXT_PRIMARY, "marginTop": "4px", "marginBottom": "16px",
-                }),
-                html.Div(stats, style={
+                parts["header"],
+                html.Div(parts["primary"], style={
                     "display": "flex", "gap": "24px", "flexWrap": "wrap",
                 }),
-                desc_el,
-                exercises_el,
-                route_el,
+                parts["extra"],
+                *(parts["detail"] or []),
             ]),
         ], id="modal-content"),
     ], id="activity-modal-overlay")
@@ -320,7 +305,7 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
-    parser = argparse.ArgumentParser(description="Strava Analytics Web Dashboard")
+    parser = argparse.ArgumentParser(description="MERON Web Dashboard")
     parser.add_argument("export_dir",
                         help="Path to Strava export directory")
     parser.add_argument("--port", type=int, default=8050)

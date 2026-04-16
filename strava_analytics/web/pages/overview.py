@@ -1,4 +1,4 @@
-"""Overview — hybrid landing page modeled on ozniai.com homepage."""
+"""Overview — hybrid landing page modeled on MERON homepage."""
 
 import calendar
 from datetime import date, timedelta
@@ -582,7 +582,7 @@ def layout(**_kwargs):
     return html.Div([
         # Hero
         hero_section(
-            label="STRAVA ANALYTICS",
+            label="MERON \u2014 OVERVIEW",
             headline="Your body is a machine. Here's the telemetry.",
             subtext=(
                 f"{total_activities} activities. {total_miles:,.0f} miles. "
@@ -596,7 +596,7 @@ def layout(**_kwargs):
             ],
         ),
 
-        # What We Track — ozniai.com "What We Build" pattern
+        # What We Track — MERON "What We Build" pattern
         page_section("WHAT WE TRACK", [
             feature_grid([
                 numbered_card(

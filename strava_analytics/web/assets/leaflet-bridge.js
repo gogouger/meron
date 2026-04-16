@@ -90,7 +90,7 @@
         // Route polyline (if coords provided)
         if (cfg.coords && cfg.coords.length) {
             var polyline = L.polyline(cfg.coords, {
-                color: cfg.color || "#ef3c4a",
+                color: cfg.color || "#FF3330",
                 weight: 3, opacity: 0.9,
             }).addTo(map);
             map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
@@ -140,7 +140,7 @@
                 // Draw each route with low opacity — overlaps accumulate brightness
                 for (var i = 0; i < data.routes.length; i++) {
                     L.polyline(data.routes[i], {
-                        color: "#ef3c4a",
+                        color: "#FF3330",
                         weight: 2,
                         opacity: 0.15,
                     }).addTo(map);

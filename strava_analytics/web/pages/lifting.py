@@ -1,4 +1,4 @@
-"""Lifting / strength training page — ozniai.com subpage pattern."""
+"""Lifting / strength training page — MERON subpage pattern."""
 
 import pandas as pd
 import dash
@@ -85,6 +85,34 @@ def layout(**_kwargs):
     if lifts.empty:
         return html.P("No weight training data available.")
 
+    # Build lift metadata for hover cards (analogous to run_meta in running.py)
+    lift_meta: dict[str, dict] = {}
+    for _, r in lifts.iterrows():
+        date_str = r["date"].strftime("%Y-%m-%d")
+        # Find dominant lift for this session
+        best_lift, best_weight = None, 0.0
+        for lk in ["bench", "squat", "deadlift", "ohp"]:
+            w = r.get(f"{lk}_weight", 0)
+            if w and not pd.isna(w) and w > best_weight:
+                best_lift, best_weight = lk, float(w)
+        sets = r.get(f"{best_lift}_sets", 0) if best_lift else 0
+        reps = r.get(f"{best_lift}_reps", 0) if best_lift else 0
+        sets = int(sets) if sets and not pd.isna(sets) else 0
+        reps = int(reps) if reps and not pd.isna(reps) else 0
+        scheme = f"{sets}x{reps}" if sets and reps else ""
+        volume = int(best_weight * sets * reps) if best_weight and sets and reps else 0
+        est_1rm = round(best_weight * (1 + reps / 30), 0) if best_weight and reps else 0
+
+        lift_meta[date_str] = {
+            "name": r.get("name", "Weight Training"),
+            "lift": (best_lift or "").title(),
+            "liftColor": LIFT_COLORS.get(best_lift, "#a8a29e"),
+            "weight": f"{best_weight:.0f} lbs" if best_weight else "",
+            "scheme": scheme,
+            "volume": f"{volume:,} lbs" if volume else "",
+            "est1rm": f"{est_1rm:.0f} lbs" if est_1rm else "",
+        }
+
     # Gains
     bench_gain = ((end_prs.get("bench_1rm", 0) / max(baseline.get("bench_1rm", 1), 1)) - 1) * 100
     squat_gain = ((end_prs.get("squat_1rm", 0) / max(baseline.get("squat_1rm", 1), 1)) - 1) * 100
@@ -100,7 +128,7 @@ def layout(**_kwargs):
             onerm_ids.append(chart_id)
             onerm_charts.append(
                 dbc.Col(
-                    charts.onerm_progression_chart(prog, lift_name.title(), color, chart_id=chart_id),
+                    charts.onerm_progression_chart(prog, lift_name.title(), color, chart_id=chart_id, lift_meta=lift_meta),
                     md=6,
                 )
             )
@@ -146,7 +174,7 @@ def layout(**_kwargs):
 
         # Working Weight Progression
         page_section("WORKING WEIGHT PROGRESSION", [
-            charts.lift_progression_chart(df),
+            charts.lift_progression_chart(df, lift_meta=lift_meta),
         ], alt_bg=True),
 
         # Estimated 1RM

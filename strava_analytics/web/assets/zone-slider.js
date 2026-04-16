@@ -18,7 +18,7 @@
         var pctStr = bar.getAttribute("data-zone-pct") || "60,70,80,90";
         var pcts = pctStr.split(",").map(Number);  // [60, 70, 80, 90]
         var names = (bar.getAttribute("data-zone-names") || "Recovery,Easy,Moderate,Threshold,Max").split(",");
-        var colors = (bar.getAttribute("data-zone-colors") || "#5b9bd5,#5b9bd5,#d4a84b,#ef3c4a,#ef3c4a").split(",");
+        var colors = (bar.getAttribute("data-zone-colors") || "#0D6EFD,#0D6EFD,#d4a84b,#FF3330,#FF3330").split(",");
         var opacities = (bar.getAttribute("data-zone-opacities") || "0.4,0.7,0.7,0.7,1.0").split(",").map(Number);
 
         // Container styling

@@ -24,7 +24,7 @@ from strava_analytics.web.api_data import (
     get_athlete_summary,
 )
 
-mcp = FastMCP("Strava Analytics", json_response=True)
+mcp = FastMCP("MERON", json_response=True)
 
 
 def _df():
@@ -107,7 +107,7 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
-    parser = argparse.ArgumentParser(description="Strava Analytics MCP Server")
+    parser = argparse.ArgumentParser(description="MERON MCP Server")
     parser.add_argument("export_dir", help="Path to Strava export directory")
     parser.add_argument("--port", type=int, default=8051)
     parser.add_argument("--host", default="0.0.0.0")

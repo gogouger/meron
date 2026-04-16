@@ -1,6 +1,6 @@
 openapi: "3.1.0"
 info:
-  title: Strava Analytics API
+  title: MERON API
   description: >
     Personal training data API for a runner and lifter.
     Provides fitness metrics, activity history, strength data,

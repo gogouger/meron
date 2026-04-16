@@ -1,4 +1,4 @@
-"""Race predictions page — ozniai.com subpage pattern."""
+"""Race predictions page — MERON subpage pattern."""
 
 import dash
 import dash_bootstrap_components as dbc

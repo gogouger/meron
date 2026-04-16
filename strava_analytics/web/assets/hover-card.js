@@ -11,7 +11,7 @@
         if (!ticking) {
             ticking = true;
             requestAnimationFrame(function () {
-                var card = document.getElementById("run-hover-card");
+                var card = document.getElementById("hover-card");
                 if (card && card.style.display === "block") {
                     var x = mx + 16;
                     var y = my - 20;
@@ -32,7 +32,7 @@
         if (target && target.closest && target.closest(".cjs-chart-wrap")) {
             var related = e.relatedTarget;
             if (!related || !related.closest || !related.closest(".cjs-chart-wrap")) {
-                var card = document.getElementById("run-hover-card");
+                var card = document.getElementById("hover-card");
                 if (card) card.style.display = "none";
             }
         }
@@ -44,7 +44,7 @@
         if (scrollTicking) return;
         scrollTicking = true;
         requestAnimationFrame(function() {
-            var card = document.getElementById("run-hover-card");
+            var card = document.getElementById("hover-card");
             if (card && card.style.display === "block") {
                 card.style.display = "none";
             }

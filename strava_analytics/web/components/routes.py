@@ -23,6 +23,71 @@ _ROUTE_CACHE_MAX = 32
 _route_map_counter = 0
 
 
+# ── SVG Mini-map from cached route fingerprints ─────────────────────
+# (Moved out of pages/activities.py so it can be used without triggering
+# dash.register_page() during a page-render callback.)
+
+_route_fingerprints: dict | None = None
+_mini_map_counter = 0
+
+
+def _load_route_fingerprints() -> dict:
+    """Load cached route fingerprints (50-point GPS coords per route)."""
+    global _route_fingerprints
+    if _route_fingerprints is not None:
+        return _route_fingerprints
+
+    export_dir = data.get_export_dir()
+    if export_dir is None:
+        _route_fingerprints = {}
+        return _route_fingerprints
+
+    index_path = export_dir / "route_index.json"
+    if not index_path.exists():
+        _route_fingerprints = {}
+        return _route_fingerprints
+
+    try:
+        raw = json.loads(index_path.read_text())
+        _route_fingerprints = raw.get("fingerprints", {})
+    except Exception:
+        _route_fingerprints = {}
+    return _route_fingerprints
+
+
+def _mini_map(filename: str, height: int = 140):
+    """Render a Leaflet tile map with route overlay from cached fingerprints."""
+    global _mini_map_counter
+    fps = _load_route_fingerprints()
+    fp = fps.get(filename)
+    if not fp or not fp.get("points"):
+        return None
+
+    pts = fp["points"]  # [[lat, lon], ...]
+    if len(pts) < 3:
+        return None
+
+    _mini_map_counter += 1
+    map_id = f"mini-map-{_mini_map_counter}"
+    coords = [[p[0], p[1]] for p in pts]
+    map_cfg = json.dumps({
+        "coords": coords,
+        "color": ACCENT,
+        "height": height,
+    })
+
+    return html.Div(
+        html.Div(id=f"{map_id}-map", className="leaflet-map-box"),
+        className="leaflet-map-wrap",
+        style={
+            "width": "100%", "marginTop": "12px",
+            "borderRadius": "6px", "overflow": "hidden",
+            "border": f"1px solid {BORDER}",
+        },
+        **{"data-mapcfg": map_cfg, "data-mapid": f"{map_id}-map"},
+    )
+
+
 def _smooth(vals, window=7):
     """Rolling average for smoothing noisy stream data."""
     arr = pd.Series(vals)

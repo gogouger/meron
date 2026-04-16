@@ -1,65 +1,64 @@
 /* ============================================================
-   Ozni AI brand theme — light stone palette
-   Derived from ozniai.com design system
+   MERON brand theme — cool palette
    ============================================================ */
 
 :root {
-    --bg: #fafaf9;
+    --bg: #f8f9fc;
     --bg-card: #ffffff;
-    --text-primary: #0c0a09;
-    --text-secondary: #57534e;
-    --text-muted: #a8a29e;
-    --border: #e7e5e4;
-    --gridline: #f5f5f4;
-    --accent: #ef3c4a;
-    --accent-hover: #dc2f3c;
+    --text-primary: #0A1B33;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --border: #E5E7EB;
+    --gridline: #f0f2f5;
+    --accent: #FF3330;
+    --accent-hover: #E62D2A;
     --surface: #ffffff;
-    --elevated: #f5f5f4;
-    --input: #f5f5f4;
-    --foreground: #0c0a09;
-    --muted: #57534e;
-    --subtle: #a8a29e;
-    --border-light: #d6d3d1;
+    --elevated: #f0f2f5;
+    --input: #f0f2f5;
+    --foreground: #0A1B33;
+    --muted: #475569;
+    --subtle: #94A3B8;
+    --border-light: #CBD5E1;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
 }
 
-/* Dark vars — applied by OS preference OR by JS toggle */
+/* Dark vars — MERON navy palette, applied by OS preference OR JS toggle */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-        --bg: #0c0a09;
-        --bg-card: #1c1917;
-        --text-primary: #fafaf9;
-        --text-secondary: #a8a29e;
-        --text-muted: #78716c;
-        --border: #292524;
-        --gridline: #292524;
-        --surface: #1c1917;
-        --elevated: #292524;
-        --input: #292524;
-        --foreground: #fafaf9;
-        --muted: #a8a29e;
-        --subtle: #78716c;
-        --border-light: #292524;
+        --bg: #0A1B33;
+        --bg-card: #0F2547;
+        --text-primary: #FFFFFF;
+        --text-secondary: #94A3B8;
+        --text-muted: #64748B;
+        --border: #1E3A5F;
+        --gridline: #1E3A5F;
+        --surface: #0F2547;
+        --elevated: #1E3A5F;
+        --input: #1E3A5F;
+        --foreground: #FFFFFF;
+        --muted: #94A3B8;
+        --subtle: #64748B;
+        --border-light: #1E3A5F;
     }
 }
 
 /* Force dark via JS toggle (overrides light OS preference) */
 :root[data-theme="dark"] {
-    --bg: #0c0a09;
-    --bg-card: #1c1917;
-    --text-primary: #fafaf9;
-    --text-secondary: #a8a29e;
-    --text-muted: #78716c;
-    --border: #292524;
-    --gridline: #292524;
-    --surface: #1c1917;
-    --elevated: #292524;
-    --input: #292524;
-    --foreground: #fafaf9;
-    --muted: #a8a29e;
-    --subtle: #78716c;
-    --border-light: #292524;
+    --bg: #0A1B33;
+    --bg-card: #0F2547;
+    --text-primary: #FFFFFF;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --border: #1E3A5F;
+    --gridline: #1E3A5F;
+    --surface: #0F2547;
+    --elevated: #1E3A5F;
+    --input: #1E3A5F;
+    --foreground: #FFFFFF;
+    --muted: #94A3B8;
+    --subtle: #64748B;
+    --border-light: #1E3A5F;
 }
 
 body {
@@ -69,16 +68,16 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* ---- Navbar (matches ozniai.com fixed nav — light) ---- */
+/* ---- Navbar (MERON brand — light) ---- */
 .navbar, .navbar-dark, .navbar-light { display: none !important; }
 
-.ozni-navbar {
+.meron-navbar {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     z-index: 50;
-    background-color: rgba(250, 250, 249, 0.80);
+    background-color: rgba(248, 249, 252, 0.80);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
@@ -99,13 +98,37 @@ body {
 
 .brand-link {
     text-decoration: none !important;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.brand-icon {
+    height: 32px;
+    width: auto;
+    display: block;
+    transition: filter 0.2s ease;
+}
+
+/* Dark mode: navy mountain in the icon disappears on dark-navy bg.
+   Swap to the 2-color outline variant and invert navy→white. */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .brand-icon {
+        content: url("/assets/meron-logo-outline.svg");
+        filter: invert(1);
+    }
+}
+:root[data-theme="dark"] .brand-icon {
+    content: url("/assets/meron-logo-outline.svg");
+    filter: invert(1);
 }
 
 .brand-text {
     color: var(--foreground);
-    font-weight: 600;
-    font-size: 15px;
-    letter-spacing: -0.3px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .nav-links {
@@ -114,7 +137,7 @@ body {
     gap: 24px;
 }
 
-.ozni-nav-link {
+.meron-nav-link {
     color: var(--muted) !important;
     font-size: 13px;
     font-weight: 400;
@@ -123,7 +146,7 @@ body {
     white-space: nowrap;
 }
 
-.ozni-nav-link:hover {
+.meron-nav-link:hover {
     color: var(--foreground) !important;
 }
 
@@ -138,12 +161,42 @@ main {
 .hero-section {
     padding: 96px 0 48px;
     width: 100%;
+    position: relative;
+    overflow: hidden;
 }
 
 .hero-inner {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 24px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Brand emblem watermark in top-right of every hero band */
+.hero-icon {
+    position: absolute;
+    top: 96px;
+    right: 48px;
+    width: 140px;
+    height: auto;
+    opacity: 0.10;
+    pointer-events: none;
+    user-select: none;
+    z-index: 0;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hero-icon {
+        opacity: 0.14;
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .hero-icon {
+    opacity: 0.14;
+    filter: invert(1) hue-rotate(180deg);
+}
+@media (max-width: 768px) {
+    .hero-icon { display: none; }
 }
 
 .hero-label {
@@ -246,8 +299,28 @@ main {
     letter-spacing: 0.2em;
     color: var(--accent);
     margin-bottom: 24px;
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
     font-family: var(--font-mono);
+}
+/* Strava-style accent stripe before section labels — a short red bar that
+   reads as a brand mark at a glance without crowding the typography. */
+.section-label::before,
+.hero-label::before,
+.statement-label::before {
+    content: "";
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    background-color: var(--accent);
+    flex-shrink: 0;
+}
+.hero-label,
+.statement-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
 }
 
 /* ============================================================
@@ -257,12 +330,49 @@ main {
 .statement-section {
     padding: 80px 0;
     border-top: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Large faint mountain emblem behind statement text */
+.statement-section::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: -120px;
+    width: 520px;
+    height: 520px;
+    transform: translateY(-50%);
+    background: url("/assets/meron-icon.svg") no-repeat center/contain;
+    opacity: 0.05;
+    pointer-events: none;
+    z-index: 0;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .statement-section::before {
+        opacity: 0.10;
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .statement-section::before {
+    opacity: 0.10;
+    filter: invert(1) hue-rotate(180deg);
+}
+@media (max-width: 768px) {
+    .statement-section::before {
+        right: -220px;
+        width: 420px;
+        height: 420px;
+        opacity: 0.04;
+    }
 }
 
 .statement-inner {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 24px;
+    position: relative;
+    z-index: 1;
 }
 
 .statement-label {
@@ -316,7 +426,7 @@ main {
 }
 
 /* ============================================================
-   Numbered Cards (ozniai.com capability card pattern)
+   Numbered Cards (MERON capability card pattern)
    ============================================================ */
 
 .numbered-card {
@@ -336,6 +446,27 @@ main {
     font-size: 14px;
     font-weight: 600;
     margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+/* MERON emblem before the numbered card's ordinal — subtle mountain mark
+   that reinforces the "personal peaks" theme (01, 02, 03 = milestones). */
+.numbered-card__number::before {
+    content: "";
+    width: 18px;
+    height: 14px;
+    background: url("/assets/meron-icon.svg") no-repeat center/contain;
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .numbered-card__number::before {
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .numbered-card__number::before {
+    filter: invert(1) hue-rotate(180deg);
 }
 
 .numbered-card__title {
@@ -449,7 +580,7 @@ main {
 }
 
 /* ============================================================
-   Footer (ozniai.com 3-column pattern)
+   Footer (MERON 3-column pattern)
    ============================================================ */
 
 .site-footer {
@@ -475,6 +606,24 @@ main {
     font-size: 15px;
     color: var(--foreground);
     margin-bottom: 8px;
+}
+
+/* Horizontal logo lockup in footer brand column */
+.footer-logo {
+    width: 180px;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin-bottom: 12px;
+}
+/* Dark mode: the horizontal SVG has navy text; invert to light + color-preserving hue flip */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .footer-logo {
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .footer-logo {
+    filter: invert(1) hue-rotate(180deg);
 }
 
 .footer-tagline {
@@ -704,18 +853,18 @@ main {
 }
 
 .Select-option:hover, .Select-option.is-focused {
-    background-color: rgba(239, 60, 74, 0.06) !important;
+    background-color: rgba(255, 51, 48, 0.06) !important;
     color: var(--accent) !important;
 }
 
 .Select-option.is-selected {
-    background-color: rgba(239, 60, 74, 0.10) !important;
+    background-color: rgba(255, 51, 48, 0.10) !important;
     color: var(--accent) !important;
 }
 
 .Select-multi-value-wrapper .Select-value {
-    background-color: rgba(239, 60, 74, 0.08) !important;
-    border-color: rgba(239, 60, 74, 0.15) !important;
+    background-color: rgba(255, 51, 48, 0.08) !important;
+    border-color: rgba(255, 51, 48, 0.15) !important;
     color: var(--accent) !important;
     border-radius: 0 !important;
     font-size: 12px !important;
@@ -755,8 +904,8 @@ main {
 }
 
 .CalendarDay__hovered_span, .CalendarDay__selected_span {
-    background: rgba(239, 60, 74, 0.08) !important;
-    border-color: rgba(239, 60, 74, 0.12) !important;
+    background: rgba(255, 51, 48, 0.08) !important;
+    border-color: rgba(255, 51, 48, 0.12) !important;
 }
 
 .DayPickerNavigation_button__default {
@@ -783,8 +932,8 @@ main {
 }
 /* Focus outline — use muted accent instead of default purple */
 .dash-datepicker:focus-within {
-    outline-color: #c4323e !important;
-    border-color: #c4323e !important;
+    outline-color: #E62D2A !important;
+    border-color: #E62D2A !important;
 }
 .dash-datepicker svg {
     fill: var(--subtle) !important;
@@ -838,7 +987,7 @@ main {
 }
 /* Selected day — solid muted-red circle */
 .dash-datepicker-calendar-date-inside.dash-datepicker-calendar-date-selected {
-    background: #c4323e !important;
+    background: #E62D2A !important;
     color: white !important;
     font-weight: 600;
 }
@@ -846,7 +995,7 @@ main {
 .dash-datepicker-calendar-date-inside.dash-datepicker-calendar-date-highlighted:not(.dash-datepicker-calendar-date-selected) {
     background: transparent !important;
     color: var(--foreground) !important;
-    outline: 1.5px solid rgba(196, 50, 62, 0.5) !important;
+    outline: 1.5px solid rgba(230, 45, 42, 0.5) !important;
     outline-offset: -1.5px;
 }
 /* Today indicator */
@@ -1061,7 +1210,7 @@ details[open] summary {
         top: 56px;
         left: 0;
         right: 0;
-        background-color: rgba(250, 250, 249, 0.97);
+        background-color: rgba(248, 249, 252, 0.97);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         border-bottom: 1px solid var(--border);
@@ -1083,7 +1232,7 @@ details[open] summary {
    ============================================================ */
 
 *:focus-visible {
-    outline: 2px solid var(--accent, #ef3c4a);
+    outline: 2px solid var(--accent, #FF3330);
     outline-offset: 2px;
 }
 
@@ -1103,7 +1252,7 @@ details[open] summary {
     padding: 10px 20px;
     border-radius: 24px;
     border: none;
-    background: var(--accent, #ef3c4a);
+    background: var(--accent, #FF3330);
     color: #fff !important;
     font-size: 13px;
     font-weight: 600;
@@ -1166,17 +1315,17 @@ details[open] summary {
     color: var(--text-muted);
 }
 .cal-activity-link:hover {
-    background-color: var(--elevated, #f5f5f4);
+    background-color: var(--elevated, #f0f2f5);
 }
 
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .cal-hover-card {
-        background-color: #1c1917;
-        border-color: #292524;
+        background-color: #0F2547;
+        border-color: #1E3A5F;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     }
     :root:not([data-theme="light"]) .cal-activity-link:hover {
-        background-color: #292524;
+        background-color: #1E3A5F;
     }
 }
 
@@ -1188,113 +1337,113 @@ details[open] summary {
 
 @media (prefers-color-scheme: dark) {
     /* Skip ALL dark overrides when user forces light mode */
-    :root[data-theme="light"] body { background-color: #fafaf9 !important; color: #0c0a09 !important; }
+    :root[data-theme="light"] body { background-color: #FFFFFF !important; color: #0A1B33 !important; }
 
     /* ---- Global ---- */
     :root:not([data-theme="light"]) body {
-        background-color: #0c0a09 !important;
-        color: #fafaf9 !important;
+        background-color: #0A1B33 !important;
+        color: #FFFFFF !important;
     }
 
     /* ---- Navbar ---- */
-    .ozni-navbar {
-        background: rgba(12, 10, 9, 0.90) !important;
-        border-bottom-color: #292524 !important;
+    .meron-navbar {
+        background: rgba(10, 27, 51, 0.90) !important;
+        border-bottom-color: #1E3A5F !important;
     }
     .brand-text {
-        color: #fafaf9 !important;
+        color: #FFFFFF !important;
     }
-    .ozni-nav-link {
-        color: #a8a29e !important;
+    .meron-nav-link {
+        color: #94A3B8 !important;
     }
-    .ozni-nav-link:hover {
-        color: #fafaf9 !important;
+    .meron-nav-link:hover {
+        color: #FFFFFF !important;
     }
     .nav-toggle {
-        color: #fafaf9 !important;
+        color: #FFFFFF !important;
     }
 
     /* ---- All inline-styled containers (cards, sections, divs) ---- */
     /* React renders hex as rgb() in style attributes */
     :root:not([data-theme="light"]) div[style*="background-color: rgb(255, 255, 255)"],
-    :root:not([data-theme="light"]) div[style*="background-color: rgb(245, 245, 244)"],
+    :root:not([data-theme="light"]) div[style*="background-color: rgb(240, 242, 245)"],
     :root:not([data-theme="light"]) details[style*="background-color: rgb(255, 255, 255)"] {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
     }
-    :root:not([data-theme="light"]) div[style*="background-color: rgb(250, 250, 249)"] {
-        background-color: #0c0a09 !important;
+    :root:not([data-theme="light"]) div[style*="background-color: rgb(248, 249, 252)"] {
+        background-color: #0A1B33 !important;
     }
 
     /* ---- All inline-styled text (skip when forced light) ---- */
-    :root:not([data-theme="light"]) div[style*="color: rgb(12, 10, 9)"],
-    :root:not([data-theme="light"]) span[style*="color: rgb(12, 10, 9)"],
-    :root:not([data-theme="light"]) p[style*="color: rgb(12, 10, 9)"] {
-        color: #fafaf9 !important;
+    :root:not([data-theme="light"]) div[style*="color: rgb(10, 27, 51)"],
+    :root:not([data-theme="light"]) span[style*="color: rgb(10, 27, 51)"],
+    :root:not([data-theme="light"]) p[style*="color: rgb(10, 27, 51)"] {
+        color: #FFFFFF !important;
     }
-    :root:not([data-theme="light"]) div[style*="color: rgb(87, 83, 78)"],
-    :root:not([data-theme="light"]) span[style*="color: rgb(87, 83, 78)"],
-    :root:not([data-theme="light"]) p[style*="color: rgb(87, 83, 78)"] {
-        color: #a8a29e !important;
+    :root:not([data-theme="light"]) div[style*="color: rgb(71, 85, 105)"],
+    :root:not([data-theme="light"]) span[style*="color: rgb(71, 85, 105)"],
+    :root:not([data-theme="light"]) p[style*="color: rgb(71, 85, 105)"] {
+        color: #94A3B8 !important;
     }
 
     /* ---- Details / run cards / lift cards (skip when forced light) ---- */
     :root:not([data-theme="light"]) details {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
     }
     :root:not([data-theme="light"]) details summary {
-        color: #fafaf9 !important;
+        color: #FFFFFF !important;
     }
 
     /* ---- Dash Dropdown (modern dash-dropdown) ---- */
     .dash-dropdown {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
-        color: #fafaf9 !important;
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
+        color: #FFFFFF !important;
     }
     .dash-dropdown-value,
     .dash-dropdown-placeholder {
-        color: #a8a29e !important;
+        color: #94A3B8 !important;
     }
     .dash-dropdown-trigger-icon svg {
-        fill: #a8a29e !important;
+        fill: #94A3B8 !important;
     }
     .dash-dropdown-menu {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
     }
     .dash-dropdown-option {
-        background-color: #1c1917 !important;
-        color: #fafaf9 !important;
+        background-color: #0F2547 !important;
+        color: #FFFFFF !important;
     }
     .dash-dropdown-option:hover,
     .dash-dropdown-option--focused {
-        background-color: #292524 !important;
+        background-color: #1E3A5F !important;
     }
     .dash-dropdown-option--selected {
-        background-color: #292524 !important;
+        background-color: #1E3A5F !important;
     }
     .dash-dropdown-tag {
-        background-color: #292524 !important;
-        color: #fafaf9 !important;
+        background-color: #1E3A5F !important;
+        color: #FFFFFF !important;
     }
     /* Legacy React-Select (if still used by some Dash components) */
     .Select-control, .Select-menu-outer {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
-        color: #fafaf9 !important;
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
+        color: #FFFFFF !important;
     }
     .Select-value-label, .Select-placeholder {
-        color: #a8a29e !important;
+        color: #94A3B8 !important;
     }
     .Select-option {
-        background-color: #1c1917 !important;
-        color: #fafaf9 !important;
+        background-color: #0F2547 !important;
+        color: #FFFFFF !important;
     }
     .Select-option.is-focused,
     .Select-option.is-selected {
-        background-color: #292524 !important;
+        background-color: #1E3A5F !important;
     }
 
     /* ---- Date picker (Dash DatePickerRange) ---- */
@@ -1306,235 +1455,357 @@ details[open] summary {
     input[type="text"][id*="date"],
     div[class*="DateRange"],
     div[class*="DateInput"] {
-        background-color: #1c1917 !important;
-        color: #fafaf9 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        color: #FFFFFF !important;
+        border-color: #1E3A5F !important;
     }
     .DateRangePickerInput_arrow svg {
-        fill: #a8a29e !important;
+        fill: #94A3B8 !important;
     }
     /* Catch-all for inputs — only when NOT forced to light */
     :root:not([data-theme="light"]) input[style*="background-color: rgb(255, 255, 255)"],
     :root:not([data-theme="light"]) input {
-        background-color: #1c1917 !important;
-        color: #fafaf9 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        color: #FFFFFF !important;
+        border-color: #1E3A5F !important;
     }
     .CalendarDay__default {
-        background: #1c1917 !important;
-        color: #fafaf9 !important;
-        border-color: #292524 !important;
+        background: #0F2547 !important;
+        color: #FFFFFF !important;
+        border-color: #1E3A5F !important;
     }
     .CalendarDay__selected {
-        background: #ef3c4a !important;
+        background: #FF3330 !important;
         color: #fff !important;
     }
     .CalendarMonth_caption {
-        color: #fafaf9 !important;
+        color: #FFFFFF !important;
     }
     .DayPickerNavigation_button {
-        background: #1c1917 !important;
-        border-color: #292524 !important;
+        background: #0F2547 !important;
+        border-color: #1E3A5F !important;
     }
     .DayPicker__withBorder {
-        background: #1c1917 !important;
-        border-color: #292524 !important;
+        background: #0F2547 !important;
+        border-color: #1E3A5F !important;
     }
     .CalendarDay__selected_span,
     .CalendarDay__selected_span:hover {
-        background: rgba(239, 60, 74, 0.25) !important;
-        color: #fafaf9 !important;
-        border-color: rgba(239, 60, 74, 0.35) !important;
+        background: rgba(255, 51, 48, 0.25) !important;
+        color: #FFFFFF !important;
+        border-color: rgba(255, 51, 48, 0.35) !important;
     }
     .CalendarDay__hovered_span,
     .CalendarDay__hovered_span:hover {
-        background: rgba(239, 60, 74, 0.18) !important;
-        color: #fafaf9 !important;
-        border-color: rgba(239, 60, 74, 0.25) !important;
+        background: rgba(255, 51, 48, 0.18) !important;
+        color: #FFFFFF !important;
+        border-color: rgba(255, 51, 48, 0.25) !important;
     }
     .CalendarDay__blocked_out_of_range,
     .CalendarDay__blocked_out_of_range:hover {
-        background: #0c0a09 !important;
-        color: #57534e !important;
-        border-color: #292524 !important;
+        background: #0A1B33 !important;
+        color: #475569 !important;
+        border-color: #1E3A5F !important;
     }
     .DateInput_fang { display: none !important; }
     .DateInput_input__focused {
-        border-bottom-color: #ef3c4a !important;
-        background: #292524 !important;
+        border-bottom-color: #FF3330 !important;
+        background: #1E3A5F !important;
     }
     .DayPickerKeyboardShortcuts_buttonReset { display: none !important; }
 
     /* ---- DataTable ---- */
     .dash-spreadsheet-container .dash-spreadsheet-inner td,
     .dash-spreadsheet-container .dash-spreadsheet-inner th {
-        background-color: #1c1917 !important;
-        color: #fafaf9 !important;
-        border-color: #292524 !important;
+        background-color: #0F2547 !important;
+        color: #FFFFFF !important;
+        border-color: #1E3A5F !important;
     }
 
     /* ---- Custom hover card (skip when forced light) ---- */
-    :root:not([data-theme="light"]) #run-hover-card {
-        background-color: #1c1917 !important;
-        border-color: #292524 !important;
-        color: #fafaf9 !important;
+    :root:not([data-theme="light"]) #hover-card {
+        background-color: #0F2547 !important;
+        border-color: #1E3A5F !important;
+        color: #FFFFFF !important;
     }
 
     /* ---- Section alt backgrounds (skip when forced light) ---- */
-    :root:not([data-theme="light"]) div[style*="background-color: rgb(245, 245, 244)"] {
-        background-color: #1c1917 !important;
+    :root:not([data-theme="light"]) div[style*="background-color: rgb(240, 242, 245)"] {
+        background-color: #0F2547 !important;
     }
 
     /* ---- Buttons (skip when forced light) ---- */
     :root:not([data-theme="light"]) button {
-        color: #fafaf9 !important;
+        color: #FFFFFF !important;
     }
 
     /* ---- Border overrides (skip when forced light) ---- */
-    :root:not([data-theme="light"]) div[style*="border-color: rgb(231, 229, 228)"],
-    :root:not([data-theme="light"]) div[style*="rgb(231, 229, 228)"],
-    :root:not([data-theme="light"]) details[style*="rgb(231, 229, 228)"] {
-        border-color: #292524 !important;
+    :root:not([data-theme="light"]) div[style*="border-color: rgb(229, 231, 235)"],
+    :root:not([data-theme="light"]) div[style*="rgb(229, 231, 235)"],
+    :root:not([data-theme="light"]) details[style*="rgb(229, 231, 235)"] {
+        border-color: #1E3A5F !important;
     }
 
     /* ---- Mobile nav overlay ---- */
     .nav-links.nav-open {
-        background-color: rgba(12, 10, 9, 0.97) !important;
+        background-color: rgba(10, 27, 51, 0.97) !important;
     }
 }
 
 /* ---- Force-dark via toggle (duplicates key overrides for inline styles) ---- */
-:root[data-theme="dark"] body { background-color: #0c0a09 !important; color: #fafaf9 !important; }
-:root[data-theme="dark"] .ozni-navbar { background: rgba(12,10,9,0.90) !important; border-bottom-color: #292524 !important; }
-:root[data-theme="dark"] .brand-text { color: #fafaf9 !important; }
-:root[data-theme="dark"] .ozni-nav-link { color: #a8a29e !important; }
-:root[data-theme="dark"] .ozni-nav-link:hover { color: #fafaf9 !important; }
-:root[data-theme="dark"] .nav-toggle { color: #fafaf9 !important; }
+:root[data-theme="dark"] body { background-color: #0A1B33 !important; color: #FFFFFF !important; }
+:root[data-theme="dark"] .meron-navbar { background: rgba(10,27,51,0.90) !important; border-bottom-color: #1E3A5F !important; }
+:root[data-theme="dark"] .brand-text { color: #FFFFFF !important; }
+:root[data-theme="dark"] .meron-nav-link { color: #94A3B8 !important; }
+:root[data-theme="dark"] .meron-nav-link:hover { color: #FFFFFF !important; }
+:root[data-theme="dark"] .nav-toggle { color: #FFFFFF !important; }
 :root[data-theme="dark"] div[style*="background-color: rgb(255, 255, 255)"],
-:root[data-theme="dark"] div[style*="background-color: rgb(245, 245, 244)"],
-:root[data-theme="dark"] details[style*="background-color: rgb(255, 255, 255)"] { background-color: #1c1917 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] div[style*="color: rgb(12, 10, 9)"],
-:root[data-theme="dark"] span[style*="color: rgb(12, 10, 9)"],
-:root[data-theme="dark"] p[style*="color: rgb(12, 10, 9)"] { color: #fafaf9 !important; }
-:root[data-theme="dark"] div[style*="color: rgb(87, 83, 78)"],
-:root[data-theme="dark"] span[style*="color: rgb(87, 83, 78)"],
-:root[data-theme="dark"] p[style*="color: rgb(87, 83, 78)"] { color: #a8a29e !important; }
-:root[data-theme="dark"] details { background-color: #1c1917 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] details summary { color: #fafaf9 !important; }
+:root[data-theme="dark"] div[style*="background-color: rgb(240, 242, 245)"],
+:root[data-theme="dark"] details[style*="background-color: rgb(255, 255, 255)"] { background-color: #0F2547 !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] div[style*="color: rgb(10, 27, 51)"],
+:root[data-theme="dark"] span[style*="color: rgb(10, 27, 51)"],
+:root[data-theme="dark"] p[style*="color: rgb(10, 27, 51)"] { color: #FFFFFF !important; }
+:root[data-theme="dark"] div[style*="color: rgb(71, 85, 105)"],
+:root[data-theme="dark"] span[style*="color: rgb(71, 85, 105)"],
+:root[data-theme="dark"] p[style*="color: rgb(71, 85, 105)"] { color: #94A3B8 !important; }
+:root[data-theme="dark"] details { background-color: #0F2547 !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] details summary { color: #FFFFFF !important; }
 :root[data-theme="dark"] .DateInput_input,
 :root[data-theme="dark"] .DateRangePickerInput,
-:root[data-theme="dark"] input { background-color: #1c1917 !important; color: #fafaf9 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] .CalendarDay__default { background: #1c1917 !important; color: #fafaf9 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] .CalendarDay__selected { background: #ef3c4a !important; color: #fff !important; }
+:root[data-theme="dark"] input { background-color: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .CalendarDay__default { background: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .CalendarDay__selected { background: #FF3330 !important; color: #fff !important; }
 :root[data-theme="dark"] .CalendarDay__selected_span,
-:root[data-theme="dark"] .CalendarDay__selected_span:hover { background: rgba(239, 60, 74, 0.25) !important; color: #fafaf9 !important; border-color: rgba(239, 60, 74, 0.35) !important; }
+:root[data-theme="dark"] .CalendarDay__selected_span:hover { background: rgba(255, 51, 48, 0.25) !important; color: #FFFFFF !important; border-color: rgba(255, 51, 48, 0.35) !important; }
 :root[data-theme="dark"] .CalendarDay__hovered_span,
-:root[data-theme="dark"] .CalendarDay__hovered_span:hover { background: rgba(239, 60, 74, 0.18) !important; color: #fafaf9 !important; border-color: rgba(239, 60, 74, 0.25) !important; }
+:root[data-theme="dark"] .CalendarDay__hovered_span:hover { background: rgba(255, 51, 48, 0.18) !important; color: #FFFFFF !important; border-color: rgba(255, 51, 48, 0.25) !important; }
 :root[data-theme="dark"] .CalendarDay__blocked_out_of_range,
-:root[data-theme="dark"] .CalendarDay__blocked_out_of_range:hover { background: #0c0a09 !important; color: #57534e !important; border-color: #292524 !important; }
+:root[data-theme="dark"] .CalendarDay__blocked_out_of_range:hover { background: #0A1B33 !important; color: #475569 !important; border-color: #1E3A5F !important; }
 :root[data-theme="dark"] .DateInput_fang { display: none !important; }
-:root[data-theme="dark"] .DateInput_input__focused { border-bottom-color: #ef3c4a !important; background: #292524 !important; }
+:root[data-theme="dark"] .DateInput_input__focused { border-bottom-color: #FF3330 !important; background: #1E3A5F !important; }
 :root[data-theme="dark"] .DayPickerKeyboardShortcuts_buttonReset { display: none !important; }
-:root[data-theme="dark"] .DayPicker__withBorder { background: #1c1917 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] .DayPickerNavigation_button { background: #1c1917 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] .CalendarMonth_caption { color: #fafaf9 !important; }
-:root[data-theme="dark"] .dash-dropdown { background-color: #1c1917 !important; border-color: #292524 !important; color: #fafaf9 !important; }
-:root[data-theme="dark"] .dash-datepicker { background: #1c1917 !important; border-color: #292524 !important; color: #fafaf9 !important; }
-:root[data-theme="dark"] .dash-datepicker input { color: #fafaf9 !important; }
+:root[data-theme="dark"] .DayPicker__withBorder { background: #0F2547 !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .DayPickerNavigation_button { background: #0F2547 !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .CalendarMonth_caption { color: #FFFFFF !important; }
+:root[data-theme="dark"] .dash-dropdown { background-color: #0F2547 !important; border-color: #1E3A5F !important; color: #FFFFFF !important; }
+:root[data-theme="dark"] .dash-datepicker { background: #0F2547 !important; border-color: #1E3A5F !important; color: #FFFFFF !important; }
+:root[data-theme="dark"] .dash-datepicker input { color: #FFFFFF !important; }
 :root[data-theme="dark"] .dash-datepicker-content,
 :root[data-theme="dark"] .dash-datepicker-calendar,
 :root[data-theme="dark"] .dash-datepicker-calendar-container,
 :root[data-theme="dark"] .dash-datepicker-calendar-wrapper,
-:root[data-theme="dark"] .dash-datepicker-controls { background: #1c1917 !important; color: #fafaf9 !important; border-color: #292524 !important; }
-:root[data-theme="dark"] .dash-datepicker-calendar-date-inside { color: #fafaf9 !important; }
-:root[data-theme="dark"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #ef3c4a !important; color: #fff !important; }
-:root[data-theme="dark"] .dash-datepicker-content .dash-dropdown { background: #1c1917 !important; color: #fafaf9 !important; }
-:root[data-theme="dark"] button { color: #fafaf9 !important; }
-:root[data-theme="dark"] #run-hover-card { background-color: #1c1917 !important; border-color: #292524 !important; color: #fafaf9 !important; }
-:root[data-theme="dark"] div[style*="border-color: rgb(231, 229, 228)"],
-:root[data-theme="dark"] details[style*="rgb(231, 229, 228)"] { border-color: #292524 !important; }
-:root[data-theme="dark"] .nav-links.nav-open { background-color: rgba(12,10,9,0.97) !important; }
+:root[data-theme="dark"] .dash-datepicker-controls { background: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .dash-datepicker-calendar-date-inside { color: #FFFFFF !important; }
+:root[data-theme="dark"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #FF3330 !important; color: #fff !important; }
+:root[data-theme="dark"] .dash-datepicker-content .dash-dropdown { background: #0F2547 !important; color: #FFFFFF !important; }
+:root[data-theme="dark"] button { color: #FFFFFF !important; }
+:root[data-theme="dark"] #hover-card { background-color: #0F2547 !important; border-color: #1E3A5F !important; color: #FFFFFF !important; }
+:root[data-theme="dark"] div[style*="border-color: rgb(229, 231, 235)"],
+:root[data-theme="dark"] details[style*="rgb(229, 231, 235)"] { border-color: #1E3A5F !important; }
+:root[data-theme="dark"] .nav-links.nav-open { background-color: rgba(10,27,51,0.97) !important; }
 
 /* ============================================================
    Force-light overrides — undoes ALL dark media query damage
    when data-theme="light" is set but OS prefers dark.
    Must come AFTER the @media block to win specificity.
    ============================================================ */
-:root[data-theme="light"] body { background-color: #fafaf9 !important; color: #0c0a09 !important; }
-:root[data-theme="light"] .ozni-navbar { background: rgba(250,250,249,0.80) !important; border-bottom-color: #e7e5e4 !important; }
-:root[data-theme="light"] .brand-text { color: #0c0a09 !important; }
-:root[data-theme="light"] .ozni-nav-link { color: #57534e !important; }
-:root[data-theme="light"] .ozni-nav-link:hover { color: #0c0a09 !important; }
-:root[data-theme="light"] .nav-toggle { color: #0c0a09 !important; }
+:root[data-theme="light"] body { background-color: #FFFFFF !important; color: #0A1B33 !important; }
+:root[data-theme="light"] .meron-navbar { background: rgba(248,249,252,0.80) !important; border-bottom-color: #E5E7EB !important; }
+:root[data-theme="light"] .brand-text { color: #0A1B33 !important; }
+:root[data-theme="light"] .meron-nav-link { color: #475569 !important; }
+:root[data-theme="light"] .meron-nav-link:hover { color: #0A1B33 !important; }
+:root[data-theme="light"] .nav-toggle { color: #0A1B33 !important; }
 /* Inline text colors */
-:root[data-theme="light"] div[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] span[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] p[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] h1[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] h2[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] h3[style*="color: rgb(250, 250, 249)"],
-:root[data-theme="light"] h4[style*="color: rgb(250, 250, 249)"] { color: #0c0a09 !important; }
-:root[data-theme="light"] div[style*="color: rgb(168, 162, 158)"],
-:root[data-theme="light"] span[style*="color: rgb(168, 162, 158)"],
-:root[data-theme="light"] p[style*="color: rgb(168, 162, 158)"] { color: #57534e !important; }
-:root[data-theme="light"] div[style*="color: rgb(120, 113, 108)"],
-:root[data-theme="light"] span[style*="color: rgb(120, 113, 108)"],
-:root[data-theme="light"] p[style*="color: rgb(120, 113, 108)"] { color: #a8a29e !important; }
+:root[data-theme="light"] div[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] span[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] p[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] h1[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] h2[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] h3[style*="color: rgb(248, 249, 252)"],
+:root[data-theme="light"] h4[style*="color: rgb(248, 249, 252)"] { color: #0A1B33 !important; }
+:root[data-theme="light"] div[style*="color: rgb(148, 163, 184)"],
+:root[data-theme="light"] span[style*="color: rgb(148, 163, 184)"],
+:root[data-theme="light"] p[style*="color: rgb(148, 163, 184)"] { color: #475569 !important; }
+:root[data-theme="light"] div[style*="color: rgb(100, 116, 139)"],
+:root[data-theme="light"] span[style*="color: rgb(100, 116, 139)"],
+:root[data-theme="light"] p[style*="color: rgb(100, 116, 139)"] { color: #94A3B8 !important; }
 /* Inline bg colors */
-:root[data-theme="light"] div[style*="background-color: rgb(12, 10, 9)"],
-:root[data-theme="light"] div[style*="background-color: rgb(28, 25, 23)"] { background-color: #ffffff !important; border-color: #e7e5e4 !important; }
-:root[data-theme="light"] div[style*="background-color: rgb(250, 250, 249)"] { background-color: #fafaf9 !important; }
-:root[data-theme="light"] div[style*="background-color: rgb(245, 245, 244)"] { background-color: #f5f5f4 !important; }
+:root[data-theme="light"] div[style*="background-color: rgb(10, 27, 51)"],
+:root[data-theme="light"] div[style*="background-color: rgb(15, 37, 71)"] { background-color: #ffffff !important; border-color: #E5E7EB !important; }
+:root[data-theme="light"] div[style*="background-color: rgb(248, 249, 252)"] { background-color: #FFFFFF !important; }
+:root[data-theme="light"] div[style*="background-color: rgb(240, 242, 245)"] { background-color: #f0f2f5 !important; }
 /* Cards & details */
-:root[data-theme="light"] details { background-color: #ffffff !important; border-color: #e7e5e4 !important; }
-:root[data-theme="light"] details summary { color: #0c0a09 !important; }
-:root[data-theme="light"] button { color: #0c0a09 !important; }
+:root[data-theme="light"] details { background-color: #ffffff !important; border-color: #E5E7EB !important; }
+:root[data-theme="light"] details summary { color: #0A1B33 !important; }
+:root[data-theme="light"] button { color: #0A1B33 !important; }
 /* All inputs */
-:root[data-theme="light"] input { background-color: #f5f5f4 !important; color: #0c0a09 !important; border-color: #e7e5e4 !important; }
+:root[data-theme="light"] input { background-color: #f0f2f5 !important; color: #0A1B33 !important; border-color: #E5E7EB !important; }
 /* Date picker */
-:root[data-theme="light"] .dash-datepicker { background: #f5f5f4 !important; border-color: #e7e5e4 !important; }
-:root[data-theme="light"] .dash-datepicker input { color: #0c0a09 !important; background: transparent !important; }
+:root[data-theme="light"] .dash-datepicker { background: #f0f2f5 !important; border-color: #E5E7EB !important; }
+:root[data-theme="light"] .dash-datepicker input { color: #0A1B33 !important; background: transparent !important; }
 :root[data-theme="light"] .dash-datepicker-content,
 :root[data-theme="light"] .dash-datepicker-calendar,
 :root[data-theme="light"] .dash-datepicker-calendar-container,
 :root[data-theme="light"] .dash-datepicker-calendar-wrapper,
-:root[data-theme="light"] .dash-datepicker-controls { background: #ffffff !important; color: #0c0a09 !important; border-color: #e7e5e4 !important; }
-:root[data-theme="light"] .dash-datepicker-calendar-date-inside { color: #0c0a09 !important; }
-:root[data-theme="light"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #ef3c4a !important; color: #fff !important; }
-:root[data-theme="light"] .dash-datepicker-content .dash-input-element { background: #ffffff !important; color: #0c0a09 !important; }
-:root[data-theme="light"] .dash-datepicker-content .dash-input-stepper { background: #f5f5f4 !important; color: #0c0a09 !important; }
+:root[data-theme="light"] .dash-datepicker-controls { background: #ffffff !important; color: #0A1B33 !important; border-color: #E5E7EB !important; }
+:root[data-theme="light"] .dash-datepicker-calendar-date-inside { color: #0A1B33 !important; }
+:root[data-theme="light"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #FF3330 !important; color: #fff !important; }
+:root[data-theme="light"] .dash-datepicker-content .dash-input-element { background: #ffffff !important; color: #0A1B33 !important; }
+:root[data-theme="light"] .dash-datepicker-content .dash-input-stepper { background: #f0f2f5 !important; color: #0A1B33 !important; }
 /* Dropdowns */
-:root[data-theme="light"] .dash-dropdown { background-color: #ffffff !important; border-color: #e7e5e4 !important; color: #0c0a09 !important; }
+:root[data-theme="light"] .dash-dropdown { background-color: #ffffff !important; border-color: #E5E7EB !important; color: #0A1B33 !important; }
 :root[data-theme="light"] .dash-dropdown-value,
-:root[data-theme="light"] .dash-dropdown-placeholder { color: #57534e !important; }
-:root[data-theme="light"] .dash-dropdown-menu { background-color: #ffffff !important; border-color: #e7e5e4 !important; }
-:root[data-theme="light"] .dash-dropdown-trigger-icon svg { fill: #57534e !important; }
+:root[data-theme="light"] .dash-dropdown-placeholder { color: #475569 !important; }
+:root[data-theme="light"] .dash-dropdown-menu { background-color: #ffffff !important; border-color: #E5E7EB !important; }
+:root[data-theme="light"] .dash-dropdown-trigger-icon svg { fill: #475569 !important; }
 /* Hover card */
-:root[data-theme="light"] #run-hover-card { background-color: #ffffff !important; border-color: #e7e5e4 !important; color: #0c0a09 !important; }
+:root[data-theme="light"] #hover-card { background-color: #ffffff !important; border-color: #E5E7EB !important; color: #0A1B33 !important; }
 /* Borders */
-:root[data-theme="light"] div[style*="border-color: rgb(41, 37, 36)"],
-:root[data-theme="light"] details[style*="rgb(41, 37, 36)"],
-:root[data-theme="light"] div[style*="rgb(41, 37, 36)"] { border-color: #e7e5e4 !important; }
+:root[data-theme="light"] div[style*="border-color: rgb(30, 58, 95)"],
+:root[data-theme="light"] details[style*="rgb(30, 58, 95)"],
+:root[data-theme="light"] div[style*="rgb(30, 58, 95)"] { border-color: #E5E7EB !important; }
 /* Calendar hover card */
-:root[data-theme="light"] .cal-hover-card { background-color: #ffffff !important; border-color: #e7e5e4 !important; }
+:root[data-theme="light"] .cal-hover-card { background-color: #ffffff !important; border-color: #E5E7EB !important; }
 /* DataTable */
 :root[data-theme="light"] .dash-spreadsheet-container .dash-spreadsheet-inner td,
-:root[data-theme="light"] .dash-spreadsheet-container .dash-spreadsheet-inner th { background-color: #ffffff !important; color: #0c0a09 !important; border-color: #e7e5e4 !important; }
+:root[data-theme="light"] .dash-spreadsheet-container .dash-spreadsheet-inner th { background-color: #ffffff !important; color: #0A1B33 !important; border-color: #E5E7EB !important; }
 /* Mobile nav */
-:root[data-theme="light"] .nav-links.nav-open { background-color: rgba(250,250,249,0.97) !important; }
+:root[data-theme="light"] .nav-links.nav-open { background-color: rgba(248,249,252,0.97) !important; }
 /* Modal/sidebar */
-:root[data-theme="light"] #modal-content { background: #ffffff !important; border-color: #e7e5e4 !important; }
+:root[data-theme="light"] #modal-content { background: #ffffff !important; border-color: #E5E7EB !important; }
 :root[data-theme="light"] #modal-backdrop { background: rgba(0,0,0,0.2) !important; }
+
+/* ============================================================
+   MERON page-navigation loading overlay
+   ============================================================ */
+
+#meron-page-loading {
+    position: fixed;
+    top: 56px;              /* below navbar */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease-out;
+}
+#meron-page-loading.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+.meron-page-loading__mark {
+    width: 72px;
+    height: 72px;
+    background: url("/assets/meron-icon.svg") no-repeat center/contain;
+    animation: meron-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .meron-page-loading__mark {
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .meron-page-loading__mark {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* ============================================================
+   Activity card brand mark — Strava-style corner attribution
+   ============================================================ */
+
+/* Small MERON emblem watermark in the top-right of each activity card
+   (the <details> elements on /activities and the modal). Inspired by
+   Strava's subtle brand stamp on exported activity images. */
+details[id^="activity-card-"],
+#modal-content {
+    position: relative;
+}
+details[id^="activity-card-"]::after,
+#modal-content::after {
+    content: "";
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 22px;
+    height: 16px;
+    background: url("/assets/meron-icon.svg") no-repeat center/contain;
+    opacity: 0.14;
+    pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) details[id^="activity-card-"]::after,
+    :root:not([data-theme="light"]) #modal-content::after {
+        filter: invert(1) hue-rotate(180deg);
+        opacity: 0.22;
+    }
+}
+:root[data-theme="dark"] details[id^="activity-card-"]::after,
+:root[data-theme="dark"] #modal-content::after {
+    filter: invert(1) hue-rotate(180deg);
+    opacity: 0.22;
+}
+
+/* ============================================================
+   MERON loading spinner — pulse the brand emblem
+   ============================================================ */
+
+.meron-loading ._dash-loading,
+.meron-loading ._dash-loading-callback {
+    position: relative;
+    min-height: 80px;
+    min-width: 80px;
+}
+.meron-loading ._dash-loading::before,
+.meron-loading ._dash-loading-callback::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 48px;
+    height: 48px;
+    margin-top: -24px;
+    margin-left: -24px;
+    background: url("/assets/meron-icon.svg") no-repeat center/contain;
+    animation: meron-pulse 1.4s ease-in-out infinite;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .meron-loading ._dash-loading::before,
+    :root:not([data-theme="light"]) .meron-loading ._dash-loading-callback::before {
+        filter: invert(1) hue-rotate(180deg);
+    }
+}
+:root[data-theme="dark"] .meron-loading ._dash-loading::before,
+:root[data-theme="dark"] .meron-loading ._dash-loading-callback::before {
+    filter: invert(1) hue-rotate(180deg);
+}
+/* Hide Dash's built-in dots/spinner circles when inside .meron-loading */
+.meron-loading .dash-spinner,
+.meron-loading .dash-default-spinner,
+.meron-loading ._dash-loading > div:not(:empty) { display: none !important; }
+
+@keyframes meron-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.95); }
+    50%      { opacity: 1.00; transform: scale(1.05); }
+}
 
 /* ============================================================
    Print CSS — training plan
    ============================================================ */
 
 @media print {
-    .ozni-navbar,
+    .meron-navbar,
     .page-footer,
     button,
-    .dcc-loading {
+    .dcc-loading,
+    #meron-page-loading,
+    .hero-icon,
+    .statement-section::before,
+    details[id^="activity-card-"]::after,
+    #modal-content::after {
         display: none !important;
     }
 
@@ -1542,6 +1813,21 @@ details[open] summary {
         background: white !important;
         color: black !important;
         font-size: 11pt;
+    }
+
+    /* MERON header stamp at the very top of printed output */
+    body::before {
+        content: "MERON";
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 10pt;
+        font-weight: 700;
+        letter-spacing: 0.3em;
+        color: #FF3330;
+        padding: 8pt 0;
+        border-bottom: 1pt solid #ccc;
+        margin-bottom: 16pt;
+        text-align: left;
     }
 
     details {
@@ -1569,7 +1855,7 @@ details[open] summary {
 .range-pill-bar {
     display: flex;
     gap: 0;
-    border: 1px solid #e7e5e4;
+    border: 1px solid #E5E7EB;
     border-radius: 4px;
     overflow: hidden;
     width: fit-content;
@@ -1577,7 +1863,7 @@ details[open] summary {
 
 .range-pill {
     background: transparent;
-    color: var(--text-secondary, #57534e);
+    color: var(--text-secondary, #475569);
     border: none;
     padding: 4px 12px;
     font-size: 11px;
@@ -1586,7 +1872,7 @@ details[open] summary {
     letter-spacing: 0.05em;
     cursor: pointer;
     transition: all 0.15s ease;
-    border-right: 1px solid #e7e5e4;
+    border-right: 1px solid #E5E7EB;
 }
 
 .range-pill:last-child {
@@ -1598,6 +1884,6 @@ details[open] summary {
 }
 
 .range-pill-active {
-    background: var(--accent, #ef3c4a) !important;
+    background: var(--accent, #FF3330) !important;
     color: #fff !important;
 }

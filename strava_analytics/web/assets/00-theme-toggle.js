@@ -20,8 +20,15 @@
         }
     }
 
-    // Apply immediately on script load (before first paint)
-    var saved = localStorage.getItem("strava-theme") || "system";
+    // Apply immediately on script load (before first paint).
+    // One-time migration of the legacy "strava-theme" key to "meron-theme".
+    var saved = localStorage.getItem("meron-theme")
+             || localStorage.getItem("strava-theme")
+             || "system";
+    if (localStorage.getItem("strava-theme") && !localStorage.getItem("meron-theme")) {
+        localStorage.setItem("meron-theme", saved);
+        localStorage.removeItem("strava-theme");
+    }
     applyTheme(saved);
 
     // Expose for Dash clientside callbacks

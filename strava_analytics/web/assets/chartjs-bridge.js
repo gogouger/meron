@@ -28,37 +28,59 @@
         window.location.hash = "modal:" + dateStr;
     }
 
-    /* ── hover card for run charts ────────────────────────────────── */
-    function showRunHoverCard(meta) {
-        var card = document.getElementById("run-hover-card");
-        if (!card || !meta) return;
-        var typeColors = {
-            "race": "#ef3c4a", "long": "#5b9bd5",
-            "moderate": "#d4a84b", "easy": "#5b9bd5"
-        };
-        var tc = typeColors[meta.type] || "#a8a29e";
-        var badge = meta.type
-            ? '<span style="background:' + tc + ';color:#fff;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;padding:1px 6px;margin-left:6px">' + meta.type + '</span>'
-            : '';
-        card.innerHTML =
-            '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + meta.name + badge + '</div>' +
-            '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">Distance</div><div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">' + meta.dist + '</div></div>' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">Pace</div><div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">' + meta.pace + '/mi</div></div>' +
-                '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">Duration</div><div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">' + meta.duration + '</div></div>' +
-                (meta.hr ? '<div><div style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">Avg HR</div><div style="font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)">' + meta.hr + '</div></div>' : '') +
-            '</div>' +
-            '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click to view details \u2193</div>';
+    /* ── hover card (unified: run + lift) ────────────────────────────── */
+    var _labelStyle = 'font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)';
+    var _statStyle = 'font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary)';
+
+    function _hoverStat(label, value) {
+        return '<div><div style="' + _labelStyle + '">' + label + '</div><div style="' + _statStyle + '">' + value + '</div></div>';
+    }
+
+    function _hoverBadge(text, color) {
+        if (!text) return '';
+        return '<span style="background:' + color + ';color:#fff;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;padding:1px 6px;margin-left:6px">' + text + '</span>';
+    }
+
+    function _buildRunCard(m) {
+        var typeColors = {"race":"#FF3330","long":"#0D6EFD","moderate":"#d4a84b","easy":"#0D6EFD"};
+        var tc = typeColors[m.type] || "#a8a29e";
+        var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.type, tc) + '</div>';
+        h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">';
+        h += _hoverStat("Distance", m.dist);
+        h += _hoverStat("Pace", m.pace + '/mi');
+        h += _hoverStat("Duration", m.duration);
+        if (m.hr) h += _hoverStat("Avg HR", m.hr);
+        h += '</div>';
+        h += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click to view details \u2193</div>';
+        return h;
+    }
+
+    function _buildLiftCard(m) {
+        var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.lift, m.liftColor || "#a8a29e") + '</div>';
+        h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">';
+        if (m.weight) h += _hoverStat("Weight", m.weight);
+        if (m.scheme) h += _hoverStat("Scheme", m.scheme);
+        if (m.volume) h += _hoverStat("Volume", m.volume);
+        if (m.est1rm) h += _hoverStat("Est. 1RM", m.est1rm);
+        h += '</div>';
+        h += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">Click to view details \u2193</div>';
+        return h;
+    }
+
+    function showHoverCard(data, type) {
+        var card = document.getElementById("hover-card");
+        if (!card || !data) return;
+        card.innerHTML = (type === "lift") ? _buildLiftCard(data) : _buildRunCard(data);
         card.style.display = "block";
     }
 
-    function hideRunHoverCard() {
-        var card = document.getElementById("run-hover-card");
+    function hideHoverCard() {
+        var card = document.getElementById("hover-card");
         if (card) card.style.display = "none";
     }
 
     document.addEventListener("mousemove", function (e) {
-        var card = document.getElementById("run-hover-card");
+        var card = document.getElementById("hover-card");
         if (!card || card.style.display === "none") return;
         var x = e.clientX + 16, y = e.clientY + 16;
         if (x + 280 > window.innerWidth) x = e.clientX - 280;
@@ -92,7 +114,7 @@
         if (model.opacity === 0) { tooltip.style.display = "none"; return; }
 
         // Suppress when run hover card is active
-        var hoverCard = document.getElementById("run-hover-card");
+        var hoverCard = document.getElementById("hover-card");
         if (hoverCard && hoverCard.style.display === "block") {
             tooltip.style.display = "none";
             return;
@@ -491,21 +513,26 @@
             })(meta.scrollListId, chart);
         }
 
-        // Hover card for run charts
-        if (meta.runHoverCard) {
+        // Hover card (run or lift)
+        if (meta.hoverCard || meta.runHoverCard) {
+            var hoverType = meta.hoverType || "run";
             canvas.addEventListener("mousemove", function (evt) {
                 var pts = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
-                if (!pts.length) { hideRunHoverCard(); return; }
+                if (!pts.length) { hideHoverCard(); return; }
                 var pt = pts[0], ds = cfg.data.datasets[pt.datasetIndex];
                 var dateStr = null, item = ds.data[pt.index];
                 if (item && item._dateStr) dateStr = item._dateStr;
                 else if (meta.dateStrings && meta.dateStrings[pt.datasetIndex])
                     dateStr = meta.dateStrings[pt.datasetIndex][pt.index];
-                if (dateStr && meta.runMeta && meta.runMeta[dateStr])
-                    showRunHoverCard(meta.runMeta[dateStr]);
-                else hideRunHoverCard();
+                var hoverData = null;
+                if (hoverType === "lift" && meta.liftMeta && dateStr)
+                    hoverData = meta.liftMeta[dateStr];
+                else if (meta.runMeta && dateStr)
+                    hoverData = meta.runMeta[dateStr];
+                if (hoverData) showHoverCard(hoverData, hoverType);
+                else hideHoverCard();
             });
-            canvas.addEventListener("mouseleave", hideRunHoverCard);
+            canvas.addEventListener("mouseleave", hideHoverCard);
         }
     }
     window._cjsRenderChart = renderChart;

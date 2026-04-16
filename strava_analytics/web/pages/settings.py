@@ -153,7 +153,7 @@ def layout(**_kwargs):
 
         page_section("ABOUT", [
             html.Div([
-                html.P("Strava Analytics", style={
+                html.P("MERON", style={
                     "fontSize": "16px", "fontWeight": "700", "color": TEXT_PRIMARY,
                 }),
                 html.P(
@@ -178,12 +178,18 @@ def layout(**_kwargs):
 clientside_callback(
     """
     function(pathname) {
-        var saved = localStorage.getItem("strava-theme") || "system";
+        var saved = localStorage.getItem("meron-theme")
+                 || localStorage.getItem("strava-theme")
+                 || "system";
+        if (localStorage.getItem("strava-theme") && !localStorage.getItem("meron-theme")) {
+            localStorage.setItem("meron-theme", saved);
+            localStorage.removeItem("strava-theme");
+        }
         setTimeout(function() {
             var cards = document.querySelectorAll(".theme-option-card");
             cards.forEach(function(c) { c.style.borderColor = ""; });
             var active = document.getElementById("theme-" + saved);
-            if (active) active.style.borderColor = "#ef3c4a";
+            if (active) active.style.borderColor = "#FF3330";
         }, 200);
         return saved;
     }
@@ -202,14 +208,14 @@ clientside_callback(
         var theme = triggeredId.replace("theme-", "");
 
         // Save and apply
-        localStorage.setItem("strava-theme", theme);
+        localStorage.setItem("meron-theme", theme);
         if (window._applyTheme) window._applyTheme(theme);
 
         // Update card highlights
         var cards = document.querySelectorAll(".theme-option-card");
         cards.forEach(function(c) { c.style.borderColor = ""; });
         var active = document.getElementById("theme-" + theme);
-        if (active) active.style.borderColor = "#ef3c4a";
+        if (active) active.style.borderColor = "#FF3330";
 
         return theme;
     }
