@@ -217,14 +217,23 @@ def compute_fatigue(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def map_lifting_program(df: pd.DataFrame) -> pd.DataFrame:
-    """Map the lifting program days to Weight Training activities.
+    """Derive per-activity lift weights from activity descriptions.
 
-    Takes the N most recent Weight Training activities (where N = number of
-    lift days in the program) and assigns program day and exercise details.
+    Each Weight Training activity's ``description`` is a parseable
+    string of the form ``"Bench Press 5x4@135; Pull Up 5x5; ..."``
+    (produced by the user, by Strava, or by the one-shot backfill in
+    ``services.backfill_lifts``). We parse it to populate the per-row
+    lift columns (bench_weight, squat_weight, etc.) that drive the
+    strength-progression plots.
+
+    Activities without a description get zero-valued rows (NaN columns)
+    and show only HR / duration in the UI — the "honest empty" the user
+    asked for.
     """
+    from .lifting_program import parse_description
+
     df = df.copy()
 
-    # Initialize lifting columns
     lift_cols = [
         "program_day", "bench_weight", "bench_volume", "bench_sets", "bench_reps",
         "squat_weight", "squat_volume", "squat_sets", "squat_reps",
@@ -237,48 +246,25 @@ def map_lifting_program(df: pd.DataFrame) -> pd.DataFrame:
         df[col] = np.nan
     df["lift_exercises"] = ""
 
-    lift_days = get_lift_days()
-    n_lift_days = len(lift_days)
-
-    # Get weight training activities sorted by date descending. Only
-    # activities with a real text description get mapped to the program
-    # — Strava-synced sessions without notes shouldn't have the program
-    # impose bench/squat/etc. weights on them; they just show HR +
-    # duration in the UI.
     wt_mask = df["type"] == "Weight Training"
-    has_desc = (
-        df["description"].fillna("").astype(str).str.strip().ne("")
-        if "description" in df.columns else pd.Series(False, index=df.index)
-    )
-    wt_indices = df[wt_mask & has_desc].sort_values(
-        "date", ascending=False
-    ).index.tolist()
+    if "description" not in df.columns:
+        return df
 
-    if len(wt_indices) < n_lift_days:
-        # Not enough activities to map the full program — map what we can
-        n_lift_days = len(wt_indices)
+    has_desc = df["description"].fillna("").astype(str).str.strip().ne("")
+    for idx in df[wt_mask & has_desc].index:
+        desc = str(df.at[idx, "description"]).strip()
+        parsed = parse_description(desc)
+        if not parsed:
+            continue
 
-    # Map most recent N lift activities to program days (reverse order)
-    for i, (day_num, _, exercises) in enumerate(reversed(lift_days)):
-        if i >= n_lift_days:
-            break
-        idx = wt_indices[i]
-        df.at[idx, "program_day"] = day_num
-        lifts = get_primary_lifts(exercises)
-        for k, v in lifts.items():
+        # Keep the raw description as the exercise summary for the card.
+        df.at[idx, "lift_exercises"] = desc
+
+        # Extract the primary-lift weights using the existing mapper.
+        tuples = [(e["name"], e["sets"], e["reps"], e["weight"]) for e in parsed]
+        for k, v in get_primary_lifts(tuples).items():
             if v is not None:
                 df.at[idx, k] = v
-
-        # Readable exercise summary
-        parts = []
-        for name, sets, reps, weight in exercises:
-            if sets and reps and weight:
-                parts.append(f"{name} {sets}x{reps}@{weight}")
-            elif sets and reps:
-                parts.append(f"{name} {sets}x{reps}")
-            else:
-                parts.append(name)
-        df.at[idx, "lift_exercises"] = "; ".join(parts)
 
     return df
 

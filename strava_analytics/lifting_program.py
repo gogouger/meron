@@ -5,6 +5,16 @@ Map to calendar by backtracking from most recent Weight Training activity.
 Program ran from ~Jan 9, 2026 to Apr 3, 2026.
 """
 
+from __future__ import annotations
+
+import re
+
+
+# Default anchor used by the backfill — the date the program started in
+# real life. Align activities on/after this date to program lift days in
+# order.
+PROGRAM_ANCHOR_DATE = "2026-01-09"
+
 # Baseline PRs at program start (Jan 2026)
 BASELINE = {
     "weight_lbs": 175,
@@ -312,3 +322,60 @@ def get_primary_lifts(exercises: list) -> dict:
         elif "hip thrust" in lower_name:
             result["hip_thrust_weight"] = weight
     return result
+
+
+# ── Description (de)serialisation ───────────────────────────────────
+#
+# An activity's description is a compact, parseable string:
+#   "Bench Press 5x4@135; Pull Up 5x5; Tib Raise"
+# used both for the backfill (writing new descriptions) and for
+# downstream enrichment (parsing description → per-activity weights).
+
+
+def format_program_day_description(exercises) -> str:
+    """Serialise a program day's ``exercises`` list to a description string."""
+    parts: list[str] = []
+    for name, sets, reps, weight in exercises:
+        s = int(sets) if sets else 0
+        r = int(reps) if reps else 0
+        w = float(weight) if weight else 0.0
+        if s and r and w:
+            parts.append(f"{name} {s}x{r}@{int(w) if w == int(w) else w}")
+        elif s and r:
+            parts.append(f"{name} {s}x{r}")
+        else:
+            parts.append(name)
+    return "; ".join(parts)
+
+
+_EX_PATTERN = re.compile(r"^(.+?)\s+(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?$")
+
+
+def parse_description(exercises_str) -> list[dict]:
+    """Parse a description string back into ``[{name, sets, reps, weight}]``.
+
+    Inverse of :func:`format_program_day_description`. Tolerant of
+    whitespace and missing weight; unparseable fragments get a zeroed
+    entry so the exercise still appears in UI lists.
+    """
+    if not exercises_str:
+        return []
+    # pandas NaN compatibility without importing pandas here.
+    if isinstance(exercises_str, float) and exercises_str != exercises_str:
+        return []
+    parsed: list[dict] = []
+    for ex_str in str(exercises_str).split(";"):
+        ex_str = ex_str.strip()
+        if not ex_str:
+            continue
+        m = _EX_PATTERN.match(ex_str)
+        if m:
+            parsed.append({
+                "name": m.group(1).strip(),
+                "sets": int(m.group(2)),
+                "reps": int(m.group(3)),
+                "weight": float(m.group(4)) if m.group(4) else 0.0,
+            })
+        else:
+            parsed.append({"name": ex_str, "sets": 0, "reps": 0, "weight": 0.0})
+    return parsed

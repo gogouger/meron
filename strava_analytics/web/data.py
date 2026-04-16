@@ -132,6 +132,27 @@ def init(path: str | Path | None = None) -> None:
     _athlete_config = _load_athlete_config(meron_root)
     _profile = _load_profile(meron_root)
 
+    # 5b. Backfill lift descriptions from the static program for any
+    #     Weight Training activity that has none. Idempotent — re-runs
+    #     skip activities that already have real descriptions. A future
+    #     update will sync structured lift data from Strava or accept
+    #     manual entry from the UI; until then, this is how strength
+    #     progression charts get per-activity weights.
+    try:
+        from strava_analytics.services.backfill_lifts import (
+            backfill_lift_descriptions,
+        )
+        from strava_analytics.db import session_scope
+        with session_scope() as session:
+            report = backfill_lift_descriptions(
+                session, user_id=current_user_id()
+            )
+        if report.get("matched", 0) > 0:
+            # New descriptions → enrichment cache is stale.
+            invalidate_cache()
+    except Exception as e:
+        logger.warning("Lift-description backfill failed: %s", e)
+
     # 6. Prime enrichment cache + sidecar artifacts
     df = get_enriched_df(user_id=current_user_id(), athlete_config=_athlete_config, fit_dir=meron_root)
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 import dash_bootstrap_components as dbc
@@ -138,27 +137,9 @@ _NAME_TO_ICON = {
 
 
 # ── Exercise parsing ─────────────────────────────────────────────────
-
-def _parse_exercises(exercises_str: str) -> list[dict]:
-    """Parse lift_exercises string → list of {name, sets, reps, weight}."""
-    if not exercises_str or pd.isna(exercises_str):
-        return []
-    parsed = []
-    for ex_str in str(exercises_str).split(";"):
-        ex_str = ex_str.strip()
-        if not ex_str:
-            continue
-        m = re.match(r'^(.+?)\s+(\d+)x(\d+)(?:@(\d+(?:\.\d+)?))?$', ex_str)
-        if m:
-            parsed.append({
-                "name": m.group(1).strip(),
-                "sets": int(m.group(2)),
-                "reps": int(m.group(3)),
-                "weight": float(m.group(4)) if m.group(4) else 0,
-            })
-        else:
-            parsed.append({"name": ex_str, "sets": 0, "reps": 0, "weight": 0})
-    return parsed
+# The canonical parser lives in ``lifting_program.parse_description`` so
+# cards and enrichment share one implementation.
+from strava_analytics.lifting_program import parse_description as _parse_exercises  # noqa: E402
 
 
 def _exercise_cards(parsed_exercises: list[dict]) -> html.Div | None:

@@ -48,6 +48,23 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     print(f"Ingest report: {report}")
 
 
+def cmd_backfill_lifts(args: argparse.Namespace) -> None:
+    """Walk the static lifting program forward from ``--anchor`` and
+    write a description onto every bare Weight Training activity."""
+    factory = _db_init()
+    from .services.backfill_lifts import backfill_lift_descriptions
+    from .services.enrichment_service import invalidate_cache
+    with factory() as session:
+        report = backfill_lift_descriptions(
+            session,
+            user_id=current_user_id(),
+            anchor_date=args.anchor,
+        )
+    if report.get("matched", 0) > 0:
+        invalidate_cache()
+    print(f"Backfill report: {report}")
+
+
 def _header(title: str) -> str:
     return f"\n{'=' * 60}\n  {title}\n{'=' * 60}"
 
@@ -322,6 +339,17 @@ def main() -> None:
     p_ingest = sub.add_parser("ingest", help="Incremental bulk ingest from an export dir")
     p_ingest.add_argument("export_dir", help="Path to Strava export directory")
 
+    # backfill-lifts — write program-day descriptions onto bare lifts
+    p_backfill = sub.add_parser(
+        "backfill-lifts",
+        help="Write program-day descriptions onto bare Weight Training activities",
+    )
+    p_backfill.add_argument(
+        "--anchor", default=None,
+        help="ISO date (YYYY-MM-DD) of the program's first lift. "
+             "Defaults to lifting_program.PROGRAM_ANCHOR_DATE.",
+    )
+
     args = parser.parse_args()
 
     # DB-only commands short-circuit before needing an export_dir
@@ -333,6 +361,9 @@ def main() -> None:
         return
     if args.command == "ingest":
         cmd_ingest(args)
+        return
+    if args.command == "backfill-lifts":
+        cmd_backfill_lifts(args)
         return
 
     # Data commands need a source. Prefer `export_dir` if provided, else
