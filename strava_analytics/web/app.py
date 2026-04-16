@@ -12,6 +12,7 @@ import pandas as pd
 
 from strava_analytics.web import data
 from strava_analytics.web.api import register_api
+from strava_analytics.web.oauth import register_oauth
 
 
 # Canonical site URL for OpenGraph / Twitter metadata. Leave empty for local dev
@@ -185,6 +186,8 @@ def create_app() -> dash.Dash:
 
     # Register REST API endpoints on the underlying Flask server
     register_api(app.server)
+    # Register OAuth blueprint (/oauth/strava/*)
+    register_oauth(app.server)
 
     # Serve /favicon.ico directly from assets/ so bare-path favicon requests
     # (browser tab, link scrapers, /favicon.ico fallback) resolve to MERON.
@@ -318,8 +321,16 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
     parser = argparse.ArgumentParser(description="MERON Web Dashboard")
-    parser.add_argument("export_dir",
-                        help="Path to Strava export directory")
+    parser.add_argument(
+        "export_dir",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional: path to a Strava export directory. If omitted the "
+            "DB at $MERON_DB_PATH (~/.meron/meron.db) is used. If provided "
+            "and the DB is empty, the export is auto-imported."
+        ),
+    )
     parser.add_argument("--port", type=int, default=8050)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--debug", action="store_true")

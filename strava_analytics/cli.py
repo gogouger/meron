@@ -11,6 +11,43 @@ from .enrichment import enrich
 from . import metrics
 
 
+def _db_init():
+    """Lazy-initialize the DB + migrations. Returns (engine, session_factory)."""
+    from .db import init_engine, get_session_factory
+    from .db.migrations import run_migrations
+    init_engine()
+    run_migrations()
+    return get_session_factory()
+
+
+def cmd_migrate(args: argparse.Namespace) -> None:
+    """Import a Strava bulk export into the MERON database."""
+    from .db.migrations import migration_002_backfill_bulk
+    _db_init()
+    report = migration_002_backfill_bulk(args.export_dir)
+    print(f"Migration complete: {report}")
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    """Pull new activities from Strava via the OAuth API."""
+    factory = _db_init()
+    from .services.sync import run_strava_sync
+    with factory() as session:
+        report = run_strava_sync(user_id=1, session=session)
+        session.commit()
+    print(f"Sync report: {report}")
+
+
+def cmd_ingest(args: argparse.Namespace) -> None:
+    """Ingest a Strava export directory into the existing MERON database."""
+    factory = _db_init()
+    from .services.ingestion.strava_csv import ingest_bulk
+    with factory() as session:
+        report = ingest_bulk(args.export_dir, user_id=1, session=session)
+        session.commit()
+    print(f"Ingest report: {report}")
+
+
 def _header(title: str) -> str:
     return f"\n{'=' * 60}\n  {title}\n{'=' * 60}"
 
@@ -242,7 +279,9 @@ def main() -> None:
     )
     parser.add_argument(
         "export_dir",
-        help="Path to Strava export directory (containing activities.csv)",
+        nargs="?",
+        default=None,
+        help="Path to Strava export directory (omit for DB-only commands: migrate, sync, ingest)",
     )
 
     sub = parser.add_subparsers(dest="command")
@@ -271,10 +310,42 @@ def main() -> None:
     )
     p_export.add_argument("--type", "-t", help="Filter to activity type (e.g. Run)")
 
+    # migrate — import a Strava export into the MERON DB
+    p_migrate = sub.add_parser("migrate", help="Import Strava export into MERON DB")
+    p_migrate.add_argument("--from", dest="export_dir", required=True,
+                           help="Path to Strava export directory")
+
+    # sync — pull from Strava API
+    sub.add_parser("sync", help="Pull new activities from Strava via OAuth API")
+
+    # ingest — incremental bulk ingest
+    p_ingest = sub.add_parser("ingest", help="Incremental bulk ingest from an export dir")
+    p_ingest.add_argument("export_dir", help="Path to Strava export directory")
+
     args = parser.parse_args()
 
-    df = load_activities(args.export_dir)
-    profile = load_profile(args.export_dir)
+    # DB-only commands short-circuit before needing an export_dir
+    if args.command == "migrate":
+        cmd_migrate(args)
+        return
+    if args.command == "sync":
+        cmd_sync(args)
+        return
+    if args.command == "ingest":
+        cmd_ingest(args)
+        return
+
+    # Data commands need a source. Prefer `export_dir` if provided, else
+    # fall back to the DB (so users can run `strava summary` after `migrate`).
+    if args.export_dir:
+        df = load_activities(args.export_dir)
+        profile = load_profile(args.export_dir)
+    else:
+        # DB-backed path
+        from .web import data
+        data.init(None)
+        df = data.get_df()
+        profile = data.get_profile()
 
     if args.command is None or args.command == "summary":
         cmd_summary(df, profile, args)

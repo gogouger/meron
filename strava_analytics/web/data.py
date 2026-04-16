@@ -1,20 +1,48 @@
-"""Data loading and caching layer for the web dashboard."""
+"""Data loading and caching layer — DB-backed since v2.
+
+This module's public API is preserved for backwards compatibility with
+every page that imports from it. Under the hood:
+- Raw activities come from SQLite (`db/repository.py`).
+- Enrichment is orchestrated via `services/enrichment_service`.
+- Sidecar artifacts (athlete_config.json, route_index.json, best_efforts_cache.json,
+  heatmap-data.json, FIT files) live under `~/.meron/` (the "export dir").
+
+`init(path)` accepts either:
+  - a legacy Strava export directory (triggers `migration_002_backfill_bulk`), OR
+  - the `~/.meron/` MERON directory directly.
+"""
 
 import json
+import logging
+import os
 from pathlib import Path
 
 import pandas as pd
 
-from strava_analytics.loader import load_activities, load_profile
-from strava_analytics.enrichment import enrich
+from strava_analytics.db import (
+    get_session_factory,
+    init_engine,
+    meron_dir,
+)
+from strava_analytics.db.migrations import run_migrations
 from strava_analytics.lifting_program import BASELINE, END_PRS, PROGRAM
+from strava_analytics.services.enrichment_service import (
+    get_enriched_df,
+    invalidate_cache,
+)
 
 
-_df: pd.DataFrame | None = None
+logger = logging.getLogger(__name__)
+
+
 _profile: dict | None = None
-_export_dir: Path | None = None
 _athlete_config: dict | None = None
 _best_efforts: pd.DataFrame | None = None
+
+# The "export dir" is now the MERON dir (~/.meron by default). FIT files,
+# sidecar JSON, and route artifacts live here.
+_export_dir: Path | None = None
+
 
 # Default athlete config
 _DEFAULT_CONFIG = {
@@ -25,9 +53,9 @@ _DEFAULT_CONFIG = {
 }
 
 
-def _load_athlete_config(export_dir: Path) -> dict:
+def _load_athlete_config(meron_root: Path) -> dict:
     """Load athlete config from JSON file, or return defaults."""
-    cfg_path = export_dir / "athlete_config.json"
+    cfg_path = meron_root / "athlete_config.json"
     if cfg_path.exists():
         with open(cfg_path) as f:
             user_cfg = json.load(f)
@@ -36,7 +64,7 @@ def _load_athlete_config(export_dir: Path) -> dict:
 
 
 def save_athlete_config(config: dict) -> None:
-    """Write athlete config to JSON file in the export directory."""
+    """Write athlete config to JSON file in the MERON dir."""
     global _athlete_config
     if _export_dir is None:
         return
@@ -44,48 +72,119 @@ def save_athlete_config(config: dict) -> None:
     with open(cfg_path, "w") as f:
         json.dump(config, f, indent=2)
     _athlete_config = config
+    # Config affects enrichment output → invalidate cache
+    invalidate_cache()
 
 
-def init(export_dir: str | Path) -> None:
-    """Load and enrich the Strava data. Call once at startup."""
-    global _df, _profile, _export_dir, _athlete_config, _best_efforts
-    _export_dir = Path(export_dir)
-    _athlete_config = _load_athlete_config(_export_dir)
-    raw = load_activities(_export_dir)
-    _df = enrich(raw, athlete_config=_athlete_config, export_dir=_export_dir)
-    _profile = load_profile(_export_dir)
+def init(path: str | Path | None = None) -> None:
+    """Initialize DB and load athlete config.
 
-    # Build route fingerprint index (incremental, fast after first run)
-    from strava_analytics.route_matching import build_route_index
-    build_route_index(_df, _export_dir)
+    `path` may be:
+      - None → use `~/.meron/` (default)
+      - A MERON dir (contains meron.db) → use directly
+      - A legacy Strava export dir → trigger migration if DB is empty
+    """
+    global _profile, _export_dir, _athlete_config, _best_efforts
 
-    # Compute best efforts at startup (cached after first run)
-    from strava_analytics.fitness import compute_best_efforts
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info("Computing best efforts...")
-    _best_efforts = compute_best_efforts(_df, _export_dir)
-    logger.info("Best efforts: %d records", len(_best_efforts) if _best_efforts is not None else 0)
+    # 1. Resolve meron_root
+    meron_root = meron_dir()
+    meron_root.mkdir(parents=True, exist_ok=True)
+    _export_dir = meron_root
 
-    # Precompute heatmap data from route fingerprints
-    _precompute_heatmap(_export_dir)
+    # 2. Init engine + run migrations
+    init_engine()
+    run_migrations()
+
+    # 3. If `path` points at a legacy Strava export dir that hasn't been
+    #    migrated yet, pull it in.
+    if path is not None:
+        path = Path(path).expanduser()
+        # Does it look like a Strava export?
+        if (path / "activities.csv").exists() and path != meron_root:
+            from strava_analytics.db.models import Activity
+            factory = get_session_factory()
+            with factory() as session:
+                existing = session.query(Activity).limit(1).first()
+                is_empty = existing is None
+            if is_empty:
+                logger.info("Auto-importing Strava export from %s", path)
+                from strava_analytics.db.migrations import migration_002_backfill_bulk
+                report = migration_002_backfill_bulk(path)
+                logger.info("Import report: %s", report)
+
+    # 4. Optional: `MERON_IMPORT_FROM` env var bootstrap
+    import_from = os.environ.get("MERON_IMPORT_FROM")
+    if import_from:
+        import_path = Path(import_from).expanduser()
+        if (import_path / "activities.csv").exists():
+            from strava_analytics.db.models import Activity
+            factory = get_session_factory()
+            with factory() as session:
+                existing = session.query(Activity).limit(1).first()
+                is_empty = existing is None
+            if is_empty:
+                from strava_analytics.db.migrations import migration_002_backfill_bulk
+                logger.info("MERON_IMPORT_FROM bootstrap from %s", import_path)
+                migration_002_backfill_bulk(import_path)
+
+    # 5. Load athlete config (used everywhere)
+    _athlete_config = _load_athlete_config(meron_root)
+    _profile = _load_profile(meron_root)
+
+    # 6. Prime enrichment cache + sidecar artifacts
+    df = get_enriched_df(user_id=1, athlete_config=_athlete_config, fit_dir=meron_root)
+
+    # 7. Build route fingerprint index (incremental; uses FIT files in meron_root/fit)
+    try:
+        from strava_analytics.route_matching import build_route_index
+        build_route_index(df, meron_root)
+    except Exception as e:
+        logger.warning("Route index build failed: %s", e)
+
+    # 8. Best efforts (cached)
+    try:
+        from strava_analytics.fitness import compute_best_efforts
+        logger.info("Computing best efforts...")
+        _best_efforts = compute_best_efforts(df, meron_root)
+        logger.info("Best efforts: %d records", len(_best_efforts) if _best_efforts is not None else 0)
+    except Exception as e:
+        logger.warning("Best efforts failed: %s", e)
+        _best_efforts = pd.DataFrame()
+
+    # 9. Precompute heatmap
+    try:
+        _precompute_heatmap(meron_root)
+    except Exception as e:
+        logger.warning("Heatmap precompute failed: %s", e)
+
+
+def _load_profile(meron_root: Path) -> dict:
+    """Load athlete profile from ~/.meron/profile.csv if present."""
+    path = meron_root / "profile.csv"
+    if not path.exists():
+        return {}
+    df = pd.read_csv(path)
+    if df.empty:
+        return {}
+    return df.iloc[0].to_dict()
 
 
 def get_df() -> pd.DataFrame:
-    """Return the full enriched DataFrame."""
-    if _df is None:
-        raise RuntimeError("Data not loaded. Call data.init(export_dir) first.")
-    return _df
+    """Return the full enriched DataFrame (cached)."""
+    cfg = get_athlete_config()
+    return get_enriched_df(user_id=1, athlete_config=cfg, fit_dir=_export_dir or meron_dir())
 
 
 def get_runs() -> pd.DataFrame:
     """Return only running activities."""
-    return get_df()[get_df()["type"] == "Run"]
+    df = get_df()
+    return df[df["type"] == "Run"]
 
 
 def get_lifts() -> pd.DataFrame:
     """Return only weight training activities."""
-    return get_df()[get_df()["type"] == "Weight Training"]
+    df = get_df()
+    return df[df["type"] == "Weight Training"]
 
 
 def get_profile() -> dict:
@@ -120,18 +219,9 @@ def get_best_efforts() -> pd.DataFrame:
     return _best_efforts
 
 
-def _precompute_heatmap(export_dir: Path) -> None:
-    """Write route overlay data to assets/heatmap-data.json at startup.
-
-    Stores each route as an array of [lat, lon] coords. The JS draws each
-    route as a polyline with low opacity — overlapping routes accumulate
-    brightness naturally, showing the most-run paths.
-    """
-    import json
-    import logging
-    logger = logging.getLogger(__name__)
-
-    index_path = export_dir / "route_index.json"
+def _precompute_heatmap(meron_root: Path) -> None:
+    """Write route overlay data to assets/heatmap-data.json at startup."""
+    index_path = meron_root / "route_index.json"
     if not index_path.exists():
         return
 
@@ -141,7 +231,6 @@ def _precompute_heatmap(export_dir: Path) -> None:
     except Exception:
         return
 
-    # Each route is an array of [lat, lon] pairs
     routes = []
     all_lats = []
     all_lons = []
@@ -158,7 +247,6 @@ def _precompute_heatmap(export_dir: Path) -> None:
     if not routes:
         return
 
-    # Compute center (median, not mean — robust to outliers)
     all_lats.sort()
     all_lons.sort()
     center = [all_lats[len(all_lats) // 2], all_lons[len(all_lons) // 2]]
@@ -175,13 +263,25 @@ def _precompute_heatmap(export_dir: Path) -> None:
 
 
 def get_export_dir() -> Path:
-    """Return the export directory path."""
+    """Return the MERON root directory (FIT files, sidecar JSON live here)."""
     if _export_dir is None:
-        raise RuntimeError("Data not loaded.")
+        return meron_dir()
     return _export_dir
 
 
 def reload() -> None:
-    """Re-load data from disk."""
-    if _export_dir:
-        init(_export_dir)
+    """Re-derive everything: invalidate cache, reload config, recompute sidecars."""
+    global _athlete_config, _best_efforts
+    invalidate_cache()
+    root = get_export_dir()
+    _athlete_config = _load_athlete_config(root)
+    df = get_enriched_df(user_id=1, athlete_config=_athlete_config, fit_dir=root, force=True)
+    try:
+        from strava_analytics.fitness import compute_best_efforts
+        _best_efforts = compute_best_efforts(df, root)
+    except Exception as e:
+        logger.warning("Best efforts failed on reload: %s", e)
+    try:
+        _precompute_heatmap(root)
+    except Exception as e:
+        logger.warning("Heatmap precompute failed on reload: %s", e)
