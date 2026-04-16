@@ -68,7 +68,9 @@ MERON_INDEX_TEMPLATE = """<!DOCTYPE html>
 
         {%metas%}
         <title>{%title%}</title>
-        {%favicon%}
+        <!-- Dash's {%favicon%} placeholder is intentionally omitted; the
+             explicit <link rel="icon"> tags above reference our MERON
+             favicon.ico / SVG / PNG and replace the default Plotly icon. -->
         {%css%}
     </head>
     <body>
@@ -183,6 +185,16 @@ def create_app() -> dash.Dash:
 
     # Register REST API endpoints on the underlying Flask server
     register_api(app.server)
+
+    # Serve /favicon.ico directly from assets/ so bare-path favicon requests
+    # (browser tab, link scrapers, /favicon.ico fallback) resolve to MERON.
+    from flask import send_from_directory
+    _assets_dir = Path(__file__).parent / "assets"
+
+    @app.server.route("/favicon.ico")
+    def _serve_favicon():
+        return send_from_directory(str(_assets_dir), "favicon.ico",
+                                    mimetype="image/x-icon")
 
     # Dynamic page title based on current URL
     clientside_callback(
