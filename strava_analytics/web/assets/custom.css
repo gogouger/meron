@@ -304,17 +304,15 @@ main {
     gap: 10px;
     font-family: var(--font-mono);
 }
-/* Strava-style accent stripe before section labels — a short red bar that
-   reads as a brand mark at a glance without crowding the typography. */
-.section-label::before,
-.hero-label::before,
-.statement-label::before {
-    content: "";
-    display: inline-block;
-    width: 16px;
-    height: 2px;
-    background-color: var(--accent);
+/* MERON mountain mark before section labels — a small branded emblem that
+   replaces the earlier accent bar (which visually read as "__"). */
+.label-mark {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
+    color: var(--accent);
+    display: inline-block;
+    vertical-align: middle;
 }
 .hero-label,
 .statement-label {

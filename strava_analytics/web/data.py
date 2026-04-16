@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from strava_analytics.api.context import current_user_id
 from strava_analytics.db import (
     get_session_factory,
     init_engine,
@@ -132,7 +133,7 @@ def init(path: str | Path | None = None) -> None:
     _profile = _load_profile(meron_root)
 
     # 6. Prime enrichment cache + sidecar artifacts
-    df = get_enriched_df(user_id=1, athlete_config=_athlete_config, fit_dir=meron_root)
+    df = get_enriched_df(user_id=current_user_id(), athlete_config=_athlete_config, fit_dir=meron_root)
 
     # 7. Build route fingerprint index (incremental; uses FIT files in meron_root/fit)
     try:
@@ -172,7 +173,7 @@ def _load_profile(meron_root: Path) -> dict:
 def get_df() -> pd.DataFrame:
     """Return the full enriched DataFrame (cached)."""
     cfg = get_athlete_config()
-    return get_enriched_df(user_id=1, athlete_config=cfg, fit_dir=_export_dir or meron_dir())
+    return get_enriched_df(user_id=current_user_id(), athlete_config=cfg, fit_dir=_export_dir or meron_dir())
 
 
 def get_runs() -> pd.DataFrame:
@@ -275,7 +276,7 @@ def reload() -> None:
     invalidate_cache()
     root = get_export_dir()
     _athlete_config = _load_athlete_config(root)
-    df = get_enriched_df(user_id=1, athlete_config=_athlete_config, fit_dir=root, force=True)
+    df = get_enriched_df(user_id=current_user_id(), athlete_config=_athlete_config, fit_dir=root, force=True)
     try:
         from strava_analytics.fitness import compute_best_efforts
         _best_efforts = compute_best_efforts(df, root)

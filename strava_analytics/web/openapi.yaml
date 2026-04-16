@@ -2,88 +2,133 @@ openapi: "3.1.0"
 info:
   title: MERON API
   description: >
-    Personal training data API for a runner and lifter.
-    Provides fitness metrics, activity history, strength data,
-    personal records, and weekly mileage trends.
-    All distances in miles, weights in lbs, elevations in feet.
-  version: "1.0.0"
+    Personal training data API. Provides fitness metrics, activity CRUD,
+    training plans, race predictions, and Strava sync. All distances in
+    miles, weights in lbs, elevations in feet. Times in seconds unless
+    otherwise noted.
+  version: "2.0.0"
 servers:
-  - url: https://your-domain.ngrok.app
-    description: Replace with your tunnel or public URL
+  - url: http://localhost:8051
+    description: Local standalone API server (strava-api)
+  - url: http://localhost:8050
+    description: Local Dash + API combined server (strava-web)
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: metrics
+    description: Read-only metric endpoints.
+  - name: activities
+    description: Activity CRUD.
+  - name: plan
+    description: Training plan, race predictions, strength projections.
+  - name: sync
+    description: Strava / Apple Health sync triggers.
+  - name: user
+    description: User profile.
+  - name: routes
+    description: Route polylines + stream data for map rendering.
+  - name: oauth
+    description: Strava OAuth flow.
+  - name: meta
+    description: Health + schema endpoints.
+
 paths:
+  /api/healthz:
+    get:
+      tags: [meta]
+      operationId: healthz
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /api/openapi.yaml:
+    get:
+      tags: [meta]
+      operationId: openapiYaml
+      summary: Fetch the OpenAPI spec (YAML)
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 spec as text/yaml
+          content:
+            text/yaml: {}
+
+  /api/openapi.json:
+    get:
+      tags: [meta]
+      operationId: openapiJson
+      summary: Fetch the OpenAPI spec (JSON)
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 spec as JSON
+          content:
+            application/json: {}
+
   /api/fitness:
     get:
+      tags: [metrics]
       operationId: getFitness
       summary: Current fitness snapshot
-      description: Returns CTL (fitness), ATL (fatigue), TSB (form), and status label.
       responses:
         "200":
-          description: Fitness metrics
+          description: CTL / ATL / TSB
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  ctl:
-                    type: number
-                    description: Chronic Training Load (fitness, 28-day)
-                  atl:
-                    type: number
-                    description: Acute Training Load (fatigue, 7-day)
-                  tsb:
-                    type: number
-                    description: Training Stress Balance (form = CTL - ATL)
-                  label:
-                    type: string
-                    description: "Status label: Fresh, Neutral, Fatigued, etc."
-                  date:
-                    type: string
-                    description: Today's date (ISO 8601)
+              schema: { $ref: "#/components/schemas/Fitness" }
 
-  /api/stats:
+  /api/fitness/timeseries:
     get:
-      operationId: getStats
-      summary: Lifetime activity statistics
-      description: Total counts, mileage, and date range of all activities.
-      responses:
-        "200":
-          description: Lifetime stats
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  total_activities:
-                    type: integer
-                  total_runs:
-                    type: integer
-                  total_lifts:
-                    type: integer
-                  total_miles:
-                    type: number
-                  date_from:
-                    type: string
-                  date_to:
-                    type: string
-
-  /api/activities:
-    get:
-      operationId: getRecentActivities
-      summary: Recent activities
-      description: Returns recent activities with key metrics (distance, pace, HR, etc).
+      tags: [metrics]
+      operationId: getFitnessTimeseries
+      summary: Daily CTL/ATL/TSB timeseries for charting
       parameters:
         - name: days
           in: query
-          schema:
-            type: integer
-            default: 14
-          description: Number of days to look back
+          schema: { type: integer, default: 90 }
+      responses:
+        "200":
+          description: Daily points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FitnessPoint" }
+
+  /api/stats:
+    get:
+      tags: [metrics]
+      operationId: getStats
+      summary: Lifetime activity stats
+      responses:
+        "200":
+          description: Lifetime totals
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Stats" }
+
+  /api/activities:
+    get:
+      tags: [activities]
+      operationId: getRecentActivities
+      summary: Recent activities
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 14 }
         - name: limit
           in: query
-          schema:
-            type: integer
-            default: 20
-          description: Max activities to return
+          schema: { type: integer, default: 20 }
       responses:
         "200":
           description: List of activities
@@ -91,63 +136,113 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    date:
-                      type: string
-                    type:
-                      type: string
-                    name:
-                      type: string
-                    distance_mi:
-                      type: number
-                    pace:
-                      type: string
-                      description: "MM:SS per mile"
-                    pace_decimal:
-                      type: number
-                    avg_hr:
-                      type: number
-                    duration_s:
-                      type: number
-                    elevation_ft:
-                      type: number
-                    run_type:
-                      type: string
+                items: { $ref: "#/components/schemas/RecentActivity" }
+    post:
+      tags: [activities]
+      operationId: createActivity
+      summary: Create a manual activity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActivityCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/activities/{activity_id}:
+    parameters:
+      - name: activity_id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [activities]
+      operationId: getActivity
+      summary: Fetch a single enriched activity
+      responses:
+        "200":
+          description: Activity detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Activity" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [activities]
+      operationId: patchActivity
+      summary: Update an activity (or add a manual override for Strava rows)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ActivityPatch" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  updated:
+                    type: array
+                    items: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [activities]
+      operationId: deleteActivity
+      summary: Soft-delete an activity
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  deleted: { type: boolean }
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/mileage:
     get:
+      tags: [metrics]
       operationId: getWeeklyMileage
       summary: Weekly running mileage
-      description: Running mileage totals per week.
       parameters:
         - name: weeks
           in: query
-          schema:
-            type: integer
-            default: 8
-          description: Number of weeks to return
+          schema: { type: integer, default: 8 }
       responses:
         "200":
-          description: Weekly mileage list
+          description: Mileage list
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    week_of:
-                      type: string
-                    miles:
-                      type: number
+                items: { $ref: "#/components/schemas/WeeklyMileage" }
 
   /api/records:
     get:
+      tags: [metrics]
       operationId: getPersonalRecords
-      summary: Personal records
-      description: Best efforts across standard distances (1mi, 5K, 10K, half, marathon).
+      summary: Personal records across standard distances
       responses:
         "200":
           description: PR list
@@ -155,52 +250,46 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    distance:
-                      type: string
-                    best_time:
-                      type: string
-                    best_pace:
-                      type: string
-                    best_date:
-                      type: string
+                items: { $ref: "#/components/schemas/PersonalRecord" }
 
   /api/strength:
     get:
+      tags: [metrics]
       operationId: getStrength
       summary: Current 1RM estimates
-      description: Latest estimated one-rep max for bench, squat, deadlift, and OHP in lbs.
       responses:
         "200":
-          description: 1RM values
+          description: 1RM per lift
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  bench:
-                    type: number
-                  squat:
-                    type: number
-                  deadlift:
-                    type: number
-                  ohp:
-                    type: number
+              schema: { $ref: "#/components/schemas/Strength" }
+
+  /api/strength/progression:
+    get:
+      tags: [plan]
+      operationId: getStrengthProgression
+      summary: 1RM fit curves + projections at 4/8/12 weeks
+      parameters:
+        - name: weeks
+          in: query
+          description: Comma-separated horizons in weeks
+          schema: { type: string, default: "4,8,12" }
+      responses:
+        "200":
+          description: Fit + projections
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StrengthProjection" }
 
   /api/runs:
     get:
+      tags: [metrics]
       operationId: getDetailedRuns
       summary: Detailed run history
-      description: Recent runs with full metrics including pace, HR, elevation, run type.
       parameters:
         - name: limit
           in: query
-          schema:
-            type: integer
-            default: 30
-          description: Max runs to return
+          schema: { type: integer, default: 30 }
       responses:
         "200":
           description: Run list
@@ -208,44 +297,17 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    date:
-                      type: string
-                    name:
-                      type: string
-                    distance_mi:
-                      type: number
-                    pace:
-                      type: string
-                    pace_decimal:
-                      type: number
-                    avg_hr:
-                      type: number
-                    max_hr:
-                      type: number
-                    elevation_ft:
-                      type: number
-                    duration_s:
-                      type: number
-                    run_type:
-                      type: string
-                    calories:
-                      type: number
+                items: { $ref: "#/components/schemas/Run" }
 
   /api/lifts:
     get:
+      tags: [metrics]
       operationId: getDetailedLifts
       summary: Detailed lift session history
-      description: Recent weight training sessions with lift weights.
       parameters:
         - name: limit
           in: query
-          schema:
-            type: integer
-            default: 20
-          description: Max sessions to return
+          schema: { type: integer, default: 20 }
       responses:
         "200":
           description: Lift session list
@@ -253,58 +315,209 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  type: object
-                  properties:
-                    date:
-                      type: string
-                    name:
-                      type: string
-                    bench_lbs:
-                      type: number
-                    squat_lbs:
-                      type: number
-                    deadlift_lbs:
-                      type: number
-                    ohp_lbs:
-                      type: number
-                    duration_s:
-                      type: number
+                items: { $ref: "#/components/schemas/Lift" }
 
   /api/summary:
     get:
+      tags: [metrics]
       operationId: getAthleteSummary
-      summary: Complete athlete data overview
-      description: >
-        Combined endpoint returning fitness, stats, recent activities,
-        weekly mileage, strength, and personal records in one call.
-        Use this as the primary endpoint to get all context at once.
+      summary: Combined overview (fitness + stats + activities + mileage + PRs)
       responses:
         "200":
-          description: Full athlete summary
+          description: Full summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Summary" }
+
+  /api/plan:
+    get:
+      tags: [plan]
+      operationId: getTrainingPlan
+      summary: Generated training plan (8-week periodized)
+      responses:
+        "200":
+          description: Plan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+
+  /api/predict/race:
+    get:
+      tags: [plan]
+      operationId: predictRace
+      summary: Critical Speed race time predictions
+      parameters:
+        - name: distance_m
+          in: query
+          schema: { type: number }
+          description: Optional filter for a single distance in metres
+      responses:
+        "200":
+          description: Predictions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RacePrediction" }
+
+  /api/lifting-program:
+    get:
+      tags: [plan]
+      operationId: getLiftingProgram
+      summary: Structured lifting program (baseline, end PRs, weekly schedule)
+      responses:
+        "200":
+          description: Program
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  fitness:
-                    type: object
-                  stats:
-                    type: object
-                  recent_activities:
+                  baseline: { type: object }
+                  end_prs: { type: object }
+                  program:
                     type: array
-                    items:
-                      type: object
-                  weekly_mileage:
-                    type: array
-                    items:
-                      type: object
-                  strength:
+                    items: { type: object }
+
+  /api/user:
+    get:
+      tags: [user]
+      operationId: getUserProfile
+      summary: Current user profile + Strava connection status
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/route-index:
+    get:
+      tags: [routes]
+      operationId: getRouteIndex
+      summary: Every cached route fingerprint, keyed by filename
+      responses:
+        "200":
+          description: Route index
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  routes:
                     type: object
-                  personal_records:
-                    type: array
-                    items:
-                      type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: array
+                        items: { type: number }
+
+  /api/routes/{filename}:
+    parameters:
+      - name: filename
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [routes]
+      operationId: getRouteDetail
+      summary: Polyline + streams for a single activity
+      responses:
+        "200":
+          description: Route
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RouteDetail" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sync/strava:
+    post:
+      tags: [sync]
+      operationId: syncStrava
+      summary: Trigger an incremental Strava API sync
+      responses:
+        "200":
+          description: Sync report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncReport" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/sync/upload:
+    post:
+      tags: [sync]
+      operationId: syncUpload
+      summary: Bulk upload a Strava export (.csv or .zip)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Sync report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncReport" }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/sync/apple-health:
+    post:
+      tags: [sync]
+      operationId: syncAppleHealth
+      summary: (stub) Apple Health ingest — not yet implemented
+      responses:
+        "501":
+          description: Not implemented
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /oauth/strava/start:
+    get:
+      tags: [oauth]
+      operationId: oauthStart
+      summary: Begin Strava OAuth — redirects to Strava's authorize URL
+      security: []
+      responses:
+        "302":
+          description: Redirect to Strava
+
+  /oauth/strava/callback:
+    get:
+      tags: [oauth]
+      operationId: oauthCallback
+      summary: OAuth callback — exchanges code for tokens
+      security: []
+      parameters:
+        - name: code
+          in: query
+          schema: { type: string }
+        - name: state
+          in: query
+          schema: { type: string }
+      responses:
+        "302":
+          description: Redirect back to /settings#strava-connected
+        "400":
+          description: State mismatch or missing code
+
+  /oauth/strava/disconnect:
+    post:
+      tags: [oauth]
+      operationId: oauthDisconnect
+      summary: Clear stored Strava tokens
+      responses:
+        "200":
+          description: OK
 
 components:
   securitySchemes:
@@ -312,8 +525,315 @@ components:
       type: apiKey
       in: header
       name: X-API-Key
-      description: Optional API key set in athlete_config.json
+      description: Read key for GET; write key for POST/PATCH/DELETE.
 
-security:
-  - ApiKeyAuth: []
-  - {}
+  responses:
+    BadRequest:
+      description: Request failed validation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
+          required: [code, message]
+
+    Fitness:
+      type: object
+      properties:
+        ctl: { type: number }
+        atl: { type: number }
+        tsb: { type: number }
+        label: { type: string }
+        date: { type: string, format: date }
+
+    FitnessPoint:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        ctl: { type: number, nullable: true }
+        atl: { type: number, nullable: true }
+        tsb: { type: number, nullable: true }
+
+    Stats:
+      type: object
+      properties:
+        total_activities: { type: integer }
+        total_runs: { type: integer }
+        total_lifts: { type: integer }
+        total_miles: { type: number }
+        date_from: { type: string, nullable: true }
+        date_to: { type: string, nullable: true }
+
+    RecentActivity:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        type: { type: string }
+        name: { type: string }
+        distance_mi: { type: number }
+        pace: { type: string }
+        pace_decimal: { type: number }
+        avg_hr: { type: number }
+        duration_s: { type: number }
+        elevation_ft: { type: number }
+        run_type: { type: string }
+
+    Activity:
+      type: object
+      description: Full enriched activity record. Fields vary by activity type.
+      additionalProperties: true
+      properties:
+        _id: { type: integer }
+        date: { type: string, format: date }
+        type: { type: string }
+        name: { type: string }
+        distance_m: { type: number }
+        distance_mi: { type: number }
+        moving_time_s: { type: number }
+        elapsed_time_s: { type: number }
+        avg_hr: { type: number }
+        max_hr: { type: number }
+        avg_watts: { type: number }
+        calories: { type: number }
+        elevation_gain_m: { type: number }
+
+    ActivityCreate:
+      type: object
+      required: [type, start_time]
+      properties:
+        type: { type: string }
+        start_time: { type: string, format: date-time }
+        name: { type: string }
+        description: { type: string }
+        gear: { type: string }
+        elapsed_time_s: { type: number, minimum: 0 }
+        moving_time_s: { type: number, minimum: 0 }
+        distance_m: { type: number, minimum: 0 }
+        elevation_gain_m: { type: number }
+        max_hr: { type: number }
+        avg_hr: { type: number }
+        avg_watts: { type: number, minimum: 0 }
+        calories: { type: number, minimum: 0 }
+        weather_condition: { type: string }
+        weather_temp_c: { type: number }
+
+    ActivityPatch:
+      type: object
+      description: Partial update — every field optional.
+      additionalProperties: false
+      properties:
+        name: { type: string }
+        type: { type: string }
+        description: { type: string }
+        gear: { type: string }
+        filename: { type: string }
+        start_time: { type: string, format: date-time }
+        elapsed_time_s: { type: number }
+        moving_time_s: { type: number }
+        distance_m: { type: number }
+        max_speed_ms: { type: number }
+        avg_speed_ms: { type: number }
+        elevation_gain_m: { type: number }
+        elevation_loss_m: { type: number }
+        elevation_low_m: { type: number }
+        elevation_high_m: { type: number }
+        max_hr: { type: number }
+        avg_hr: { type: number }
+        avg_watts: { type: number }
+        calories: { type: number }
+        relative_effort: { type: number }
+        grade_adj_distance_m: { type: number }
+        total_steps: { type: number }
+        training_load: { type: number }
+        intensity: { type: number }
+        weather_condition: { type: string }
+        weather_temp_c: { type: number }
+        competition: { type: string }
+        strava_with_kid: { type: integer }
+
+    WeeklyMileage:
+      type: object
+      properties:
+        week_of: { type: string, format: date }
+        miles: { type: number }
+
+    PersonalRecord:
+      type: object
+      properties:
+        distance: { type: string }
+        best_time: { type: string }
+        best_pace: { type: string }
+        best_date: { type: string, format: date }
+
+    Strength:
+      type: object
+      properties:
+        bench: { type: number }
+        squat: { type: number }
+        deadlift: { type: number }
+        ohp: { type: number }
+
+    Run:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        name: { type: string }
+        distance_mi: { type: number }
+        pace: { type: string }
+        pace_decimal: { type: number }
+        avg_hr: { type: number }
+        max_hr: { type: number }
+        elevation_ft: { type: number }
+        duration_s: { type: number }
+        run_type: { type: string }
+        calories: { type: number }
+
+    Lift:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        name: { type: string }
+        bench_lbs: { type: number }
+        squat_lbs: { type: number }
+        deadlift_lbs: { type: number }
+        ohp_lbs: { type: number }
+        duration_s: { type: number }
+
+    Summary:
+      type: object
+      properties:
+        fitness: { $ref: "#/components/schemas/Fitness" }
+        stats: { $ref: "#/components/schemas/Stats" }
+        recent_activities:
+          type: array
+          items: { $ref: "#/components/schemas/RecentActivity" }
+        weekly_mileage:
+          type: array
+          items: { $ref: "#/components/schemas/WeeklyMileage" }
+        strength: { $ref: "#/components/schemas/Strength" }
+        personal_records:
+          type: array
+          items: { $ref: "#/components/schemas/PersonalRecord" }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        display_name: { type: string, nullable: true }
+        timezone: { type: string }
+        strava_athlete_id: { type: integer, nullable: true }
+        strava_connected: { type: boolean }
+        created_at: { type: string, format: date-time, nullable: true }
+
+    Plan:
+      type: object
+      properties:
+        start_date: { type: string, format: date }
+        races:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              date: { type: string, format: date }
+        workouts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    RacePrediction:
+      type: object
+      properties:
+        cs:
+          type: object
+          properties:
+            cs_m_per_s: { type: number }
+            cs_min_per_mi: { type: number }
+            d_prime_m: { type: number }
+            r_squared: { type: number }
+            n_points: { type: integer }
+        predictions:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              time_s: { type: number }
+              pace_min_per_mi: { type: number }
+              method: { type: string }
+              confidence: { type: string }
+
+    StrengthProjection:
+      type: object
+      properties:
+        weekly_running_miles: { type: number }
+        interference_factor: { type: number }
+        lifts:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              fit: { type: object }
+              projections:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    weeks: { type: integer }
+                    projected_1rm: { type: number }
+
+    RouteDetail:
+      type: object
+      properties:
+        filename: { type: string }
+        polyline:
+          type: array
+          items:
+            type: array
+            items: { type: number }
+        streams:
+          type: object
+          properties:
+            timestamps:
+              type: array
+              items: { type: string }
+            heart_rate:
+              type: array
+              items: { type: number, nullable: true }
+            altitude_m:
+              type: array
+              items: { type: number, nullable: true }
+            speed_m_per_s:
+              type: array
+              items: { type: number, nullable: true }
+
+    SyncReport:
+      type: object
+      properties:
+        inserted: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+        errors:
+          type: array
+          items: { type: string }

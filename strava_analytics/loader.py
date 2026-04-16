@@ -88,12 +88,13 @@ def load_activities(export_dir: str | Path) -> pd.DataFrame:
     selected = raw[list(_COLUMN_MAP.keys())].copy()
     selected.columns = list(_COLUMN_MAP.values())
 
-    # Parse dates (Strava exports in UTC; convert to US/Mountain for Denver)
+    # Parse dates (Strava exports in UTC; convert to the user's local tz)
+    from .config import default_tz_name
     selected["date"] = pd.to_datetime(selected["date"], format="mixed", dayfirst=False)
     selected["date"] = (
         selected["date"]
         .dt.tz_localize("UTC")
-        .dt.tz_convert("US/Mountain")
+        .dt.tz_convert(default_tz_name())
         .dt.tz_localize(None)  # drop tz info for pandas compat
     )
 

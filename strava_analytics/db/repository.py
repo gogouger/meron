@@ -47,13 +47,14 @@ def load_raw_activities_df(user_id: int, session: Session) -> pd.DataFrame:
     # Rename start_time -> date (loader.py output convention).
     df = df.rename(columns={"start_time": "date"})
 
-    # Match loader.py handling: drop tz (localize to UTC, convert to
-    # US/Mountain, then drop tz for pandas compat).
+    # Match loader.py handling: drop tz (localize to UTC, convert to the
+    # user's local tz, then drop tz for pandas compat).
     if not df.empty and "date" in df.columns:
+        from ..config import default_tz_name
         df["date"] = pd.to_datetime(df["date"])
         # Stored as UTC if tz-aware; naive values we assume are already local.
         if df["date"].dt.tz is not None:
-            df["date"] = df["date"].dt.tz_convert("US/Mountain").dt.tz_localize(None)
+            df["date"] = df["date"].dt.tz_convert(default_tz_name()).dt.tz_localize(None)
 
     # activity_id compatibility: downstream code (notably
     # route_matching.build_route_index + lifting_program mapping) keys off

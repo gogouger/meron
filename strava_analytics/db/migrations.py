@@ -39,10 +39,11 @@ def migration_001_initial(engine) -> None:
     with factory() as session:
         user = session.get(User, 1)
         if user is None:
+            from ..config import default_tz_name
             session.add(User(
                 id=1,
                 display_name="You",
-                timezone="US/Mountain",
+                timezone=default_tz_name(),
             ))
         # sync_state row w/ API keys
         from .models import SyncState

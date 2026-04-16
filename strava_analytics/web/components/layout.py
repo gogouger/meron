@@ -5,6 +5,20 @@ from dash import html, dcc
 from strava_analytics.web.theme import ACCENT
 
 
+def _label_mark():
+    """Small MERON mountain mark rendered inline before a section label.
+
+    Uses a real <img> (not a CSS ::before pseudo-element) so the mark is a
+    real sibling of the label text — simpler to style and plays nicely with
+    the scramble animation, which mutates label text contents.
+    """
+    return html.Img(
+        src="/assets/meron-label-mark.svg",
+        className="label-mark",
+        alt="",
+    )
+
+
 def hero_section(label, headline, subtext, cta_buttons=None, icon=True):
     """Full-width hero matching MERON hero pattern.
 
@@ -12,7 +26,10 @@ def hero_section(label, headline, subtext, cta_buttons=None, icon=True):
     top-right of the hero band. Hidden on mobile via CSS.
     """
     children = [
-        html.Span(label, className="hero-label scramble-label"),
+        html.Span(
+            [_label_mark(), html.Span(label, className="scramble-label")],
+            className="hero-label",
+        ),
         html.H1(headline, className="hero-headline"),
         html.P(subtext, className="hero-subtext"),
     ]
@@ -40,7 +57,10 @@ def page_section(label, children, alt_bg=False, border_top=True):
     inner_children = []
     if label:
         inner_children.append(
-            html.Span(label, className="section-label scramble-label")
+            html.Span(
+                [_label_mark(), html.Span(label, className="scramble-label")],
+                className="section-label",
+            )
         )
     if isinstance(children, list):
         inner_children.extend(children)
@@ -57,7 +77,10 @@ def statement_section(label, text):
     """Large bold statement — MERON 'OUR MISSION' pattern."""
     return html.Div(
         html.Div([
-            html.Span(label, className="statement-label scramble-label"),
+            html.Span(
+                [_label_mark(), html.Span(label, className="scramble-label")],
+                className="statement-label",
+            ),
             html.P(text, className="statement-text"),
         ], className="statement-inner"),
         className="statement-section",

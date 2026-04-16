@@ -6,6 +6,7 @@ import dash
 from dash import html, dcc, callback, clientside_callback, Output, Input, State, no_update
 from sqlalchemy import select
 
+from strava_analytics.api.context import current_user_id
 from strava_analytics.auth import strava_oauth
 from strava_analytics.db import session_scope
 from strava_analytics.db.models import SyncState, User
@@ -107,7 +108,7 @@ def _strava_status() -> dict:
         with session_scope() as session:
             row = session.scalar(
                 select(SyncState).where(
-                    SyncState.user_id == 1,
+                    SyncState.user_id == current_user_id(),
                     SyncState.provider == "strava",
                 )
             )
@@ -512,7 +513,7 @@ def handle_strava_upload(contents, filename, current_version):
         return "activities.csv not found in upload.", (current_version or 0)
 
     with session_scope() as session:
-        report = ingest_bulk(target, user_id=1, session=session)
+        report = ingest_bulk(target, user_id=current_user_id(), session=session)
     data.reload()
     return f"Imported: {_format_report(report)}.", (current_version or 0) + 1
 
@@ -528,7 +529,7 @@ def handle_strava_sync(n_clicks, current_version):
     if not n_clicks:
         return no_update, no_update
     with session_scope() as session:
-        report = run_strava_sync(user_id=1, session=session)
+        report = run_strava_sync(user_id=current_user_id(), session=session)
     data.reload()
     return f"Sync: {_format_report(report)}.", (current_version or 0) + 1
 
@@ -542,5 +543,5 @@ def handle_strava_disconnect(n_clicks):
     if not n_clicks:
         return no_update
     with session_scope() as session:
-        strava_oauth.disconnect(session, user_id=1)
+        strava_oauth.disconnect(session, user_id=current_user_id())
     return "Disconnected. Reload the page."

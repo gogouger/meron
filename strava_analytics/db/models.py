@@ -27,11 +27,17 @@ class Base(DeclarativeBase):
     pass
 
 
+def _default_user_tz() -> str:
+    # Late import to avoid a circular dep: models.py is loaded very early.
+    from ..config import default_tz_name
+    return default_tz_name()
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     display_name: Mapped[str | None] = mapped_column(String(200))
-    timezone: Mapped[str] = mapped_column(String(64), default="US/Mountain")
+    timezone: Mapped[str] = mapped_column(String(64), default=_default_user_tz)
     strava_athlete_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 

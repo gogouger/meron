@@ -1,11 +1,11 @@
 """CLI entry point for Strava analytics."""
 
 import argparse
-import sys
 
 import pandas as pd
 from tabulate import tabulate
 
+from .api.context import current_user_id
 from .loader import load_activities, load_profile
 from .enrichment import enrich
 from . import metrics
@@ -33,7 +33,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
     factory = _db_init()
     from .services.sync import run_strava_sync
     with factory() as session:
-        report = run_strava_sync(user_id=1, session=session)
+        report = run_strava_sync(user_id=current_user_id(), session=session)
         session.commit()
     print(f"Sync report: {report}")
 
@@ -43,7 +43,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     factory = _db_init()
     from .services.ingestion.strava_csv import ingest_bulk
     with factory() as session:
-        report = ingest_bulk(args.export_dir, user_id=1, session=session)
+        report = ingest_bulk(args.export_dir, user_id=current_user_id(), session=session)
         session.commit()
     print(f"Ingest report: {report}")
 

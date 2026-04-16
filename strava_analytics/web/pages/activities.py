@@ -7,6 +7,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, callback, clientside_callback, Output, Input, State, MATCH, no_update
 import pandas as pd
 
+from strava_analytics.api.context import current_user_id
 from strava_analytics.db import session_scope
 from strava_analytics.db.repository import (
     create_manual_activity,
@@ -537,7 +538,7 @@ def save_activity(
                 if row is None:
                     return True, "Activity not found.", no_update
             else:
-                create_manual_activity(session, user_id=1, payload=payload)
+                create_manual_activity(session, user_id=current_user_id(), payload=payload)
     except Exception as e:
         return True, f"Save failed: {e}", no_update
 

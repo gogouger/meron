@@ -20,9 +20,8 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc, page_container, Input, Output, State, callback, clientside_callback
 import pandas as pd
 
+from strava_analytics.api import register_api, register_oauth
 from strava_analytics.web import data
-from strava_analytics.web.api import register_api
-from strava_analytics.web.oauth import register_oauth
 
 
 # Canonical site URL for OpenGraph / Twitter metadata. Leave empty for local dev
@@ -218,7 +217,6 @@ def create_app() -> dash.Dash:
                 "/running": "Running",
                 "/lifting": "Lifting",
                 "/activities": "Activities",
-                "/races": "Predictions",
                 "/plan": "Plan",
                 "/settings": "Settings"
             };
