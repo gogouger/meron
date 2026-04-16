@@ -1,10 +1,19 @@
 """Activities — unified chronological feed of all activity types."""
 
+from datetime import datetime, timezone
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, callback, clientside_callback, Output, Input, State, MATCH, no_update
 import pandas as pd
 
+from strava_analytics.db import session_scope
+from strava_analytics.db.repository import (
+    create_manual_activity,
+    patch_activity,
+    soft_delete_activity,
+)
+from strava_analytics.services.enrichment_service import invalidate_cache
 from strava_analytics.web import data
 from strava_analytics.web.components.cards import stat_cell, duration_str, activity_type_badge
 from strava_analytics.web.components.routes import build_route_charts
@@ -74,6 +83,33 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
 
     parts = activity_card_body(row, route_mode="lazy", card_id_prefix="act", idx=idx)
 
+    # Row actions (edit/delete) anchored to this activity's DB id.
+    db_id = int(row["_id"]) if "_id" in row and pd.notna(row.get("_id")) else None
+    is_manual = row.get("_source") == "manual"
+    actions = None
+    if db_id is not None:
+        manual_pill = html.Span("manual", style={
+            "fontSize": "10px", "padding": "2px 8px",
+            "background": ACCENT_AMBER, "color": "#000",
+            "marginLeft": "8px", "fontWeight": "600",
+            "letterSpacing": "0.08em", "textTransform": "uppercase",
+        }) if is_manual else None
+
+        actions = html.Div([
+            manual_pill,
+            html.Button("Edit", id={"type": "act-edit-btn", "index": db_id},
+                        n_clicks=0, className="btn-ghost",
+                        style={"padding": "4px 10px", "fontSize": "11px",
+                               "marginLeft": "8px"}),
+            html.Button("Delete", id={"type": "act-delete-btn", "index": db_id},
+                        n_clicks=0, className="btn-ghost",
+                        style={"padding": "4px 10px", "fontSize": "11px",
+                               "marginLeft": "6px", "color": ACCENT_RED}),
+        ], style={
+            "display": "flex", "alignItems": "center",
+            "justifyContent": "flex-end", "marginTop": "8px",
+        })
+
     return html.Details([
         html.Summary([
             parts["header"],
@@ -85,6 +121,7 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         html.Div(parts["detail"], style={
             "padding": "12px 0 0 0",
         }) if parts["detail"] else None,
+        actions,
     ], id=f"activity-card-{parts['date_id']}-{idx}",
        open=default_open,
        style={
@@ -93,6 +130,88 @@ def _activity_card(row, idx: int, default_open: bool = False) -> html.Details:
         "padding": "20px 24px", "marginBottom": "8px",
         "borderLeft": f"3px solid {parts['color']}",
     })
+
+
+# ── Add / Edit modal ──────────────────────────────────────────────────
+
+_ACTIVITY_TYPE_OPTIONS = [
+    "Run", "Ride", "Walk", "Hike", "Weight Training",
+    "Swim", "Yoga", "Workout", "Rowing", "Other",
+]
+
+
+def _modal(title_id: str = "activity-modal-title") -> dbc.Modal:
+    """Reusable Add/Edit modal."""
+    return dbc.Modal([
+        dbc.ModalHeader(dbc.ModalTitle("Add Activity", id=title_id)),
+        dbc.ModalBody([
+            # Hidden id input — empty for Add, set to id for Edit
+            dcc.Store(id="activity-form-id", data=None),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Type"),
+                    dcc.Dropdown(
+                        id="activity-form-type",
+                        options=[{"label": t, "value": t} for t in _ACTIVITY_TYPE_OPTIONS],
+                        value="Run",
+                        clearable=False,
+                    ),
+                ], md=6),
+                dbc.Col([
+                    dbc.Label("Date & time"),
+                    dbc.Input(id="activity-form-datetime", type="datetime-local"),
+                ], md=6),
+            ], class_name="mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Duration (min)"),
+                    dbc.Input(id="activity-form-duration", type="number", step="0.1"),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Distance (mi)"),
+                    dbc.Input(id="activity-form-distance", type="number", step="0.01"),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Elev gain (ft)"),
+                    dbc.Input(id="activity-form-elev", type="number", step="1"),
+                ], md=4),
+            ], class_name="mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Avg HR"),
+                    dbc.Input(id="activity-form-avghr", type="number"),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Max HR"),
+                    dbc.Input(id="activity-form-maxhr", type="number"),
+                ], md=4),
+                dbc.Col([
+                    dbc.Label("Calories"),
+                    dbc.Input(id="activity-form-calories", type="number"),
+                ], md=4),
+            ], class_name="mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Name"),
+                    dbc.Input(id="activity-form-name", type="text"),
+                ], md=12),
+            ], class_name="mb-3"),
+            dbc.Row([
+                dbc.Col([
+                    dbc.Label("Description"),
+                    dbc.Textarea(id="activity-form-desc"),
+                ], md=12),
+            ]),
+            html.Div(id="activity-form-error", style={
+                "color": ACCENT_RED, "fontSize": "13px", "marginTop": "10px",
+            }),
+        ]),
+        dbc.ModalFooter([
+            dbc.Button("Cancel", id="activity-form-cancel", className="btn-ghost"),
+            dbc.Button("Save", id="activity-form-save", className="btn-accent",
+                       color=None),
+        ]),
+    ], id="activity-form-modal", is_open=False, size="lg")
 
 
 # ── Layout ────────────────────────────────────────────────────────────
@@ -136,6 +255,26 @@ def layout(**_kwargs):
             headline="Everything. One feed.",
             subtext=f"{total} activities across {len(types)} types.",
         ),
+
+        # Add activity CTA
+        html.Div([
+            html.Button("+ Add activity",
+                        id="activity-add-btn",
+                        n_clicks=0,
+                        className="btn-accent",
+                        style={"padding": "10px 20px", "fontSize": "13px"}),
+        ], style={
+            "display": "flex", "justifyContent": "flex-end",
+            "padding": "0 24px", "marginTop": "12px",
+        }),
+
+        _modal(),
+        dcc.ConfirmDialog(
+            id="activity-delete-confirm",
+            message="Delete this activity? This can be reverted in the database.",
+        ),
+        dcc.Store(id="activity-delete-target", data=None),
+        dcc.Store(id="activity-ops-counter", data=0),
 
         # Filters
         page_section("FILTER", [
@@ -236,3 +375,237 @@ def load_activity_route(n_clicks, btn_id, filenames):
     if not filename:
         return html.P("No GPS data for this activity.", style={"color": TEXT_MUTED})
     return build_route_charts(filename, df=data.get_df())
+
+
+# ── CRUD callbacks ───────────────────────────────────────────────────
+
+def _default_modal_values():
+    return {
+        "type": "Run",
+        "datetime": datetime.now().strftime("%Y-%m-%dT%H:%M"),
+        "duration": None,
+        "distance": None,
+        "elev": None,
+        "avghr": None,
+        "maxhr": None,
+        "calories": None,
+        "name": "",
+        "desc": "",
+        "title": "Add Activity",
+        "open": True,
+        "activity_id": None,
+    }
+
+
+def _row_to_form(act_id: int) -> dict:
+    """Pull current values from DB for an Edit."""
+    from strava_analytics.db.models import Activity
+    with session_scope() as session:
+        act = session.get(Activity, act_id)
+        if act is None:
+            return _default_modal_values()
+        overrides = act.manual_overrides or {}
+        def pick(field, default=None):
+            return overrides.get(field, getattr(act, field, default))
+        dt = pick("start_time") or act.start_time
+        distance_m = pick("distance_m") or 0
+        moving_time_s = pick("moving_time_s") or 0
+        elev_m = pick("elevation_gain_m") or 0
+        return {
+            "type": pick("type") or "Run",
+            "datetime": dt.strftime("%Y-%m-%dT%H:%M") if dt else datetime.now().strftime("%Y-%m-%dT%H:%M"),
+            "duration": round(moving_time_s / 60.0, 2) if moving_time_s else None,
+            "distance": round(distance_m / 1609.344, 3) if distance_m else None,
+            "elev": round(elev_m * 3.28084, 0) if elev_m else None,
+            "avghr": pick("avg_hr"),
+            "maxhr": pick("max_hr"),
+            "calories": pick("calories"),
+            "name": pick("name") or "",
+            "desc": pick("description") or "",
+            "title": "Edit Activity",
+            "open": True,
+            "activity_id": act_id,
+        }
+
+
+@callback(
+    Output("activity-form-modal", "is_open"),
+    Output("activity-modal-title", "children"),
+    Output("activity-form-id", "data"),
+    Output("activity-form-type", "value"),
+    Output("activity-form-datetime", "value"),
+    Output("activity-form-duration", "value"),
+    Output("activity-form-distance", "value"),
+    Output("activity-form-elev", "value"),
+    Output("activity-form-avghr", "value"),
+    Output("activity-form-maxhr", "value"),
+    Output("activity-form-calories", "value"),
+    Output("activity-form-name", "value"),
+    Output("activity-form-desc", "value"),
+    Output("activity-form-error", "children"),
+    Input("activity-add-btn", "n_clicks"),
+    Input({"type": "act-edit-btn", "index": dash.ALL}, "n_clicks"),
+    Input("activity-form-cancel", "n_clicks"),
+    State({"type": "act-edit-btn", "index": dash.ALL}, "id"),
+    prevent_initial_call=True,
+)
+def open_activity_modal(add_clicks, edit_clicks_list, cancel_clicks, edit_ids):
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return tuple([no_update] * 14)
+    trig = ctx.triggered[0]["prop_id"]
+
+    if trig.startswith("activity-form-cancel"):
+        return (False, no_update, no_update, no_update, no_update, no_update,
+                no_update, no_update, no_update, no_update, no_update,
+                no_update, no_update, "")
+
+    if trig.startswith("activity-add-btn"):
+        v = _default_modal_values()
+    else:
+        # An edit button — extract db id from the pattern-matching id
+        # The triggered prop_id has the JSON id as prefix.
+        import json
+        try:
+            js = trig.split(".")[0]
+            obj = json.loads(js)
+            db_id = int(obj["index"])
+        except Exception:
+            return tuple([no_update] * 14)
+        v = _row_to_form(db_id)
+
+    return (
+        v["open"], v["title"], v["activity_id"],
+        v["type"], v["datetime"],
+        v["duration"], v["distance"], v["elev"],
+        v["avghr"], v["maxhr"], v["calories"],
+        v["name"], v["desc"], "",
+    )
+
+
+@callback(
+    Output("activity-form-modal", "is_open", allow_duplicate=True),
+    Output("activity-form-error", "children", allow_duplicate=True),
+    Output("activity-ops-counter", "data"),
+    Input("activity-form-save", "n_clicks"),
+    State("activity-form-id", "data"),
+    State("activity-form-type", "value"),
+    State("activity-form-datetime", "value"),
+    State("activity-form-duration", "value"),
+    State("activity-form-distance", "value"),
+    State("activity-form-elev", "value"),
+    State("activity-form-avghr", "value"),
+    State("activity-form-maxhr", "value"),
+    State("activity-form-calories", "value"),
+    State("activity-form-name", "value"),
+    State("activity-form-desc", "value"),
+    State("activity-ops-counter", "data"),
+    prevent_initial_call=True,
+)
+def save_activity(
+    n_clicks, act_id, atype, dt_str, duration_min, distance_mi, elev_ft,
+    avg_hr, max_hr, calories, name, desc, ops_count,
+):
+    if not n_clicks:
+        return no_update, no_update, no_update
+    if not atype or not dt_str:
+        return True, "Type and date are required.", no_update
+    try:
+        dt = datetime.fromisoformat(dt_str)
+    except Exception:
+        return True, "Invalid datetime.", no_update
+
+    payload = {
+        "type": atype,
+        "start_time": dt,
+        "name": name or None,
+        "description": desc or None,
+        "moving_time_s": float(duration_min) * 60.0 if duration_min else None,
+        "elapsed_time_s": float(duration_min) * 60.0 if duration_min else None,
+        "distance_m": float(distance_mi) * 1609.344 if distance_mi is not None else None,
+        "elevation_gain_m": float(elev_ft) / 3.28084 if elev_ft is not None else None,
+        "avg_hr": float(avg_hr) if avg_hr is not None else None,
+        "max_hr": float(max_hr) if max_hr is not None else None,
+        "calories": float(calories) if calories is not None else None,
+    }
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    try:
+        with session_scope() as session:
+            if act_id:
+                row = patch_activity(session, activity_id=int(act_id), patch=payload)
+                if row is None:
+                    return True, "Activity not found.", no_update
+            else:
+                create_manual_activity(session, user_id=1, payload=payload)
+    except Exception as e:
+        return True, f"Save failed: {e}", no_update
+
+    invalidate_cache()
+    data.reload()
+    return False, "", (ops_count or 0) + 1
+
+
+@callback(
+    Output("activity-delete-confirm", "displayed"),
+    Output("activity-delete-target", "data"),
+    Input({"type": "act-delete-btn", "index": dash.ALL}, "n_clicks"),
+    State({"type": "act-delete-btn", "index": dash.ALL}, "id"),
+    prevent_initial_call=True,
+)
+def prompt_delete(clicks_list, ids):
+    if not any(clicks_list or []):
+        return no_update, no_update
+    # Find which button triggered via the latest n_clicks change.
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        return no_update, no_update
+    import json
+    try:
+        js = ctx.triggered[0]["prop_id"].split(".")[0]
+        obj = json.loads(js)
+        db_id = int(obj["index"])
+    except Exception:
+        return no_update, no_update
+    return True, db_id
+
+
+@callback(
+    Output("activity-ops-counter", "data", allow_duplicate=True),
+    Input("activity-delete-confirm", "submit_n_clicks"),
+    State("activity-delete-target", "data"),
+    State("activity-ops-counter", "data"),
+    prevent_initial_call=True,
+)
+def confirm_delete(submit_clicks, db_id, ops_count):
+    if not submit_clicks or not db_id:
+        return no_update
+    with session_scope() as session:
+        soft_delete_activity(session, activity_id=int(db_id))
+    invalidate_cache()
+    data.reload()
+    return (ops_count or 0) + 1
+
+
+# Re-render the visible card list when an op counter bumps.
+@callback(
+    Output("visible-activity-cards", "children"),
+    Output("hidden-activity-cards", "children", allow_duplicate=True),
+    Output("show-all-activities-btn", "style", allow_duplicate=True),
+    Input("activity-ops-counter", "data"),
+    prevent_initial_call=True,
+)
+def rebuild_feed(_ops_count):
+    df = data.get_df()
+    if df.empty:
+        return [], [], {"display": "none"}
+    sorted_df = df.sort_values("date", ascending=False)
+    total = len(sorted_df)
+    visible_rows = sorted_df.head(_PAGE_SIZE)
+    cards = []
+    for idx, (_, row) in enumerate(visible_rows.iterrows()):
+        cards.append(_activity_card(row, idx, default_open=False))
+    hidden_count = max(0, total - _PAGE_SIZE)
+    btn_style = {"display": "block" if hidden_count else "none",
+                 "margin": "20px auto"}
+    return cards, [], btn_style

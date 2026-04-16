@@ -1,8 +1,16 @@
-"""Settings page — theme toggle, HR zones, and app configuration."""
+"""Settings page — theme toggle, HR zones, Data Sources, and app configuration."""
+
+import base64
 
 import dash
-from dash import html, dcc, callback, clientside_callback, Output, Input, State
+from dash import html, dcc, callback, clientside_callback, Output, Input, State, no_update
+from sqlalchemy import select
 
+from strava_analytics.auth import strava_oauth
+from strava_analytics.db import session_scope
+from strava_analytics.db.models import SyncState, User
+from strava_analytics.services.ingestion.strava_csv import ingest_bulk
+from strava_analytics.services.sync import run_strava_sync
 from strava_analytics.web import data
 from strava_analytics.web.components.layout import (
     hero_section, page_section, footer,
@@ -87,6 +95,145 @@ def _hr_zones_section() -> html.Div:
                       html.Div([save_btn, save_status])])
 
 
+def _strava_status() -> dict:
+    """Return {connected, athlete_id, last_sync_at, configured}."""
+    info = {
+        "configured": strava_oauth.is_configured(),
+        "connected": False,
+        "athlete_id": None,
+        "last_sync_at": None,
+    }
+    try:
+        with session_scope() as session:
+            row = session.scalar(
+                select(SyncState).where(
+                    SyncState.user_id == 1,
+                    SyncState.provider == "strava",
+                )
+            )
+            if row and row.refresh_token:
+                info["connected"] = True
+                info["last_sync_at"] = (
+                    row.last_sync_at.strftime("%Y-%m-%d %H:%M UTC")
+                    if row.last_sync_at else "never"
+                )
+            user = session.get(User, 1)
+            if user and user.strava_athlete_id:
+                info["athlete_id"] = user.strava_athlete_id
+    except Exception:
+        pass
+    return info
+
+
+def _data_sources_section() -> html.Div:
+    status = _strava_status()
+
+    upload_card = html.Div([
+        html.H4("Upload Strava export",
+                style={"fontSize": "15px", "margin": "0 0 6px 0"}),
+        html.P(
+            "Drop a Strava bulk export (zip) or a single activities.csv.",
+            style={"color": TEXT_MUTED, "fontSize": "13px", "marginBottom": "10px"},
+        ),
+        dcc.Upload(
+            id="strava-export-upload",
+            children=html.Div([
+                html.Span("Drop file or "),
+                html.Span("browse", style={"textDecoration": "underline"}),
+            ]),
+            style={
+                "width": "100%", "minHeight": "70px",
+                "lineHeight": "70px", "textAlign": "center",
+                "border": f"1px dashed {BORDER}", "fontSize": "13px",
+                "color": TEXT_SECONDARY, "cursor": "pointer",
+            },
+            multiple=False,
+            accept=".zip,.csv",
+        ),
+        html.Div(id="strava-upload-status", style={
+            "marginTop": "8px", "fontSize": "13px", "color": TEXT_SECONDARY,
+        }),
+    ], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "padding": "20px", "marginBottom": "12px",
+    })
+
+    # Strava OAuth card
+    if not status["configured"]:
+        strava_body = html.P(
+            "Strava OAuth is not configured. Set STRAVA_CLIENT_ID and "
+            "STRAVA_CLIENT_SECRET environment variables, then restart the server.",
+            style={"color": TEXT_MUTED, "fontSize": "13px", "margin": "0"},
+        )
+    elif status["connected"]:
+        strava_body = html.Div([
+            html.Div([
+                html.Span("Connected", style={
+                    "color": ACCENT, "fontWeight": "600", "fontSize": "13px",
+                }),
+                html.Span(
+                    f" · athlete {status['athlete_id']}" if status["athlete_id"] else "",
+                    style={"color": TEXT_MUTED, "fontSize": "13px"},
+                ),
+            ], style={"marginBottom": "6px"}),
+            html.Div(f"Last sync: {status['last_sync_at']}",
+                     style={"color": TEXT_MUTED, "fontSize": "13px",
+                            "marginBottom": "12px"}),
+            html.Div([
+                html.Button("Sync now", id="strava-sync-btn", n_clicks=0,
+                            className="btn-accent",
+                            style={"padding": "8px 20px", "fontSize": "13px",
+                                   "marginRight": "8px"}),
+                html.Button("Disconnect", id="strava-disconnect-btn", n_clicks=0,
+                            className="btn-ghost",
+                            style={"padding": "8px 20px", "fontSize": "13px"}),
+            ]),
+            html.Div(id="strava-sync-status", style={
+                "marginTop": "10px", "fontSize": "13px", "color": TEXT_SECONDARY,
+            }),
+        ])
+    else:
+        strava_body = html.Div([
+            html.P("Authorize MERON to pull activities directly from Strava.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "13px",
+                          "margin": "0 0 10px 0"}),
+            html.A("Connect Strava",
+                   href="/oauth/strava/start",
+                   className="btn-accent",
+                   style={"display": "inline-block",
+                          "padding": "8px 20px", "fontSize": "13px",
+                          "textDecoration": "none"}),
+        ])
+
+    strava_card = html.Div([
+        html.H4("Connect Strava",
+                style={"fontSize": "15px", "margin": "0 0 10px 0"}),
+        strava_body,
+    ], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "padding": "20px", "marginBottom": "12px",
+    })
+
+    # Apple Health placeholder
+    apple_card = html.Div([
+        html.H4("Apple Health",
+                style={"fontSize": "15px", "margin": "0 0 6px 0"}),
+        html.P("Coming soon — pull workouts from iOS Health.",
+               style={"color": TEXT_MUTED, "fontSize": "13px",
+                      "margin": "0 0 10px 0"}),
+        html.Button("Coming soon",
+                    disabled=True,
+                    className="btn-ghost",
+                    style={"padding": "8px 20px", "fontSize": "13px",
+                           "opacity": "0.5", "cursor": "not-allowed"}),
+    ], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "padding": "20px",
+    })
+
+    return html.Div([upload_card, strava_card, apple_card])
+
+
 def layout(**_kwargs):
     # Read current theme from a dcc.Store (populated by clientside callback on load)
     return html.Div([
@@ -97,6 +244,15 @@ def layout(**_kwargs):
         ),
 
         dcc.Store(id="current-theme-store"),
+
+        page_section("DATA SOURCES", [
+            html.P(
+                "Connect Strava, upload an export, or plug in Apple Health.",
+                style={"color": TEXT_SECONDARY, "fontSize": "0.9rem",
+                       "marginBottom": "20px"},
+            ),
+            _data_sources_section(),
+        ]),
 
         page_section("APPEARANCE", [
             html.P("Choose your theme. Your preference is saved locally.",
@@ -282,3 +438,109 @@ def save_openai_key(n_clicks, api_key):
     cfg["openai_api_key"] = (api_key or "").strip()
     data.save_athlete_config(cfg)
     return "Saved." if api_key else "Cleared."
+
+
+# ── Data Sources callbacks ───────────────────────────────────────────
+
+def _format_report(report: dict) -> str:
+    parts = []
+    if report.get("inserted"):
+        parts.append(f"{report['inserted']} new")
+    if report.get("updated"):
+        parts.append(f"{report['updated']} updated")
+    if report.get("skipped"):
+        parts.append(f"{report['skipped']} skipped")
+    errs = report.get("errors") or []
+    if errs:
+        parts.append(f"{len(errs)} errors")
+    return ", ".join(parts) or "no changes"
+
+
+@callback(
+    Output("strava-upload-status", "children"),
+    Output("data-version-store", "data", allow_duplicate=True),
+    Input("strava-export-upload", "contents"),
+    State("strava-export-upload", "filename"),
+    State("data-version-store", "data"),
+    prevent_initial_call=True,
+)
+def handle_strava_upload(contents, filename, current_version):
+    if not contents or not filename:
+        return no_update, no_update
+
+    # Decode the base64 payload dcc.Upload provides
+    header, _, b64 = contents.partition(",")
+    try:
+        raw = base64.b64decode(b64)
+    except Exception as e:
+        return f"Upload failed: {e}", (current_version or 0)
+
+    import tempfile, zipfile
+    from pathlib import Path
+    from strava_analytics.db import meron_dir
+
+    upload_root = meron_dir() / "uploads"
+    upload_root.mkdir(parents=True, exist_ok=True)
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = upload_root / ts
+    dest.mkdir(parents=True, exist_ok=True)
+    saved = dest / Path(filename).name
+    saved.write_bytes(raw)
+
+    # If a zip, extract; if a bare csv, place it as activities.csv
+    target = None
+    lower = filename.lower()
+    if lower.endswith(".zip"):
+        try:
+            with zipfile.ZipFile(saved) as zf:
+                zf.extractall(dest)
+        except zipfile.BadZipFile:
+            return "Not a valid zip file.", (current_version or 0)
+        for cand in [dest, *dest.iterdir()]:
+            if cand.is_dir() and (cand / "activities.csv").exists():
+                target = cand
+                break
+    elif lower.endswith(".csv"):
+        if saved.name != "activities.csv":
+            (dest / "activities.csv").write_bytes(raw)
+        target = dest
+    else:
+        return f"Unsupported file type: {filename}", (current_version or 0)
+
+    if target is None:
+        return "activities.csv not found in upload.", (current_version or 0)
+
+    with session_scope() as session:
+        report = ingest_bulk(target, user_id=1, session=session)
+    data.reload()
+    return f"Imported: {_format_report(report)}.", (current_version or 0) + 1
+
+
+@callback(
+    Output("strava-sync-status", "children"),
+    Output("data-version-store", "data", allow_duplicate=True),
+    Input("strava-sync-btn", "n_clicks"),
+    State("data-version-store", "data"),
+    prevent_initial_call=True,
+)
+def handle_strava_sync(n_clicks, current_version):
+    if not n_clicks:
+        return no_update, no_update
+    with session_scope() as session:
+        report = run_strava_sync(user_id=1, session=session)
+    data.reload()
+    return f"Sync: {_format_report(report)}.", (current_version or 0) + 1
+
+
+@callback(
+    Output("strava-sync-status", "children", allow_duplicate=True),
+    Input("strava-disconnect-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_strava_disconnect(n_clicks):
+    if not n_clicks:
+        return no_update
+    with session_scope() as session:
+        strava_oauth.disconnect(session, user_id=1)
+    return "Disconnected. Reload the page."
