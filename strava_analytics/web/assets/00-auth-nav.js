@@ -11,6 +11,7 @@
 (function () {
     function renderSlot() {
         var slot = document.getElementById("nav-auth-slot");
+        var gear = document.getElementById("nav-settings-gear");
         if (!slot) return;
         fetch("/api/auth/me", {credentials: "same-origin"})
             .then(function (resp) {
@@ -21,13 +22,16 @@
                             '<span style="opacity:0.6">' + escape(name) + '</span>' +
                             '  <a href="#" data-meron-logout ' +
                             'style="color:inherit;text-decoration:underline;">logout</a>';
+                        if (gear) gear.style.display = "";
                     });
                 }
-                slot.innerHTML =
-                    '<a href="/login" style="color:inherit;">login</a>';
+                // Anonymous: empty auth slot, gear stays hidden.
+                slot.innerHTML = "";
+                if (gear) gear.style.display = "none";
             })
             .catch(function () {
-                slot.innerHTML = '';
+                slot.innerHTML = "";
+                if (gear) gear.style.display = "none";
             });
     }
 

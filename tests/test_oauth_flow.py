@@ -145,6 +145,10 @@ def test_oauth_start_redirects_anon_to_login(isolated_db, monkeypatch):
     """Anonymous visitors hitting /oauth/strava/start get bounced to /login."""
     monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
     monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+    # Isolate from any admin creds that leaked in from a prior test — if a
+    # session is somehow authenticated we'd get the 503 path, not 302.
+    monkeypatch.delenv("MERON_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("MERON_ADMIN_PASSWORD", raising=False)
     app = _app(isolated_db)
     client = app.test_client()
     resp = client.get("/oauth/strava/start")
@@ -158,7 +162,7 @@ def test_oauth_start_requires_configuration_when_logged_in(isolated_db, monkeypa
     monkeypatch.setenv("MERON_ADMIN_PASSWORD", "password123")
     monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
     monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
-    run_migrations()  # picks up the env creds
+    run_migrations()
     app = _app(isolated_db)
     client = app.test_client()
     client.post("/api/auth/login",

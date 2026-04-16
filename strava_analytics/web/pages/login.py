@@ -12,7 +12,6 @@ from __future__ import annotations
 import dash
 from dash import Input, Output, State, clientside_callback, dcc, html
 
-from strava_analytics.web.components.layout import footer, hero_section
 from strava_analytics.web.theme import (
     BG_CARD, BORDER, FONT_MONO, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
 )
@@ -22,65 +21,87 @@ dash.register_page(__name__, path="/login", name="Login")
 
 
 def _form_input(id_: str, label: str, type_: str = "text",
-                placeholder: str = "", value: str = "") -> html.Div:
+                placeholder: str = "", value: str = "",
+                autocomplete: str = "") -> html.Div:
     return html.Div([
-        html.Label(label, style={
-            "fontSize": "12px", "fontWeight": "600",
-            "color": TEXT_SECONDARY, "marginBottom": "4px",
+        html.Label(label, htmlFor=id_, style={
+            "fontSize": "11px", "fontWeight": "600",
+            "textTransform": "uppercase", "letterSpacing": "0.08em",
+            "color": TEXT_MUTED, "marginBottom": "6px",
             "display": "block",
         }),
         dcc.Input(
             id=id_, type=type_, value=value, placeholder=placeholder,
-            style={"width": "100%", "fontFamily": FONT_MONO,
-                   "fontSize": "13px", "padding": "8px 10px"},
+            autoComplete=autocomplete or None,
+            style={
+                "width": "100%", "fontFamily": FONT_MONO,
+                "fontSize": "14px", "padding": "10px 12px",
+                "border": f"1px solid {BORDER}",
+                "borderRadius": "4px", "backgroundColor": "transparent",
+                "color": "inherit", "outline": "none",
+                "boxSizing": "border-box",
+            },
             debounce=False,
         ),
-    ], style={"marginBottom": "12px"})
+    ], style={"marginBottom": "16px"})
 
 
 def layout(**kwargs):
     return html.Div([
-        hero_section(
-            label="LOGIN",
-            headline="Welcome back.",
-            subtext="Sign in to see your own data and manage settings.",
-            icon=False,
-        ),
         html.Div([
             html.Div([
-                html.H3("Sign in", style={
-                    "fontSize": "18px", "margin": "0 0 16px 0",
-                    "color": TEXT_PRIMARY,
+                html.Img(src="/assets/meron-icon.svg", alt="MERON",
+                         style={"width": "40px", "height": "40px",
+                                "marginBottom": "16px", "opacity": "0.9"}),
+                html.H1("Sign in", style={
+                    "fontSize": "28px", "fontWeight": "700",
+                    "margin": "0 0 8px 0", "color": TEXT_PRIMARY,
+                    "letterSpacing": "-0.01em",
+                }),
+                html.P("Welcome back.", style={
+                    "color": TEXT_MUTED, "margin": "0 0 28px 0",
+                    "fontSize": "14px",
                 }),
                 _form_input("login-username", "Username",
-                             placeholder="you"),
+                            placeholder="you",
+                            autocomplete="username"),
                 _form_input("login-password", "Password", type_="password",
-                             placeholder="••••••••"),
+                            placeholder="••••••••",
+                            autocomplete="current-password"),
                 html.Button(
                     "Sign in", id="login-submit", n_clicks=0,
                     className="btn-accent",
-                    style={"padding": "10px 24px", "fontSize": "13px",
-                           "width": "100%"},
+                    style={"padding": "12px 24px", "fontSize": "14px",
+                           "fontWeight": "600", "width": "100%",
+                           "marginTop": "4px", "cursor": "pointer"},
                 ),
                 html.Div(id="login-status", style={
-                    "marginTop": "10px", "fontSize": "13px",
-                    "color": TEXT_MUTED, "minHeight": "18px",
+                    "marginTop": "14px", "fontSize": "13px",
+                    "color": "var(--accent)", "minHeight": "18px",
+                    "textAlign": "center",
                 }),
-                html.P([
-                    "Don't have an account? ",
-                    dcc.Link("Sign up with an invite code",
-                             href="/signup", style={"color": "var(--accent)"}),
-                    ".",
-                ], style={
-                    "marginTop": "16px", "fontSize": "13px",
-                    "color": TEXT_MUTED,
-                }),
+                html.Div(
+                    dcc.Link("Have an invite? Sign up",
+                             href="/signup",
+                             style={"color": TEXT_MUTED,
+                                    "fontSize": "13px",
+                                    "textDecoration": "underline"}),
+                    style={"textAlign": "center", "marginTop": "20px"},
+                ),
             ], style={
-                "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
-                "padding": "28px", "maxWidth": "380px", "margin": "40px auto",
+                "backgroundColor": BG_CARD,
+                "border": f"1px solid {BORDER}",
+                "borderRadius": "6px",
+                "padding": "40px 36px",
+                "width": "100%", "maxWidth": "380px",
+                "boxShadow": "0 1px 2px rgba(0,0,0,0.04)",
             }),
-        ], style={"padding": "0 24px"}),
-        footer(),
+        ], style={
+            "minHeight": "calc(100vh - 64px)",
+            "display": "flex", "alignItems": "center",
+            "justifyContent": "center",
+            "padding": "40px 24px",
+        }),
     ])
 
 

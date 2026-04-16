@@ -13,6 +13,15 @@ def isolated_db(tmp_path, monkeypatch):
     """Point every test at a scratch sqlite file under tmp_path."""
     db_path = tmp_path / "meron.db"
     monkeypatch.setenv("MERON_DB_PATH", str(db_path))
+    # Drop env vars the runtime ``.env`` file may have leaked into os.environ
+    # — each test should start from a clean admin-less slate and opt into
+    # creds explicitly where needed.
+    for leaky in (
+        "MERON_ADMIN_USERNAME", "MERON_ADMIN_PASSWORD",
+        "MERON_ALLOWED_ORIGINS", "MERON_PUBLIC_URL",
+        "TUNNEL_TOKEN",
+    ):
+        monkeypatch.delenv(leaky, raising=False)
 
     # Reset the module-level engine/session factory so init_engine() picks up
     # the new path.

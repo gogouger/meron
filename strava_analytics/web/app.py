@@ -158,10 +158,16 @@ def create_app() -> dash.Dash:
                     dcc.Link("Lifting", href="/lifting", className="meron-nav-link"),
                     dcc.Link("Activities", href="/activities", className="meron-nav-link"),
                     dcc.Link("Plan", href="/plan", className="meron-nav-link"),
-                    dcc.Link("\u2699", href="/settings", className="meron-nav-link",
-                             style={"fontSize": "18px", "opacity": "0.6"},
+                    # Gear is hidden by default; 00-auth-nav.js reveals it
+                    # once /api/auth/me returns 200.
+                    dcc.Link("\u2699", href="/settings",
+                             id="nav-settings-gear",
+                             className="meron-nav-link",
+                             style={"fontSize": "18px", "opacity": "0.6",
+                                    "display": "none"},
                              title="Settings"),
-                    # Auth slot — filled by a clientside callback from /api/auth/me.
+                    # Auth slot — empty for anonymous visitors, populated
+                    # with "<username> · logout" when logged in.
                     html.Span(id="nav-auth-slot", className="meron-nav-link",
                               style={"fontSize": "13px"}),
                 ], id="nav-links", className="nav-links"),

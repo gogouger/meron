@@ -27,7 +27,10 @@ services:
     ports:
       - "${MERON_BIND_PORT:-8050}:8050"
     volumes:
-      - ./meron-data:/data
+      # Bind-mount the host's ~/.meron so the container shares one
+      # canonical data dir with any existing CLI / previous runs.
+      # Override via MERON_DATA_DIR to point elsewhere (e.g. a NAS path).
+      - ${MERON_DATA_DIR:-${HOME}/.meron}:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/api/healthz', timeout=3).read()"]
       interval: 30s

@@ -110,10 +110,10 @@ def bootstrap_admin_from_env() -> None:
             from ..config import default_tz_name
             user = User(id=1, display_name="Admin", timezone=default_tz_name())
             session.add(user)
-        if not user.username or user.username == admin_user:
-            user.username = admin_user
-            user.password_hash = hash_password(admin_pw)
-            user.is_admin = 1
+        # Env is the source of truth for admin creds — always apply on boot.
+        user.username = admin_user
+        user.password_hash = hash_password(admin_pw)
+        user.is_admin = 1
         session.commit()
         logger.info("Admin user %r seeded/refreshed from env", admin_user)
 
