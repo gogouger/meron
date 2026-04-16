@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MERON Logo System Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #f8f9fc; color: #0A1B33; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-family: 'Montserrat', sans-serif; font-size: 28px; font-weight: 900;
+       letter-spacing: 0.06em; margin-bottom: 8px; }
+  .subtitle { color: #64748B; font-size: 14px; margin-bottom: 48px; }
+  .section { margin-bottom: 48px; }
+  .section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+                   text-transform: uppercase; color: #64748B; margin-bottom: 16px; }
+  .grid { display: grid; gap: 24px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .card { border-radius: 12px; padding: 32px; display: flex; align-items: center;
+          justify-content: center; min-height: 200px; }
+  .card-light { background: #ffffff; border: 1px solid #E5E7EB; }
+  .card-dark { background: #0A1B33; }
+  .card-red { background: #FF3330; }
+  .card-navy { background: #0F2547; }
+  .card img { max-width: 100%; max-height: 160px; }
+  .card-label { font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+                text-transform: uppercase; color: #64748B; margin-bottom: 8px; }
+  .card-label-light { color: rgba(255,255,255,0.6); }
+
+  /* Color palette */
+  .palette { display: flex; gap: 16px; }
+  .swatch { text-align: center; }
+  .swatch-circle { width: 64px; height: 64px; border-radius: 12px; margin-bottom: 8px;
+                   border: 1px solid rgba(0,0,0,0.08); }
+  .swatch-label { font-size: 11px; font-weight: 600; color: #0A1B33; }
+  .swatch-hex { font-size: 11px; color: #64748B; font-family: 'IBM Plex Mono', monospace; }
+
+  /* Typography */
+  .type-sample { padding: 24px; }
+  .type-brand { font-family: 'Montserrat', sans-serif; font-weight: 900;
+                font-size: 42px; letter-spacing: 0.08em; color: #0A1B33; }
+  .type-tagline { font-size: 13px; letter-spacing: 0.15em; color: #64748B; margin-top: 4px; }
+  .type-tagline em { font-style: normal; color: #FF3330; font-weight: 700; }
+
+  @media (max-width: 768px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>MERON</h1>
+  <p class="subtitle">Logo System &mdash; Strength. Endurance. Elevation.</p>
+
+  <!-- Primary Logo -->
+  <div class="section">
+    <div class="section-title">Primary Logo &mdash; Full Color</div>
+    <div class="grid grid-2">
+      <div>
+        <div class="card-label">Light background</div>
+        <div class="card card-light">
+          <img src="meron-logo-primary.png" alt="MERON Primary Logo">
+        </div>
+      </div>
+      <div>
+        <div class="card-label">Dark background</div>
+        <div class="card card-dark">
+          <img src="meron-logo-dark-bg.png" alt="MERON Dark Background Logo">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Horizontal Lockup -->
+  <div class="section">
+    <div class="section-title">Horizontal Lockup</div>
+    <div class="card card-light" style="min-height: 120px;">
+      <img src="meron-logo-horizontal.png" alt="MERON Horizontal Lockup" style="max-height: 80px;">
+    </div>
+  </div>
+
+  <!-- Icon Variants -->
+  <div class="section">
+    <div class="section-title">Icon Variants</div>
+    <div class="grid grid-4">
+      <div>
+        <div class="card-label">Full Color</div>
+        <div class="card card-light" style="min-height: 140px;">
+          <img src="meron-icon.png" alt="MERON Icon" style="max-height: 80px;">
+        </div>
+      </div>
+      <div>
+        <div class="card-label">Outline / Stroke</div>
+        <div class="card card-light" style="min-height: 140px;">
+          <img src="meron-logo-outline.png" alt="MERON Outline" style="max-height: 80px;">
+        </div>
+      </div>
+      <div>
+        <div class="card-label card-label-light">On Dark</div>
+        <div class="card card-dark" style="min-height: 140px; padding: 16px;">
+          <img src="meron-logo-dark-bg.png" alt="MERON Dark BG" style="max-height: 100px; width: 100%; object-fit: contain;">
+        </div>
+      </div>
+      <div>
+        <div class="card-label card-label-light">On Red</div>
+        <div class="card card-red" style="min-height: 140px; padding: 16px;">
+          <img src="meron-logo-red-bg.png" alt="MERON Red BG" style="max-height: 100px; width: 100%; object-fit: contain;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Icon -->
+  <div class="section">
+    <div class="section-title">App Icon</div>
+    <div class="grid grid-3">
+      <div>
+        <div class="card-label">512px</div>
+        <div class="card card-light" style="min-height: 180px;">
+          <img src="meron-app-icon.png" alt="MERON App Icon" style="max-height: 140px; border-radius: 28px;">
+        </div>
+      </div>
+      <div>
+        <div class="card-label">64px</div>
+        <div class="card card-light" style="min-height: 180px;">
+          <img src="meron-app-icon.png" alt="MERON App Icon 64" style="width: 64px; height: 64px; border-radius: 14px;">
+        </div>
+      </div>
+      <div>
+        <div class="card-label">32px</div>
+        <div class="card card-light" style="min-height: 180px;">
+          <img src="meron-app-icon.png" alt="MERON App Icon 32" style="width: 32px; height: 32px; border-radius: 7px;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Color Palette -->
+  <div class="section">
+    <div class="section-title">Color Palette</div>
+    <div class="palette">
+      <div class="swatch">
+        <div class="swatch-circle" style="background: #0A1B33;"></div>
+        <div class="swatch-label">Dark Navy</div>
+        <div class="swatch-hex">#0A1B33</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-circle" style="background: #0D6EFD;"></div>
+        <div class="swatch-label">Blue</div>
+        <div class="swatch-hex">#0D6EFD</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-circle" style="background: #FF3330;"></div>
+        <div class="swatch-label">Red</div>
+        <div class="swatch-hex">#FF3330</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-circle" style="background: #FFFFFF;"></div>
+        <div class="swatch-label">White</div>
+        <div class="swatch-hex">#FFFFFF</div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-circle" style="background: #d4a84b;"></div>
+        <div class="swatch-label">Gold (Data Viz)</div>
+        <div class="swatch-hex">#d4a84b</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Typography -->
+  <div class="section">
+    <div class="section-title">Typography</div>
+    <div class="card card-light type-sample">
+      <div>
+        <div class="type-brand">MERON</div>
+        <div class="type-tagline">STRENGTH. <em>ENDURANCE.</em> ELEVATION.</div>
+        <p style="margin-top: 16px; font-size: 13px; color: #64748B;">
+          Bold &middot; Modern &middot; Strong &mdash; Built for those who move mountains.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

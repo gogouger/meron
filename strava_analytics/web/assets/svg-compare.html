@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>SVG vs PNG Comparison</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; background: #f0f0f0; padding: 16px; }
+  h1 { font-size: 18px; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; background: white; table-layout: fixed; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: center; vertical-align: middle; }
+  th { background: #f8f8f8; font-size: 12px; }
+  td img { max-height: 90px; max-width: 100%; }
+  .dark { background: #0A1B33; }
+  .red { background: #FF3330; }
+  .lbl { font-size: 11px; color: #666; width: 60px; }
+</style>
+</head>
+<body>
+<h1>SVG vs PNG — All Variants</h1>
+<table>
+  <colgroup><col style="width:60px"><col><col></colgroup>
+  <tr><th>Variant</th><th>PNG</th><th>SVG</th></tr>
+  <tr>
+    <td class="lbl">Icon</td>
+    <td><img src="meron-icon.png"></td>
+    <td><img src="meron-icon.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">Primary</td>
+    <td><img src="meron-logo-primary.png"></td>
+    <td><img src="meron-logo-primary.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">Horizontal</td>
+    <td><img src="meron-logo-horizontal.png"></td>
+    <td><img src="meron-logo-horizontal.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">Outline</td>
+    <td><img src="meron-logo-outline.png"></td>
+    <td><img src="meron-logo-outline.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">Dark BG</td>
+    <td class="dark"><img src="meron-logo-dark-bg.png"></td>
+    <td class="dark"><img src="meron-logo-dark-bg.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">Red BG</td>
+    <td class="red"><img src="meron-logo-red-bg.png"></td>
+    <td class="red"><img src="meron-logo-red-bg.svg"></td>
+  </tr>
+  <tr>
+    <td class="lbl">App Icon</td>
+    <td><img src="meron-app-icon.png" style="border-radius:16px;"></td>
+    <td><img src="meron-app-icon.svg"></td>
+  </tr>
+</table>
+</body>
+</html>
