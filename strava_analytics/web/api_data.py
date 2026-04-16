@@ -160,6 +160,70 @@ def get_detailed_lifts(df: pd.DataFrame, limit: int = 20) -> list[dict]:
     return results
 
 
+def get_activity_feed(df: pd.DataFrame, cursor: str | None = None,
+                      limit: int = 20) -> dict:
+    """Cursor-paginated activity feed for the mobile app.
+
+    Returns ``{items: [...], next_cursor: "<iso_date>|<id>" | None}``.
+    Order is date-descending; ties (same date) broken by id-descending.
+    """
+    if df.empty or "_id" not in df.columns:
+        return {"items": [], "next_cursor": None}
+
+    # Sort date desc, id desc — deterministic for paging.
+    sorted_df = df.sort_values(
+        ["date", "_id"], ascending=[False, False]
+    ).reset_index(drop=True)
+
+    if cursor:
+        try:
+            cutoff_iso, cutoff_id_raw = cursor.split("|", 1)
+            cutoff_date = pd.Timestamp(cutoff_iso)
+            cutoff_id = int(cutoff_id_raw)
+        except (ValueError, TypeError):
+            return {"items": [], "next_cursor": None,
+                    "error": "invalid cursor"}
+        mask = (
+            (sorted_df["date"] < cutoff_date)
+            | ((sorted_df["date"] == cutoff_date)
+               & (sorted_df["_id"].astype(int) < cutoff_id))
+        )
+        sorted_df = sorted_df[mask].reset_index(drop=True)
+
+    page = sorted_df.head(limit)
+
+    items = []
+    for _, row in page.iterrows():
+        act = {
+            "_id": int(row["_id"]) if pd.notna(row.get("_id")) else None,
+            "date": row["date"].strftime("%Y-%m-%d"),
+            "type": row.get("type", ""),
+            "name": row.get("name", ""),
+        }
+        for field, key in [("distance_mi", "distance_mi"),
+                           ("pace_min_per_mi", "pace"),
+                           ("avg_hr", "avg_hr"),
+                           ("moving_time_s", "duration_s"),
+                           ("elevation_gain_ft", "elevation_ft"),
+                           ("run_type", "run_type")]:
+            val = row.get(field)
+            if val is not None and not pd.isna(val) and val != 0:
+                if key == "pace":
+                    act[key] = format_pace(val)
+                    act["pace_decimal"] = round(float(val), 2)
+                else:
+                    act[key] = round(float(val), 1) if isinstance(val, float) else val
+        items.append(act)
+
+    # Only emit a next_cursor when there are more rows beyond the page.
+    next_cursor: str | None = None
+    if len(sorted_df) > len(page) and not page.empty:
+        last = page.iloc[-1]
+        next_cursor = f"{last['date'].isoformat()}|{int(last['_id'])}"
+
+    return {"items": items, "next_cursor": next_cursor}
+
+
 def get_athlete_summary(df: pd.DataFrame) -> dict:
     """Combined overview of all athlete data."""
     return {

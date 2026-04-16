@@ -18,7 +18,7 @@ from strava_analytics.db.repository import (
 )
 from strava_analytics.services.enrichment_service import invalidate_cache
 from strava_analytics.web import data
-from strava_analytics.web.api_data import get_recent_activities
+from strava_analytics.web.api_data import get_activity_feed, get_recent_activities
 
 from ..context import current_user_id
 from ..errors import NotFound, ValidationError
@@ -46,6 +46,20 @@ def activities_collection():
         new_id = act.id
     invalidate_cache()
     return jsonify({"id": new_id}), 201
+
+
+@bp.route("/activities/feed")
+def activities_feed():
+    """Cursor-paginated feed for the mobile infinite scroll.
+
+    Returns ``{items, next_cursor}``. Pass ``?cursor=<value>`` from the
+    previous response to fetch the next page. Omit it for the first page.
+    """
+    cursor = request.args.get("cursor") or None
+    limit = request.args.get("limit", 20, type=int)
+    # Cap the limit so a malicious client can't ask for the whole DB.
+    limit = max(1, min(limit, 100))
+    return jsonify(get_activity_feed(data.get_df(), cursor=cursor, limit=limit))
 
 
 @bp.route("/activities/<int:activity_id>", methods=["GET", "PATCH", "DELETE"])

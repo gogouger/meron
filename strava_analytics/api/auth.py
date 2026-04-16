@@ -18,11 +18,13 @@ from .errors import envelope
 
 # Routes that should bypass the key check. ``/api/openapi.*`` is public so
 # schema consumers (codegen, ChatGPT, Swagger UI) can fetch it without a
-# key. ``/api/healthz`` is a liveness probe.
+# key. ``/api/healthz`` is a liveness probe. ``/api/auth/pair/claim`` is
+# the mobile bootstrap flow — the caller doesn't have a key yet.
 _PUBLIC_PATHS = frozenset({
     "/api/openapi.yaml",
     "/api/openapi.json",
     "/api/healthz",
+    "/api/auth/pair/claim",
 })
 
 

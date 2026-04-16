@@ -10,6 +10,7 @@ from __future__ import annotations
 from flask import Flask
 
 from .activities import bp as activities_bp
+from .auth import bp as auth_bp
 from .metrics import bp as metrics_bp
 from .openapi import bp as openapi_bp
 from .plan import bp as plan_bp
@@ -27,6 +28,7 @@ def register_routes(server: Flask) -> None:
         plan_bp,
         user_bp,
         routes_bp,
+        auth_bp,
         openapi_bp,
     ):
         server.register_blueprint(bp)

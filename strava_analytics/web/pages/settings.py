@@ -6,6 +6,7 @@ import dash
 from dash import html, dcc, callback, clientside_callback, Output, Input, State, no_update
 from sqlalchemy import select
 
+from strava_analytics.api import pairing
 from strava_analytics.api.context import current_user_id
 from strava_analytics.auth import strava_oauth
 from strava_analytics.db import session_scope
@@ -94,6 +95,119 @@ def _hr_zones_section() -> html.Div:
     return html.Div([*stores, dcc.Store(id="zone-pct-sync"),
                       zone_bar, max_hr_input,
                       html.Div([save_btn, save_status])])
+
+
+def _read_api_key() -> str:
+    """Fetch the current user's read API key for mobile pairing."""
+    with session_scope() as session:
+        row = session.scalar(
+            select(SyncState).where(
+                SyncState.user_id == current_user_id(),
+                SyncState.provider == "strava",
+            )
+        )
+        return (row.api_key_read if row else "") or ""
+
+
+def _qr_data_url(payload: str) -> str:
+    """Render ``payload`` as a ``data:image/svg+xml;base64,...`` URL.
+
+    Returned as an ``<img src>`` value, which sidesteps the Markdown
+    sanitizer's stripping of raw ``<svg>`` tags in Dash.
+    """
+    try:
+        import qrcode
+        from qrcode.image.svg import SvgPathImage
+    except ImportError:
+        return ""
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=6,
+        border=2,
+    )
+    qr.add_data(payload)
+    qr.make(fit=True)
+    img = qr.make_image(image_factory=SvgPathImage)
+    import base64
+    import io
+    buf = io.BytesIO()
+    img.save(buf)
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:image/svg+xml;base64,{b64}"
+
+
+def _pair_card_body(code: str | None, api_base: str | None) -> list:
+    """Render the pair-card body depending on whether a code is live."""
+    if not code:
+        return [
+            html.P("Scan a one-time QR from your phone to sign the MERON app in. "
+                   "Codes expire after 10 minutes and are single-use.",
+                   style={"color": TEXT_SECONDARY, "fontSize": "13px",
+                          "margin": "0 0 10px 0"}),
+            html.Button("Generate pair code", id="pair-generate-btn", n_clicks=0,
+                        className="btn-accent",
+                        style={"padding": "8px 20px", "fontSize": "13px"}),
+        ]
+
+    # We have a live code — render the QR + the short code as a fallback.
+    import json
+    payload = json.dumps({"api_base": api_base, "pair_code": code},
+                         separators=(",", ":"))
+    data_url = _qr_data_url(payload)
+    if data_url:
+        qr_el = html.Img(src=data_url, alt="pairing QR",
+                         style={"width": "180px", "height": "180px",
+                                "display": "block"})
+    else:
+        qr_el = html.Div("QR library not installed — use the code below.",
+                         style={"color": TEXT_MUTED, "fontSize": "12px"})
+
+    pretty_code = f"{code[:4]}-{code[4:]}" if len(code) == 8 else code
+    return [
+        html.Div([
+            html.Div(qr_el, style={
+                "background": "#fff", "padding": "8px",
+                "display": "inline-block", "border": f"1px solid {BORDER}",
+            }),
+            html.Div([
+                html.Div("PAIR CODE", style={
+                    "fontSize": "11px", "letterSpacing": "0.2em",
+                    "color": TEXT_MUTED, "fontFamily": FONT_MONO,
+                }),
+                html.Div(pretty_code, style={
+                    "fontSize": "28px", "fontWeight": "700",
+                    "fontFamily": FONT_MONO, "letterSpacing": "0.05em",
+                    "color": TEXT_PRIMARY, "margin": "4px 0",
+                }),
+                html.Div(f"Server: {api_base}", style={
+                    "fontSize": "12px", "color": TEXT_MUTED,
+                    "fontFamily": FONT_MONO, "marginBottom": "10px",
+                }),
+                html.Div("Expires in 10 minutes. One use only.", style={
+                    "fontSize": "12px", "color": TEXT_MUTED,
+                }),
+                html.Button("Regenerate", id="pair-generate-btn", n_clicks=0,
+                            className="btn-ghost",
+                            style={"padding": "6px 14px", "fontSize": "12px",
+                                   "marginTop": "10px"}),
+            ], style={"flex": "1", "marginLeft": "20px"}),
+        ], style={"display": "flex", "alignItems": "flex-start"}),
+    ]
+
+
+def _mobile_pair_section() -> html.Div:
+    return html.Div([
+        html.H4("Pair mobile app",
+                style={"fontSize": "15px", "margin": "0 0 10px 0"}),
+        html.Div(
+            _pair_card_body(None, None),
+            id="pair-card-body",
+        ),
+    ], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "padding": "20px", "marginBottom": "12px",
+    })
 
 
 def _strava_status() -> dict:
@@ -232,7 +346,7 @@ def _data_sources_section() -> html.Div:
         "padding": "20px",
     })
 
-    return html.Div([upload_card, strava_card, apple_card])
+    return html.Div([upload_card, strava_card, _mobile_pair_section(), apple_card])
 
 
 def layout(**_kwargs):
@@ -545,3 +659,31 @@ def handle_strava_disconnect(n_clicks):
     with session_scope() as session:
         strava_oauth.disconnect(session, user_id=current_user_id())
     return "Disconnected. Reload the page."
+
+
+@callback(
+    Output("pair-card-body", "children"),
+    Input("pair-generate-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_generate_pair_code(n_clicks):
+    """Mint a single-use pair code for the mobile app."""
+    if not n_clicks:
+        return no_update
+
+    import os
+    from flask import request as flask_request
+
+    read_key = _read_api_key()
+    if not read_key:
+        return html.P(
+            "No API key yet — run the server once to seed it, then reload.",
+            style={"color": TEXT_MUTED, "fontSize": "13px"},
+        )
+
+    # Prefer the explicit public URL for production; fall back to whatever
+    # host the browser used to reach Settings (works for local + tunnel).
+    api_base = (os.environ.get("MERON_PUBLIC_URL") or
+                flask_request.host_url.rstrip("/"))
+    code, _expires = pairing.create_pair(api_key=read_key, api_base=api_base)
+    return _pair_card_body(code, api_base)
