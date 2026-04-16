@@ -25,12 +25,15 @@
                         if (gear) gear.style.display = "";
                     });
                 }
-                // Anonymous: empty auth slot, gear stays hidden.
-                slot.innerHTML = "";
+                // Anonymous: show a discreet "Log in" link in the auth
+                // slot. Gear stays hidden — it only appears after login.
+                slot.innerHTML =
+                    '<a href="/login" style="color:inherit;">log in</a>';
                 if (gear) gear.style.display = "none";
             })
             .catch(function () {
-                slot.innerHTML = "";
+                slot.innerHTML =
+                    '<a href="/login" style="color:inherit;">log in</a>';
                 if (gear) gear.style.display = "none";
             });
     }
