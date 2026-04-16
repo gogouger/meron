@@ -20,7 +20,7 @@ from strava_analytics.services.enrichment_service import invalidate_cache
 from strava_analytics.web import data
 from strava_analytics.web.api_data import get_activity_feed, get_recent_activities
 
-from ..context import current_user_id
+from ..context import current_user_id, require_user_id
 from ..errors import NotFound, ValidationError
 from ..schemas import ActivityCreate, ActivityPatch
 
@@ -36,11 +36,12 @@ def activities_collection():
         return jsonify(get_recent_activities(data.get_df(), days=days, limit=limit))
 
     # POST — create a manual activity
+    uid = require_user_id()
     payload = ActivityCreate.model_validate(request.get_json(silent=True) or {})
     with session_scope() as session:
         act = create_manual_activity(
             session,
-            user_id=current_user_id(),
+            user_id=uid,
             payload=payload.to_db_payload(),
         )
         new_id = act.id
@@ -120,11 +121,16 @@ def _row_to_dict(row: pd.Series) -> dict:
 
 
 def _patch_activity(activity_id: int):
+    uid = require_user_id()
     body = request.get_json(silent=True) or {}
     patch = ActivityPatch.model_validate(body).to_db_patch()
     if not patch:
         raise ValidationError("no editable fields provided")
     with session_scope() as session:
+        # Guard against cross-user edits.
+        act = session.get(Activity, activity_id)
+        if act is None or act.deleted_at is not None or act.user_id != uid:
+            raise NotFound(f"activity {activity_id} not found")
         row = patch_activity(session, activity_id=activity_id, patch=patch)
         if row is None:
             raise NotFound(f"activity {activity_id} not found")
@@ -133,7 +139,11 @@ def _patch_activity(activity_id: int):
 
 
 def _delete_activity(activity_id: int):
+    uid = require_user_id()
     with session_scope() as session:
+        act = session.get(Activity, activity_id)
+        if act is None or act.deleted_at is not None or act.user_id != uid:
+            raise NotFound(f"activity {activity_id} not found")
         ok = soft_delete_activity(session, activity_id=activity_id)
     if not ok:
         raise NotFound(f"activity {activity_id} not found")

@@ -41,6 +41,26 @@ class User(Base):
     strava_athlete_id: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
+    # ── Auth fields (added in migration 003) ──────────────────────────
+    # Unique case-insensitive-via-application. Nullable so existing rows
+    # (pre-auth) can sit without credentials; null-username means the
+    # account can't log in (only the demo read path uses it).
+    username: Mapped[str | None] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(256))
+    is_admin: Mapped[bool] = mapped_column(Integer, default=0)
+
+
+class InviteCode(Base):
+    """Single-use signup invitation. Admin-generated."""
+    __tablename__ = "invite_codes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    consumed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
 
 class Activity(Base):
     """Canonical activity row. Raw columns match loader.py:12-42.

@@ -509,6 +509,9 @@ def save_activity(
 ):
     if not n_clicks:
         return no_update, no_update, no_update
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return True, "Log in to add or edit activities.", no_update
     if not atype or not dt_str:
         return True, "Type and date are required.", no_update
     try:
@@ -580,6 +583,9 @@ def prompt_delete(clicks_list, ids):
 )
 def confirm_delete(submit_clicks, db_id, ops_count):
     if not submit_clicks or not db_id:
+        return no_update
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
         return no_update
     with session_scope() as session:
         soft_delete_activity(session, activity_id=int(db_id))

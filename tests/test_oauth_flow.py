@@ -141,11 +141,28 @@ def test_disconnect_clears_tokens(isolated_db):
         assert row.token_expires_at is None
 
 
-def test_oauth_start_requires_configuration(isolated_db, monkeypatch):
+def test_oauth_start_redirects_anon_to_login(isolated_db, monkeypatch):
+    """Anonymous visitors hitting /oauth/strava/start get bounced to /login."""
     monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
     monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
     app = _app(isolated_db)
     client = app.test_client()
+    resp = client.get("/oauth/strava/start")
+    assert resp.status_code == 302
+    assert resp.location.endswith("/login")
+
+
+def test_oauth_start_requires_configuration_when_logged_in(isolated_db, monkeypatch):
+    """Once logged in, /oauth/strava/start 503s if env vars are missing."""
+    monkeypatch.setenv("MERON_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("MERON_ADMIN_PASSWORD", "password123")
+    monkeypatch.delenv("STRAVA_CLIENT_ID", raising=False)
+    monkeypatch.delenv("STRAVA_CLIENT_SECRET", raising=False)
+    run_migrations()  # picks up the env creds
+    app = _app(isolated_db)
+    client = app.test_client()
+    client.post("/api/auth/login",
+                json={"username": "admin", "password": "password123"})
     resp = client.get("/oauth/strava/start")
     assert resp.status_code == 503
 

@@ -14,7 +14,7 @@ from strava_analytics.services.ingestion.strava_csv import ingest_bulk
 from strava_analytics.services.sync import run_strava_sync
 from strava_analytics.web import data
 
-from ..context import current_user_id
+from ..context import require_user_id
 
 
 bp = Blueprint("api_sync", __name__, url_prefix="/api/sync")
@@ -22,19 +22,21 @@ bp = Blueprint("api_sync", __name__, url_prefix="/api/sync")
 
 @bp.route("/strava", methods=["POST"])
 def sync_strava():
+    uid = require_user_id()
     with session_scope() as session:
-        report = run_strava_sync(user_id=current_user_id(), session=session)
+        report = run_strava_sync(user_id=uid, session=session)
     data.reload()
     return jsonify(report)
 
 
 @bp.route("/upload", methods=["POST"])
 def sync_upload():
+    uid = require_user_id()
     f = request.files.get("file")
     if f is None:
         return jsonify({"error": {"code": "bad_request",
                                   "message": "no file uploaded"}}), 400
-    report = _handle_upload(f)
+    report = _handle_upload(f, uid)
     data.reload()
     return jsonify(report)
 
@@ -47,7 +49,7 @@ def sync_apple_health():
     }), 501
 
 
-def _handle_upload(file_storage) -> dict:
+def _handle_upload(file_storage, uid: int) -> dict:
     """Unzip / copy the uploaded payload into ~/.meron/uploads/ and ingest."""
     upload_root = meron_dir() / "uploads"
     upload_root.mkdir(parents=True, exist_ok=True)
@@ -83,5 +85,5 @@ def _handle_upload(file_storage) -> dict:
                 "errors": [f"unsupported file extension: {filename}"]}
 
     with session_scope() as session:
-        report = ingest_bulk(target, user_id=current_user_id(), session=session)
+        report = ingest_bulk(target, user_id=uid, session=session)
     return report

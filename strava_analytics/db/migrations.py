@@ -5,14 +5,15 @@ reads the `schema_version` singleton and applies pending migrations in order.
 """
 
 import logging
+import os
 import secrets
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from . import get_engine, get_session_factory, meron_dir
-from .models import Base, SchemaVersion, User
+from .models import Base, InviteCode, SchemaVersion, User
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,68 @@ def migration_001_initial(engine) -> None:
         session.commit()
 
 
+def migration_003_auth(engine) -> None:
+    """Add username/password_hash/is_admin on users + create invite_codes."""
+    # create_all is idempotent; it creates the new invite_codes table.
+    Base.metadata.create_all(engine)
+
+    # SQLite can't ALTER TABLE ADD COLUMN for columns defined in ORM that
+    # already exist, and create_all won't add missing columns to an
+    # existing table. Add them manually.
+    with engine.begin() as conn:
+        existing_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(users)"))
+        }
+        for col, ddl in [
+            ("username", "VARCHAR(64)"),
+            ("password_hash", "VARCHAR(256)"),
+            ("is_admin", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            if col not in existing_cols:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+        # Unique index on username (nullable → multiple NULLs allowed in SQLite).
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "uq_users_username ON users(username)"
+        ))
+
+
+def bootstrap_admin_from_env() -> None:
+    """Seed or rotate the admin account from MERON_ADMIN_USERNAME/PASSWORD.
+
+    Called after migrations on every boot so restarting the server with
+    a new password env var rotates the credential. If the env vars are
+    absent, the site stays in read-only demo mode until configured.
+    """
+    admin_user = os.environ.get("MERON_ADMIN_USERNAME", "").strip()
+    admin_pw = os.environ.get("MERON_ADMIN_PASSWORD", "")
+    if not admin_user or not admin_pw:
+        logger.info(
+            "MERON_ADMIN_USERNAME/PASSWORD not set — admin login disabled; "
+            "site runs in read-only demo mode until you configure these."
+        )
+        return
+
+    # Lazy import so this module doesn't drag in api.* at top-level.
+    from ..api.passwords import hash_password
+    factory = get_session_factory()
+    with factory() as session:
+        user = session.get(User, 1)
+        if user is None:
+            from ..config import default_tz_name
+            user = User(id=1, display_name="Admin", timezone=default_tz_name())
+            session.add(user)
+        if not user.username or user.username == admin_user:
+            user.username = admin_user
+            user.password_hash = hash_password(admin_pw)
+            user.is_admin = 1
+        session.commit()
+        logger.info("Admin user %r seeded/refreshed from env", admin_user)
+
+
 _MIGRATIONS = [
     (1, migration_001_initial),
+    (3, migration_003_auth),
 ]
 
 
@@ -89,6 +150,11 @@ def run_migrations(engine=None) -> int:
                 _set_version(s2, version)
                 s2.commit()
             current = version
+
+    # Bootstrap / refresh admin credentials on every boot (not just when
+    # migrations apply). Env-driven password rotations take effect on the
+    # next server restart.
+    bootstrap_admin_from_env()
     return current
 
 

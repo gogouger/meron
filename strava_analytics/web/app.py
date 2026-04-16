@@ -161,6 +161,9 @@ def create_app() -> dash.Dash:
                     dcc.Link("\u2699", href="/settings", className="meron-nav-link",
                              style={"fontSize": "18px", "opacity": "0.6"},
                              title="Settings"),
+                    # Auth slot — filled by a clientside callback from /api/auth/me.
+                    html.Span(id="nav-auth-slot", className="meron-nav-link",
+                              style={"fontSize": "13px"}),
                 ], id="nav-links", className="nav-links"),
             ], className="nav-inner"),
         ], className="nav-container"),

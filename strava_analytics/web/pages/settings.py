@@ -196,6 +196,37 @@ def _pair_card_body(code: str | None, api_base: str | None) -> list:
     ]
 
 
+def _admin_invites_section() -> html.Div | None:
+    """Admin-only card — generate + revoke signup invite codes."""
+    from strava_analytics.api.context import current_is_admin
+    if not current_is_admin():
+        return None
+
+    return html.Div([
+        html.H4("Invite users",
+                style={"fontSize": "15px", "margin": "0 0 10px 0"}),
+        html.P(
+            "Generate a one-time code to let a friend sign up. "
+            "Consumed on first signup; share it over a trusted channel.",
+            style={"color": TEXT_SECONDARY, "fontSize": "13px",
+                   "margin": "0 0 10px 0"},
+        ),
+        html.Button("Generate invite", id="invite-generate-btn", n_clicks=0,
+                    className="btn-accent",
+                    style={"padding": "8px 20px", "fontSize": "13px"}),
+        html.Div(id="invite-latest", style={
+            "marginTop": "10px", "fontFamily": FONT_MONO, "fontSize": "13px",
+            "color": TEXT_PRIMARY,
+        }),
+        html.Div(id="invite-list", style={
+            "marginTop": "14px", "fontSize": "12px", "color": TEXT_MUTED,
+        }),
+    ], style={
+        "backgroundColor": BG_CARD, "border": f"1px solid {BORDER}",
+        "padding": "20px", "marginBottom": "12px",
+    })
+
+
 def _mobile_pair_section() -> html.Div:
     return html.Div([
         html.H4("Pair mobile app",
@@ -346,10 +377,42 @@ def _data_sources_section() -> html.Div:
         "padding": "20px",
     })
 
-    return html.Div([upload_card, strava_card, _mobile_pair_section(), apple_card])
+    cards = [upload_card, strava_card, _mobile_pair_section()]
+    admin_card = _admin_invites_section()
+    if admin_card is not None:
+        cards.append(admin_card)
+    cards.append(apple_card)
+    return html.Div(cards)
 
 
 def layout(**_kwargs):
+    # Settings is login-gated. Anonymous visitors can still see the read-only
+    # dashboard pages, but managing Strava / HR zones / invites requires auth.
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return html.Div([
+            hero_section(
+                label="SETTINGS",
+                headline="Sign in to manage your account.",
+                subtext="The public demo is read-only. Log in to connect your "
+                        "own Strava, edit activities, and pair the mobile app.",
+            ),
+            html.Div([
+                dcc.Link("Log in", href="/login",
+                         className="btn-accent",
+                         style={"display": "inline-block",
+                                "padding": "10px 24px", "fontSize": "13px",
+                                "textDecoration": "none",
+                                "marginRight": "10px"}),
+                dcc.Link("Sign up with an invite", href="/signup",
+                         className="btn-ghost",
+                         style={"display": "inline-block",
+                                "padding": "10px 24px", "fontSize": "13px",
+                                "textDecoration": "none"}),
+            ], style={"padding": "40px 24px"}),
+            footer(),
+        ])
+
     # Read current theme from a dcc.Store (populated by clientside callback on load)
     return html.Div([
         hero_section(
@@ -530,6 +593,9 @@ clientside_callback(
 def save_hr_settings(zone_pct_str, max_hr, current_version):
     if not zone_pct_str or not max_hr:
         return "", (current_version or 0)
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return "Log in first.", (current_version or 0)
     pcts = [int(p) for p in zone_pct_str.split(",")]
     cfg = data.get_athlete_config()
     cfg["max_hr"] = int(max_hr)
@@ -549,6 +615,9 @@ def save_hr_settings(zone_pct_str, max_hr, current_version):
 def save_openai_key(n_clicks, api_key):
     if not n_clicks:
         return ""
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return "Log in first."
     cfg = data.get_athlete_config()
     cfg["openai_api_key"] = (api_key or "").strip()
     data.save_athlete_config(cfg)
@@ -582,6 +651,9 @@ def _format_report(report: dict) -> str:
 def handle_strava_upload(contents, filename, current_version):
     if not contents or not filename:
         return no_update, no_update
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return "Log in first.", (current_version or 0)
 
     # Decode the base64 payload dcc.Upload provides
     header, _, b64 = contents.partition(",")
@@ -642,6 +714,9 @@ def handle_strava_upload(contents, filename, current_version):
 def handle_strava_sync(n_clicks, current_version):
     if not n_clicks:
         return no_update, no_update
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return "Log in first.", (current_version or 0)
     with session_scope() as session:
         report = run_strava_sync(user_id=current_user_id(), session=session)
     data.reload()
@@ -656,9 +731,47 @@ def handle_strava_sync(n_clicks, current_version):
 def handle_strava_disconnect(n_clicks):
     if not n_clicks:
         return no_update
+    from strava_analytics.api.context import is_authenticated
+    if not is_authenticated():
+        return "Log in first."
     with session_scope() as session:
         strava_oauth.disconnect(session, user_id=current_user_id())
     return "Disconnected. Reload the page."
+
+
+@callback(
+    Output("invite-latest", "children"),
+    Output("invite-list", "children"),
+    Input("invite-generate-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def handle_generate_invite(n_clicks):
+    if not n_clicks:
+        return no_update, no_update
+    from strava_analytics.api.context import current_is_admin
+    from strava_analytics.api.routes.auth import _new_invite_code
+    from strava_analytics.db.models import InviteCode
+    if not current_is_admin():
+        return "Admin only.", no_update
+    code = _new_invite_code()
+    with session_scope() as session:
+        session.add(InviteCode(code=code, created_by_user_id=current_user_id()))
+        session.commit()
+        outstanding = session.query(InviteCode).filter(
+            InviteCode.consumed_by_user_id.is_(None)
+        ).count()
+    pretty = f"{code[:4]}-{code[4:]}" if len(code) == 8 else code
+    return (
+        html.Div([
+            html.Span("New code: ", style={"color": TEXT_MUTED}),
+            html.Span(pretty, style={"fontWeight": "700"}),
+            html.Span("   (share over a trusted channel; signup link: ",
+                     style={"color": TEXT_MUTED, "marginLeft": "6px"}),
+            html.Code(f"/signup?code={code}"),
+            html.Span(")", style={"color": TEXT_MUTED}),
+        ]),
+        f"{outstanding} outstanding invite(s) total.",
+    )
 
 
 @callback(
@@ -667,12 +780,20 @@ def handle_strava_disconnect(n_clicks):
     prevent_initial_call=True,
 )
 def handle_generate_pair_code(n_clicks):
-    """Mint a single-use pair code for the mobile app."""
+    """Mint a single-use pair code bound to the logged-in user."""
     if not n_clicks:
         return no_update
 
     import os
     from flask import request as flask_request
+
+    from strava_analytics.api.context import is_authenticated
+
+    if not is_authenticated():
+        return html.P(
+            "Log in first to pair a mobile device.",
+            style={"color": TEXT_MUTED, "fontSize": "13px"},
+        )
 
     read_key = _read_api_key()
     if not read_key:

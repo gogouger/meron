@@ -134,7 +134,10 @@ def test_feed_empty_when_no_activities(isolated_db):
     assert body["next_cursor"] is None
 
 
-def test_feed_requires_auth(isolated_db):
+def test_feed_is_public_demo_readable(isolated_db):
+    """Anonymous visitors see the demo user's feed — no key / login needed."""
     _seed_activities(5)
     resp = _client().get("/api/activities/feed")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert len(body["items"]) == 5

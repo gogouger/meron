@@ -23,15 +23,30 @@ def get_fitness_summary(df: pd.DataFrame) -> dict:
 
 def get_lifetime_stats(df: pd.DataFrame) -> dict:
     """Lifetime activity counts, mileage, and date range."""
-    runs = df[df["type"] == "Run"]
-    lifts = df[df["type"] == "Weight Training"]
+    if df.empty:
+        return {
+            "total_activities": 0,
+            "total_runs": 0,
+            "total_lifts": 0,
+            "total_miles": 0.0,
+            "date_from": None,
+            "date_to": None,
+        }
+    runs = df[df["type"] == "Run"] if "type" in df.columns else df.iloc[0:0]
+    lifts = df[df["type"] == "Weight Training"] if "type" in df.columns else df.iloc[0:0]
+    total_miles = (
+        round(float(df["distance_mi"].sum()), 1)
+        if "distance_mi" in df.columns else 0.0
+    )
+    date_min = df["date"].min() if "date" in df.columns else None
+    date_max = df["date"].max() if "date" in df.columns else None
     return {
         "total_activities": len(df),
         "total_runs": len(runs),
         "total_lifts": len(lifts),
-        "total_miles": round(float(df["distance_mi"].sum()), 1),
-        "date_from": df["date"].min().strftime("%Y-%m-%d") if not df.empty else None,
-        "date_to": df["date"].max().strftime("%Y-%m-%d") if not df.empty else None,
+        "total_miles": total_miles,
+        "date_from": date_min.strftime("%Y-%m-%d") if date_min is not None and pd.notna(date_min) else None,
+        "date_to": date_max.strftime("%Y-%m-%d") if date_max is not None and pd.notna(date_max) else None,
     }
 
 

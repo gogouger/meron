@@ -16,7 +16,7 @@ from flask import Blueprint, Flask, redirect, request, current_app
 from ..auth import strava_oauth
 from ..db import session_scope
 
-from .context import current_user_id
+from .context import is_authenticated, require_user_id
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,8 @@ def _serializer(app: Flask) -> URLSafeTimedSerializer:
 
 @bp.route("/strava/start")
 def strava_start():
+    if not is_authenticated():
+        return redirect("/login")
     if not strava_oauth.is_configured():
         return (
             "Strava OAuth not configured. Set STRAVA_CLIENT_ID and "
@@ -64,6 +66,13 @@ def strava_callback():
     except BadSignature:
         return "Invalid state signature", 400
 
+    # Only an authenticated user can complete an OAuth flow — we bind
+    # the returned tokens to *their* user id, not the demo user.
+    try:
+        uid = require_user_id()
+    except Exception:
+        return redirect("/login")
+
     try:
         bundle = strava_oauth.exchange_code(code)
     except Exception as e:
@@ -71,7 +80,7 @@ def strava_callback():
         return f"Token exchange failed: {e}", 500
 
     with session_scope() as session:
-        strava_oauth.save_tokens(session, user_id=current_user_id(), bundle=bundle)
+        strava_oauth.save_tokens(session, user_id=uid, bundle=bundle)
 
     resp = redirect("/settings#strava-connected")
     resp.delete_cookie("strava_oauth_state")
@@ -80,8 +89,9 @@ def strava_callback():
 
 @bp.route("/strava/disconnect", methods=["POST"])
 def strava_disconnect():
+    uid = require_user_id()
     with session_scope() as session:
-        strava_oauth.disconnect(session, user_id=current_user_id())
+        strava_oauth.disconnect(session, user_id=uid)
     return {"ok": True}
 
 
