@@ -28,6 +28,7 @@ def _apply_overrides(row: Activity) -> dict:
                 base[k] = v
     base["_id"] = row.id
     base["_source"] = row.source
+    base["_source_id"] = row.source_id
     return base
 
 

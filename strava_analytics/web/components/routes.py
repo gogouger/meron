@@ -55,11 +55,20 @@ def _load_route_fingerprints() -> dict:
     return _route_fingerprints
 
 
-def _mini_map(filename: str, height: int = 140):
-    """Render a Leaflet tile map with route overlay from cached fingerprints."""
+def _mini_map(filename: str, height: int = 140, source_id: str | None = None):
+    """Render a Leaflet tile map with route overlay from cached fingerprints.
+
+    Tries two lookup keys in order: ``filename`` (bulk-import FIT files)
+    then ``strava:<source_id>`` (API-synced activities whose polyline
+    came from the summary endpoint — no FIT on disk).
+    """
     global _mini_map_counter
     fps = _load_route_fingerprints()
-    fp = fps.get(filename)
+    fp = None
+    if filename:
+        fp = fps.get(filename)
+    if (not fp or not fp.get("points")) and source_id:
+        fp = fps.get(f"strava:{source_id}")
     if not fp or not fp.get("points"):
         return None
 

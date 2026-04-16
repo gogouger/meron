@@ -22,9 +22,30 @@ bp = Blueprint("api_sync", __name__, url_prefix="/api/sync")
 
 @bp.route("/strava", methods=["POST"])
 def sync_strava():
+    """Pull new activities from Strava.
+
+    Query params:
+      since=YYYY-MM-DD  Force re-pull of activities after this date
+                        (useful when sync logic changes — e.g. to
+                        backfill descriptions + polylines onto rows
+                        that were synced before those fields were
+                        captured).
+    """
+    from datetime import datetime, timezone
+
     uid = require_user_id()
+    since_param = request.args.get("since")
+    since = None
+    if since_param:
+        try:
+            since = datetime.fromisoformat(since_param).replace(tzinfo=timezone.utc)
+        except ValueError:
+            return jsonify({
+                "error": {"code": "bad_request",
+                          "message": f"bad 'since' date: {since_param!r}"}
+            }), 400
     with session_scope() as session:
-        report = run_strava_sync(user_id=uid, session=session)
+        report = run_strava_sync(user_id=uid, session=session, since=since)
     data.reload()
     return jsonify(report)
 

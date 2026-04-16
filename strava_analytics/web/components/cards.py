@@ -355,12 +355,18 @@ def activity_card_body(
 
         # Route handling
         filename = row.get("filename", "")
-        if filename and not pd.isna(filename):
-            filename = str(filename)
-            if route_mode == "lazy" and filename.endswith(".fit.gz"):
+        filename = str(filename) if filename and not pd.isna(filename) else ""
+        source_id = row.get("_source_id") or row.get("source_id") or ""
+        # API-synced activities have no filename but do have an encoded
+        # polyline cached under ``strava:<source_id>`` in route_index.
+        has_route = (
+            (filename.endswith(".fit.gz")) or bool(source_id)
+        )
+        if has_route:
+            if route_mode == "lazy":
                 # Mini-map as card extra
                 from strava_analytics.web.components.routes import _mini_map
-                extra = _mini_map(filename)
+                extra = _mini_map(filename, source_id=str(source_id) if source_id else None)
                 # Lazy-load button + container
                 route_key = f"{date_id}-{idx}"
                 btn_type = f"{card_id_prefix}-route-btn" if card_id_prefix else "route-btn"
