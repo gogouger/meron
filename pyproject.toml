@@ -36,6 +36,7 @@ web = [
 api = [
     "flask-cors>=4.0,<7",
     "flask-limiter>=3.5,<5",
+    "gunicorn>=22,<24",
 ]
 # MCP (Model Context Protocol) server for ChatGPT.
 mcp = [

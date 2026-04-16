@@ -1,0 +1,51 @@
+# Local-first MERON deployment.
+#
+#   docker compose up -d          → http://localhost:8050
+#   docker compose logs -f meron  → tail the app
+#   docker compose down           → stop (data persists in ./meron-data/)
+#
+# The `tunnel` profile adds Cloudflare Tunnel for a real public HTTPS URL
+# without opening ports on your router:
+#
+#   echo 'TUNNEL_TOKEN=...' >> .env
+#   docker compose --profile tunnel up -d
+#
+# See .env.example for the full environment variable reference.
+
+services:
+  meron:
+    build: .
+    image: meron:local
+    container_name: meron
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # SQLite + sidecar JSON + FIT files live on the mounted volume so
+      # they survive container replacement.
+      MERON_DB_PATH: /data/meron.db
+    ports:
+      - "${MERON_BIND_PORT:-8050}:8050"
+    volumes:
+      - ./meron-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8050/api/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Cloudflare Tunnel — free, no open ports needed. Sign up at
+  # https://dash.cloudflare.com, create a tunnel, and set TUNNEL_TOKEN.
+  # Point a DNS record at the tunnel; the mobile app talks to that URL.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: meron-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    env_file:
+      - .env
+    depends_on:
+      - meron
+    profiles:
+      - tunnel

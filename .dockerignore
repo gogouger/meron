@@ -1,0 +1,26 @@
+# Things that have no business inside the image.
+.git
+.github
+.venv
+.pytest_cache
+.claude
+.DS_Store
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.egg-info
+strava_analytics.egg-info
+
+# Local data — the container mounts /data from the host volume instead.
+meron-data
+strava_enriched.csv
+
+# Dev-only
+tests
+scripts
+Dockerfile
+docker-compose*.yml
+.env
+.env.*
+!.env.example

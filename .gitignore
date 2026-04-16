@@ -5,6 +5,11 @@ __pycache__/
 dist/
 build/
 .env
+.env.smoketest
 .claude/
 strava_enriched.csv
 .DS_Store
+
+# Docker volume mount for self-hosted deployments (contains the SQLite
+# DB, FIT files, encrypted tokens — never commit).
+meron-data/
