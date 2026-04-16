@@ -17,6 +17,7 @@ dependencies = [
     "sqlalchemy>=2.0",
     "stravalib>=2.0",
     "cryptography>=42",
+    "python-dotenv>=1.0",
 ]
 
 [project.optional-dependencies]

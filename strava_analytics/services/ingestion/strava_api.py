@@ -19,6 +19,48 @@ from . import IngestReport
 logger = logging.getLogger(__name__)
 
 
+def _extract_type(act) -> str:
+    """stravalib 2.x wraps type/sport_type in pydantic RootModels.
+
+    Returns the clean activity-type string (e.g. "Run"), matching the CSV
+    export convention (adds a space to "WeightTraining").
+    """
+    raw = getattr(act, "type", None) or getattr(act, "sport_type", None)
+    if raw is None:
+        return ""
+    # Pydantic RootModel → .root holds the enum string
+    val = getattr(raw, "root", None)
+    if val is None:
+        val = str(raw)
+    val = str(val)
+    # Normalize API spellings to match the CSV convention used everywhere else
+    return _SPORT_TYPE_NORMALIZE.get(val, val)
+
+
+# Map Strava API sport types to the spelling the rest of MERON uses
+# (matches the Strava bulk-CSV export conventions).
+_SPORT_TYPE_NORMALIZE = {
+    "WeightTraining": "Weight Training",
+    "VirtualRun": "Virtual Run",
+    "VirtualRide": "Virtual Ride",
+    "TrailRun": "Trail Run",
+    "RockClimbing": "Rock Climbing",
+    "StairStepper": "Stair Stepper",
+    "EBikeRide": "E-Bike Ride",
+    "MountainBikeRide": "Mountain Bike Ride",
+    "GravelRide": "Gravel Ride",
+    "HighIntensityIntervalTraining": "HIIT",
+    "AlpineSki": "Alpine Ski",
+    "BackcountrySki": "Backcountry Ski",
+    "NordicSki": "Nordic Ski",
+    "InlineSkate": "Inline Skate",
+    "IceSkate": "Ice Skate",
+    "StandUpPaddling": "Stand Up Paddling",
+    "WaterSport": "Water Sport",
+    "RollerSki": "Roller Ski",
+}
+
+
 def _strava_activity_to_payload(act) -> dict:
     """Map a stravalib Activity to our model fields."""
     # stravalib returns Quantity-wrapped numbers; stringify/coerce.
@@ -36,7 +78,7 @@ def _strava_activity_to_payload(act) -> dict:
     return {
         "start_time": getattr(act, "start_date_local", None) or getattr(act, "start_date", None),
         "name": getattr(act, "name", None),
-        "type": str(getattr(act, "type", "") or getattr(act, "sport_type", "") or ""),
+        "type": _extract_type(act),
         "description": getattr(act, "description", None),
         "gear": str(getattr(act, "gear_id", "") or "") or None,
         "elapsed_time_s": n(getattr(act, "elapsed_time", None)),

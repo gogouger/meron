@@ -5,6 +5,16 @@ import logging
 import os
 from pathlib import Path
 
+# Auto-load .env from repo root or ~/.meron/ before anything reads os.environ
+try:
+    from dotenv import load_dotenv
+    # Search order: current working dir, then ~/.meron/
+    for _p in (Path.cwd() / ".env", Path.home() / ".meron" / ".env"):
+        if _p.exists():
+            load_dotenv(_p, override=False)
+except ImportError:
+    pass
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, page_container, Input, Output, State, callback, clientside_callback
