@@ -291,11 +291,31 @@ def _path_bbox(path_d):
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+# Icon-only palette (no 'muted' — avoids anti-aliasing snapping to gray)
+_ICON_PALETTE = [BRAND["navy"], BRAND["blue"], BRAND["red"], BRAND["white"]]
+_ICON_BRAND_COLORS = {BRAND_HEX["navy"], BRAND_HEX["blue"],
+                      BRAND_HEX["red"], BRAND_HEX["white"]}
+
+
+def _keep_only_brand_colors(paths, allowed_hex_colors):
+    """Drop paths whose fill isn't in the allowed set.
+
+    Tidies up any remaining anti-aliasing fringe paths that didn't
+    snap cleanly to a brand color.
+    """
+    kept = []
+    for p in paths:
+        m = re.search(r'fill="(#[0-9a-fA-F]{6})"', p)
+        if m and m.group(1).lower() in {c.lower() for c in allowed_hex_colors}:
+            kept.append(p)
+    return kept
+
+
 def _get_primary_icon_paths():
     """Get paths for just the icon area (y < 170) from a fresh trace.
 
-    Traces the PNG pre-cropped to the icon region so path y-coords
-    are bounded and safe to use without bbox filtering.
+    Uses the icon-only palette (no muted gray) so anti-aliasing between
+    navy and white snaps cleanly to navy. Drops fringe paths post-trace.
 
     Returns: (paths, traced_w, traced_h, orig_w, orig_h)
     """
@@ -310,7 +330,7 @@ def _get_primary_icon_paths():
     scale = 3
     img = img.resize((crop_w * scale, crop_h * scale), Image.LANCZOS)
     img = _remove_white_bg(img)
-    img = _snap_pixels(img, white_to_transparent=False)
+    img = _snap_pixels(img, palette=_ICON_PALETTE, white_to_transparent=False)
 
     tmp = _save_temp(img)
     svg = _trace(tmp, filter_speckle=scale * 4, color_precision=6,
@@ -319,6 +339,8 @@ def _get_primary_icon_paths():
     tmp.unlink()
 
     paths = re.findall(r'<path[^/]*/>', svg)
+    # Drop any remaining non-brand fringe paths
+    paths = _keep_only_brand_colors(paths, _ICON_BRAND_COLORS)
     result = (paths, crop_w * scale, crop_h * scale, crop_w, crop_h)
     _PRIMARY_CACHE["icon_paths"] = result
     return result
@@ -632,119 +654,148 @@ def _build_bg_variant(bg_color, mountain_color, snow_color,
     return ''.join(lines)
 
 
+def _recolor_icon_paths(paths, *, mountain, snow, heartbeat, dumbbell):
+    """Recolor primary's icon paths for bg variants.
+
+    Maps:
+      navy (mountain) → mountain color
+      blue (dumbbell) → dumbbell color
+      red (heartbeat) → heartbeat color
+      white (snow)    → snow color
+    """
+    out = []
+    for p in paths:
+        low = p.lower()
+        if f'fill="{BRAND_HEX["navy"]}"' in low:
+            out.append(re.sub(r'fill="#[0-9a-fA-F]{6}"', f'fill="{mountain}"', p))
+        elif f'fill="{BRAND_HEX["blue"]}"' in low:
+            out.append(re.sub(r'fill="#[0-9a-fA-F]{6}"', f'fill="{dumbbell}"', p))
+        elif f'fill="{BRAND_HEX["red"]}"' in low:
+            out.append(re.sub(r'fill="#[0-9a-fA-F]{6}"', f'fill="{heartbeat}"', p))
+        elif f'fill="{BRAND_HEX["white"]}"' in low:
+            out.append(re.sub(r'fill="#[fF]{6}"', f'fill="{snow}"', p))
+    return out
+
+
+def _build_bg_variant(bg_hex, mountain, snow, heartbeat, dumbbell, filename):
+    """Wide landscape bg variant with the icon centered.
+
+    Reuses primary's clean icon paths and recolors them per-variant.
+    """
+    paths, tw, th, _ow, _oh = _get_primary_icon_paths()
+    recolored = _recolor_icon_paths(paths, mountain=mountain, snow=snow,
+                                    heartbeat=heartbeat, dumbbell=dumbbell)
+
+    # Canvas: landscape 512×164 (matches PNG aspect), icon centered
+    VB_W, VB_H = 512, 164
+    PAD_Y = 12
+    fit = (VB_H - 2 * PAD_Y) / th
+    scaled_w = tw * fit
+    scaled_h = th * fit
+    ox = (VB_W - scaled_w) / 2
+    oy = (VB_H - scaled_h) / 2
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VB_W} {VB_H}">\n',
+        f'<rect width="{VB_W}" height="{VB_H}" fill="{bg_hex}"/>\n',
+        f'<g transform="translate({ox:.2f},{oy:.2f}) scale({fit:.6f})">\n',
+    ]
+    lines.extend(f'  {p}\n' for p in recolored)
+    lines.append('</g>\n</svg>\n')
+
+    (ASSETS / filename).write_text(''.join(lines))
+    return filename
+
+
 def convert_dark_bg():
-    """Dark bg has white/red/blue icon on navy. Separate then trace."""
-    img = Image.open(ASSETS / "meron-logo-dark-bg.png").convert("RGBA")
+    """Dark bg — primary's icon, recolored for navy background.
+
+    White mountain + dumbbell, blue snow accent, red heartbeat.
+    """
+    return _build_bg_variant(
+        bg_hex=BRAND_HEX["navy"],
+        mountain=BRAND_HEX["white"],
+        snow=BRAND_HEX["blue"],
+        heartbeat=BRAND_HEX["red"],
+        dumbbell=BRAND_HEX["white"],
+        filename="meron-logo-dark-bg.svg",
+    )
+
+
+def convert_red_bg():
+    """Red bg — trace the PNG's line-art directly (preserves element separation).
+
+    The PNG is drawn as thin white strokes on red, so element detail
+    (mountain ridgeline, heartbeat, dumbbell plates) comes through
+    when traced as binary white-on-red.
+    """
+    img = Image.open(ASSETS / "meron-logo-red-bg.png").convert("RGBA")
     w, h = img.size
 
-    # Mask navy bg to transparent, keep white/red/blue icon pixels
+    # Binary threshold: white-ish pixels → opaque white, red bg → transparent
     data = list(img.getdata())
     new_data = []
     for r, g, b, a in data:
-        brightness = (r + g + b) / 3
-        if brightness > 80:
-            new_data.append((r, g, b, 255))
+        # White has g and b both high; red bg has only high r
+        if g > 150 and b > 150:
+            new_data.append((255, 255, 255, 255))
         else:
             new_data.append((0, 0, 0, 0))
     img.putdata(new_data)
 
     scale = 4
     img = img.resize((w * scale, h * scale), Image.LANCZOS)
-    img = _snap_pixels(img, white_to_transparent=False)
-    tmp = _save_temp(img)
-
-    svg = _trace(tmp, filter_speckle=scale * 4, color_precision=6)
-    svg = _snap_svg_colors(svg)
-    tmp.unlink()
-
-    paths = re.findall(r'<path[^/]*/>', svg)
-
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">\n',
-        f'<rect width="{w}" height="{h}" fill="{BRAND_HEX["navy"]}"/>\n',
-        f'<g transform="scale({1/scale:.6f})">\n',
-    ]
-    for p in paths:
-        lines.append(f'  {p}\n')
-    lines.append('</g>\n')
-    lines.append('</svg>\n')
-
-    (ASSETS / "meron-logo-dark-bg.svg").write_text(''.join(lines))
-    return "meron-logo-dark-bg.svg"
-
-
-def convert_red_bg():
-    """Red bg — snap pixels to white/red, mask red bg, trace white icon."""
-    img = Image.open(ASSETS / "meron-logo-red-bg.png").convert("RGBA")
-    w, h = img.size
-
-    # Snap all pixels to either white or red
-    data = list(img.getdata())
-    new_data = []
-    white_rgb = BRAND["white"]
-    red_rgb = BRAND["red"]
-    for r, g, b, a in data:
-        dw = _color_dist((r, g, b), white_rgb)
-        dr = _color_dist((r, g, b), red_rgb)
-        if dw < dr:
-            new_data.append(white_rgb + (255,))
-        else:
-            new_data.append((0, 0, 0, 0))  # red bg → transparent
-    img.putdata(new_data)
-
-    scale = 4
-    img = img.resize((w * scale, h * scale), Image.LANCZOS)
-    # Re-snap after LANCZOS
+    # Re-threshold after LANCZOS softening
     data = list(img.getdata())
     new_data = []
     for r, g, b, a in data:
         if a > 128 and (r + g + b) / 3 > 128:
-            new_data.append(white_rgb + (255,))
+            new_data.append((255, 255, 255, 255))
         else:
             new_data.append((0, 0, 0, 0))
     img.putdata(new_data)
 
     tmp = _save_temp(img)
-    svg = _trace(tmp, filter_speckle=scale * 4, color_precision=2)
-    svg = _snap_svg_colors(svg)
+    svg = _trace(tmp, filter_speckle=scale * 4, color_precision=2,
+                 mode="spline")
     tmp.unlink()
 
+    # Force all paths to white (binary trace produces black; snap to white)
     paths = re.findall(r'<path[^/]*/>', svg)
+    paths = [re.sub(r'fill="#[0-9a-fA-F]{6}"',
+                    f'fill="{BRAND_HEX["white"]}"', p) for p in paths]
 
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}">\n',
         f'<rect width="{w}" height="{h}" fill="{BRAND_HEX["red"]}"/>\n',
-        f'<g transform="scale({1/scale})">\n',
+        f'<g transform="scale({1/scale:.6f})">\n',
     ]
     for p in paths:
         lines.append(f'  {p}\n')
-    lines.append('</g>\n')
-    lines.append('</svg>\n')
+    lines.append('</g>\n</svg>\n')
 
     (ASSETS / "meron-logo-red-bg.svg").write_text(''.join(lines))
     return "meron-logo-red-bg.svg"
 
 
 def convert_app_icon():
-    """App icon — reuse primary's icon paths, recolor for dark background."""
-    paths, tw, th, ow, oh = _get_primary_icon_paths()
+    """App icon — primary's icon on a rounded navy gradient square.
 
-    kept = []
-    for p in paths:
-        low = p.lower()
-        if f'fill="{BRAND_HEX["red"]}"' in low:
-            kept.append(p)
-        elif f'fill="{BRAND_HEX["white"]}"' in low:
-            kept.append(re.sub(r'fill="#[fF]{6}"',
-                               f'fill="{BRAND_HEX["blue"]}"', p))
-        elif f'fill="{BRAND_HEX["navy"]}"' in low or f'fill="{BRAND_HEX["blue"]}"' in low:
-            kept.append(re.sub(r'fill="#[0-9a-fA-F]{6}"',
-                               f'fill="{BRAND_HEX["white"]}"', p))
+    Same recoloring scheme as dark-bg (white mountain+dumbbell, blue snow,
+    red heartbeat) on a 512x512 gradient background with rounded corners.
+    """
+    paths, tw, th, _ow, _oh = _get_primary_icon_paths()
+    recolored = _recolor_icon_paths(
+        paths,
+        mountain=BRAND_HEX["white"],
+        snow=BRAND_HEX["blue"],
+        heartbeat=BRAND_HEX["red"],
+        dumbbell=BRAND_HEX["white"],
+    )
 
     VB = 512
     PAD = 60
     canvas = VB - 2 * PAD
-
     fit = min(canvas / tw, canvas / th)
     scaled_w = tw * fit
     scaled_h = th * fit
@@ -763,9 +814,8 @@ def convert_app_icon():
         f'<rect width="{VB}" height="{VB}" rx="100" fill="url(#bg-g)"/>\n',
         f'<g transform="translate({ox:.2f},{oy:.2f}) scale({fit:.6f})">\n',
     ]
-    lines.extend(f'  {p}\n' for p in kept)
-    lines.append('</g>\n')
-    lines.append('</svg>\n')
+    lines.extend(f'  {p}\n' for p in recolored)
+    lines.append('</g>\n</svg>\n')
 
     (ASSETS / "meron-app-icon.svg").write_text(''.join(lines))
     return "meron-app-icon.svg"
