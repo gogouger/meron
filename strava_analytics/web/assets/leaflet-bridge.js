@@ -96,6 +96,21 @@
             map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
         }
         _maps[containerId] = map;
+
+        // When a map is instantiated inside an initially-collapsed
+        // <details> element (activity cards) or a just-populated lazy
+        // container, Leaflet measures 0x0 and tiles never load. Ask it
+        // to re-measure shortly after and again whenever the container
+        // resizes — covers both the "expand card" and "window resize"
+        // cases cheaply.
+        setTimeout(function () { map.invalidateSize(); }, 100);
+        if (typeof ResizeObserver !== "undefined") {
+            try {
+                new ResizeObserver(function () {
+                    map.invalidateSize();
+                }).observe(container);
+            } catch (e) { /* older browsers — ignore */ }
+        }
     }
 
     function scanMaps() {

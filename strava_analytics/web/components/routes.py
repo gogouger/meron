@@ -134,10 +134,15 @@ def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
     if filename in _route_cache:
         return _route_cache[filename]
 
-    from strava_analytics.routes import parse_activity
+    from strava_analytics.routes import parse_activity, resolve_activity_path
 
     export_dir = data.get_export_dir()
-    stream = parse_activity(export_dir / filename)
+    fit_path = resolve_activity_path(export_dir, filename)
+    if fit_path is None:
+        # No FIT on disk at either legacy or current location → no chart.
+        _route_cache[filename] = html.Div()
+        return _route_cache[filename]
+    stream = parse_activity(fit_path)
     children = []
 
     if stream.coords:

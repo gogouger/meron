@@ -71,9 +71,10 @@ def route_detail(filename: str):
     polyline = [[round(p[0], 5), round(p[1], 5)] for p in fp["points"]]
 
     # Streams are optional — only extract if the FIT file exists.
+    from strava_analytics.routes import resolve_activity_path
     streams: dict = {}
-    fit_path = data.get_export_dir() / filename
-    if fit_path.exists() and fit_path.suffix.lower() in (".fit", ".fit.gz"):
+    fit_path = resolve_activity_path(data.get_export_dir(), filename)
+    if fit_path is not None and fit_path.name.lower().endswith((".fit", ".fit.gz")):
         streams = _extract_streams(fit_path)
 
     return jsonify({

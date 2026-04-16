@@ -10,6 +10,29 @@ import fitparse
 logger = logging.getLogger(__name__)
 
 
+def resolve_activity_path(export_dir, filename) -> Path | None:
+    """Resolve a stored ``filename`` to an on-disk FIT path.
+
+    Stored filenames come from the original Strava export layout as
+    ``activities/<id>.fit.gz``. Newer MERON installs keep the files
+    under ``<meron_dir>/fit/`` instead — we check both locations so
+    older DB rows with the legacy prefix still resolve.
+
+    Returns ``None`` when neither location contains the file.
+    """
+    if not filename or not isinstance(filename, str):
+        return None
+    export_dir = Path(export_dir)
+    primary = export_dir / filename
+    if primary.exists():
+        return primary
+    # Fall back to <export_dir>/fit/<basename> — current MERON layout.
+    fallback = export_dir / "fit" / Path(filename).name
+    if fallback.exists():
+        return fallback
+    return None
+
+
 @dataclass
 class ActivityStream:
     """Parsed activity data from a FIT file."""

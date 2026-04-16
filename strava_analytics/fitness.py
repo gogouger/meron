@@ -222,6 +222,10 @@ _PR_DISTANCES_M = [
 ]
 
 _BEST_EFFORT_CACHE_FILE = ".best_efforts_cache.json"
+# Bump when the cache format or FIT-path resolution logic changes — old
+# entries get discarded on next boot. v2: added resolve_activity_path()
+# fallback so pre-fix empty-cache entries get recomputed.
+_BEST_EFFORT_CACHE_VERSION = 2
 
 
 def _find_best_effort(distance_m: list[float], timestamps: list, target_m: float) -> float | None:
@@ -267,7 +271,7 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
     """
     import json
     from pathlib import Path
-    from .routes import parse_distance_stream
+    from .routes import parse_distance_stream, resolve_activity_path
 
     if export_dir is None:
         return pd.DataFrame()
@@ -277,13 +281,19 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
     if runs.empty or "filename" not in runs.columns:
         return pd.DataFrame()
 
-    # Load cache
+    # Load cache. The on-disk format is
+    #     {"__version": N, "<filename>": [effort_dict, ...]}
+    # — entries from older versions are discarded rather than trusted,
+    # since bug fixes (e.g. FIT path resolution) can render previously
+    # cached "no efforts" entries wrong.
     cache_path = export_dir / _BEST_EFFORT_CACHE_FILE
     cache = {}
     if cache_path.exists():
         try:
             with open(cache_path) as f:
-                cache = json.load(f)
+                raw = json.load(f)
+            if raw.get("__version") == _BEST_EFFORT_CACHE_VERSION:
+                cache = {k: v for k, v in raw.items() if k != "__version"}
         except Exception:
             cache = {}
 
@@ -306,7 +316,10 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
                 all_efforts.append(eff)
             continue
 
-        fit_path = export_dir / fn
+        fit_path = resolve_activity_path(export_dir, fn)
+        if fit_path is None:
+            cache[fn] = []
+            continue
         points = parse_distance_stream(fit_path)
         if len(points) < 10:
             cache[fn] = []
@@ -336,10 +349,10 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
             eff["activity_idx"] = idx
             all_efforts.append(eff)
 
-    # Save cache
+    # Save cache (with version tag so future format changes invalidate).
     try:
         with open(cache_path, "w") as f:
-            json.dump(cache, f)
+            json.dump({"__version": _BEST_EFFORT_CACHE_VERSION, **cache}, f)
     except Exception:
         pass
 

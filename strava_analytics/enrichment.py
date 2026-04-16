@@ -240,9 +240,19 @@ def map_lifting_program(df: pd.DataFrame) -> pd.DataFrame:
     lift_days = get_lift_days()
     n_lift_days = len(lift_days)
 
-    # Get weight training activities sorted by date descending
+    # Get weight training activities sorted by date descending. Only
+    # activities with a real text description get mapped to the program
+    # — Strava-synced sessions without notes shouldn't have the program
+    # impose bench/squat/etc. weights on them; they just show HR +
+    # duration in the UI.
     wt_mask = df["type"] == "Weight Training"
-    wt_indices = df[wt_mask].sort_values("date", ascending=False).index.tolist()
+    has_desc = (
+        df["description"].fillna("").astype(str).str.strip().ne("")
+        if "description" in df.columns else pd.Series(False, index=df.index)
+    )
+    wt_indices = df[wt_mask & has_desc].sort_values(
+        "date", ascending=False
+    ).index.tolist()
 
     if len(wt_indices) < n_lift_days:
         # Not enough activities to map the full program — map what we can
@@ -438,7 +448,10 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
             cache_hits += 1
             continue
 
-        fit_path = export_dir / fn
+        from .routes import resolve_activity_path
+        fit_path = resolve_activity_path(export_dir, fn)
+        if fit_path is None:
+            continue
         points = parse_hr_stream(fit_path)
         if len(points) < 2:
             continue

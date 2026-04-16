@@ -191,11 +191,16 @@ def build_route_index(df: pd.DataFrame, export_dir: Path) -> dict:
     runs = df[run_mask & df["filename"].notna()]
     new_count = 0
 
+    from .routes import resolve_activity_path
+
     for fn in runs["filename"].unique():
         if fn in fingerprints:
             continue
+        fit_path = resolve_activity_path(export_dir, fn)
+        if fit_path is None:
+            continue
         try:
-            stream = parse_activity(export_dir / fn, max_points=300)
+            stream = parse_activity(fit_path, max_points=300)
         except Exception:
             log.debug("route_matching: failed to parse %s", fn)
             continue
