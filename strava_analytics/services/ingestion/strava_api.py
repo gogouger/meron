@@ -251,12 +251,16 @@ def sync_incremental(
 
                 # If a real description just arrived and the row still
                 # carries a backfill-written description override, clear
-                # the override so the real one surfaces.
+                # the override so the real one surfaces. Also write the
+                # payload description to the raw column — the upsert
+                # above skipped it because 'description' was treated as
+                # a locked override field.
                 if payload.get("description") and row.manual_overrides:
                     ov = dict(row.manual_overrides)
                     if "_program_day" in ov and ov.get("description"):
                         ov.pop("description", None)
                         row.manual_overrides = ov
+                        row.description = payload["description"]
 
                 if encoded:
                     decoded = _decode_polyline(encoded)

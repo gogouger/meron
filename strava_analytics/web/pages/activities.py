@@ -231,22 +231,28 @@ def layout(**_kwargs):
     # "Show All" — keeps initial page load fast on large activity feeds.
     visible_rows = sorted_df.head(_PAGE_SIZE)
     cards = []
-    filenames_dict = {}
+    filenames_dict: dict[str, dict] = {}
+
+    def _store_entry(row):
+        fn = row.get("filename", "") or ""
+        sid = row.get("_source_id") or row.get("source_id") or ""
+        return {"fn": str(fn) if fn else "", "sid": str(sid) if sid else ""}
+
     for idx, (_, row) in enumerate(visible_rows.iterrows()):
         cards.append(_activity_card(row, idx, default_open=False))
-        fn = row.get("filename", "")
-        if fn:
+        entry = _store_entry(row)
+        if entry["fn"] or entry["sid"]:
             date_id = row["date"].strftime("%Y-%m-%d")
-            filenames_dict[f"{date_id}-{idx}"] = fn
+            filenames_dict[f"{date_id}-{idx}"] = entry
 
     # Pre-populate the filename mapping for ALL activities so the lazy
     # route-loader can resolve filenames for cards added later.
     for idx, (_, row) in enumerate(sorted_df.iloc[_PAGE_SIZE:].iterrows(),
                                     start=_PAGE_SIZE):
-        fn = row.get("filename", "")
-        if fn:
+        entry = _store_entry(row)
+        if entry["fn"] or entry["sid"]:
             date_id = row["date"].strftime("%Y-%m-%d")
-            filenames_dict[f"{date_id}-{idx}"] = fn
+            filenames_dict[f"{date_id}-{idx}"] = entry
 
     hidden_count = max(0, total - _PAGE_SIZE)
 
@@ -372,10 +378,17 @@ def load_activity_route(n_clicks, btn_id, filenames):
     if not n_clicks:
         return no_update
     key = btn_id["index"]
-    filename = filenames.get(key, "")
-    if not filename:
+    entry = filenames.get(key) or {}
+    # Back-compat: older stores held a bare filename string.
+    if isinstance(entry, str):
+        entry = {"fn": entry, "sid": ""}
+    filename = entry.get("fn") or ""
+    source_id = entry.get("sid") or ""
+    if not filename and not source_id:
         return html.P("No GPS data for this activity.", style={"color": TEXT_MUTED})
-    return build_route_charts(filename, df=data.get_df())
+    return build_route_charts(
+        filename, df=data.get_df(), source_id=source_id or None,
+    )
 
 
 # ── CRUD callbacks ───────────────────────────────────────────────────

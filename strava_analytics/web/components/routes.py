@@ -132,25 +132,79 @@ def _compute_gap(speed_ms, altitude_m, distance_m):
     return gap
 
 
-def build_route_charts(filename: str, df: pd.DataFrame | None = None) -> list:
+def _polyline_only_route_charts(coords: list) -> html.Div:
+    """Render just a Leaflet map (no stream charts) from a polyline.
+
+    Used for activities that came in via the Strava API (no FIT file on
+    disk, so no per-second streams — but the encoded summary_polyline
+    is enough to draw the route).
+    """
+    global _route_map_counter
+    _route_map_counter += 1
+    map_id = f"route-map-{_route_map_counter}"
+    map_cfg = json.dumps({
+        "coords": [[c[0], c[1]] for c in coords],
+        "color": ACCENT,
+        "height": 300,
+    })
+    return html.Div([
+        html.Div(
+            html.Div(id=f"{map_id}-map", className="leaflet-map-box"),
+            className="leaflet-map-wrap",
+            **{"data-mapcfg": map_cfg, "data-mapid": f"{map_id}-map"},
+        ),
+        html.P(
+            "Splits / pace / HR streams require a FIT file — import the "
+            "Strava bulk export to see them. Map only for now.",
+            style={"color": TEXT_MUTED, "fontSize": "12px",
+                   "marginTop": "10px", "fontStyle": "italic"},
+        ),
+    ])
+
+
+def build_route_charts(
+    filename: str,
+    df: pd.DataFrame | None = None,
+    source_id: str | None = None,
+) -> list:
     """Build route map + stream charts for a run. Returns list of Dash components.
 
     If *df* is provided, ghost overlays for previous runs on the same route
     are included automatically.
+
+    When no FIT file exists on disk (API-synced activities), falls back
+    to the cached ``strava:<source_id>`` polyline in ``route_index.json``
+    and renders a map-only view — streams / splits aren't available
+    without the FIT, so those sections are omitted.
     """
     global _route_map_counter
 
-    if filename in _route_cache:
-        return _route_cache[filename]
+    cache_key = filename or (f"strava:{source_id}" if source_id else "")
+    if cache_key and cache_key in _route_cache:
+        return _route_cache[cache_key]
 
     from strava_analytics.routes import parse_activity, resolve_activity_path
 
     export_dir = data.get_export_dir()
-    fit_path = resolve_activity_path(export_dir, filename)
+    fit_path = resolve_activity_path(export_dir, filename) if filename else None
+
     if fit_path is None:
-        # No FIT on disk at either legacy or current location → no chart.
-        _route_cache[filename] = html.Div()
-        return _route_cache[filename]
+        # No FIT — try the cached polyline from route_index.
+        fps = _load_route_fingerprints()
+        fp = fps.get(filename) if filename else None
+        if (not fp or not fp.get("points")) and source_id:
+            fp = fps.get(f"strava:{source_id}")
+        if fp and fp.get("points") and len(fp["points"]) >= 3:
+            result = _polyline_only_route_charts(fp["points"])
+            if cache_key:
+                _route_cache[cache_key] = result
+            return result
+        # Nothing to render.
+        empty = html.Div()
+        if cache_key:
+            _route_cache[cache_key] = empty
+        return empty
+
     stream = parse_activity(fit_path)
     children = []
 

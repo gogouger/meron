@@ -74,7 +74,12 @@ def backfill_lift_descriptions(
         .order_by(Activity.start_time)
     ).all()
 
+    # Build a day_num -> exercises lookup so self-heal can restore a
+    # description even for rows the plain walk-forward skips.
+    by_day_num = {d[0]: d[2] for d in program_lift_days}
+
     matched = 0
+    restored = 0
     skipped_has_desc = 0
     program_idx = 0
 
@@ -82,11 +87,29 @@ def backfill_lift_descriptions(
         existing = (act.description or "").strip()
         overrides = act.manual_overrides or {}
         override_desc = (overrides.get("description") or "").strip()
+        stored_day = overrides.get("_program_day")
+
+        # Already described by the user or a past sync — honour it.
         if existing or override_desc:
-            # Never overwrite real user data. Consume a program slot
-            # anyway — user presumably wrote it describing the same day
-            # that the program expected.
             skipped_has_desc += 1
+            program_idx += 1
+            continue
+
+        # Self-heal: row was backfilled on a prior run but lost its
+        # description (sync-side override clearing had a bug). Use the
+        # stored breadcrumb to restore the right program day.
+        if stored_day is not None and stored_day in by_day_num:
+            new_overrides = dict(overrides)
+            new_overrides["description"] = format_program_day_description(
+                by_day_num[stored_day]
+            )
+            act.manual_overrides = new_overrides
+            act.updated_at = datetime.now(timezone.utc)
+            restored += 1
+            # This slot IS consuming a program day (the one stamped by
+            # the original backfill) — advance program_idx so later
+            # walk-forward doesn't re-assign the same day to a
+            # subsequent activity.
             program_idx += 1
             continue
 
@@ -113,6 +136,7 @@ def backfill_lift_descriptions(
 
     report = {
         "matched": matched,
+        "restored": restored,
         "skipped_has_desc": skipped_has_desc,
         "program_exhausted": program_idx >= len(program_lift_days),
         "activities_considered": len(rows),
