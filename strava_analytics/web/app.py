@@ -223,6 +223,57 @@ def create_app() -> dash.Dash:
         return ("User-agent: *\nDisallow: /\n", 200,
                 {"Content-Type": "text/plain"})
 
+    # Public, no-auth summary for the personal-site "live-wired" Meron card.
+    # Returns ONLY safe aggregates (counts/totals/weekly sums) — never GPS,
+    # routes, home location, or per-activity timestamps. Anonymous GETs map to
+    # the demo/owner user (user 1) via current_user_id().
+    @app.server.route("/api/public/summary")
+    def _public_summary():
+        from flask import jsonify
+        log = logging.getLogger(__name__)
+        try:
+            df = data.get_df()
+            if df is None or len(df) == 0:
+                return jsonify({
+                    "ok": True, "activities": 0, "runs": 0,
+                    "total_miles": 0, "run_miles": 0,
+                    "this_week_miles": 0, "this_month_miles": 0,
+                    "longest_run_mi": 0, "weekly_miles": [], "since": None,
+                })
+            d = df.copy()
+            d["date"] = pd.to_datetime(d["date"], errors="coerce")
+            d = d.dropna(subset=["date"])
+            d["_mi"] = pd.to_numeric(
+                d.get("distance_mi"), errors="coerce"
+            ).fillna(0)
+            runs = d[d["type"] == "Run"] if "type" in d.columns else d
+            now = pd.Timestamp.now()
+            wk = (runs.set_index("date")["_mi"].resample("W").sum()
+                  if not runs.empty else pd.Series(dtype=float))
+            resp = jsonify({
+                "ok": True,
+                "activities": int(len(d)),
+                "runs": int(len(runs)),
+                "total_miles": round(float(d["_mi"].sum()), 1),
+                "run_miles": round(float(runs["_mi"].sum()), 1),
+                "this_week_miles": round(float(
+                    runs[runs["date"] >= now - pd.Timedelta(days=7)]["_mi"].sum()
+                ), 1),
+                "this_month_miles": round(float(
+                    runs[runs["date"] >= now - pd.Timedelta(days=30)]["_mi"].sum()
+                ), 1),
+                "longest_run_mi": (round(float(runs["_mi"].max()), 1)
+                                   if not runs.empty else 0),
+                "weekly_miles": [round(float(x), 1)
+                                 for x in wk.tail(16).tolist()],
+                "since": int(d["date"].min().year),
+            })
+            resp.headers["Cache-Control"] = "public, max-age=300"
+            return resp
+        except Exception:
+            log.exception("public summary failed")
+            return jsonify({"ok": False}), 200
+
     @app.server.after_request
     def _no_index(resp):
         resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
