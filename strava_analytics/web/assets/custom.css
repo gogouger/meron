@@ -115,12 +115,12 @@ body {
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .brand-icon {
         content: url("/assets/meron-logo-outline.svg");
-        filter: invert(1);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .brand-icon {
     content: url("/assets/meron-logo-outline.svg");
-    filter: invert(1);
+    filter: none;
 }
 
 .brand-text {
@@ -188,12 +188,12 @@ main {
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .hero-icon {
         opacity: 0.14;
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .hero-icon {
     opacity: 0.14;
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 @media (max-width: 768px) {
     .hero-icon { display: none; }
@@ -349,12 +349,12 @@ main {
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .statement-section::before {
         opacity: 0.10;
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .statement-section::before {
     opacity: 0.10;
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 @media (max-width: 768px) {
     .statement-section::before {
@@ -460,11 +460,11 @@ main {
 }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .numbered-card__number::before {
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .numbered-card__number::before {
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 
 .numbered-card__title {
@@ -617,11 +617,11 @@ main {
 /* Dark mode: the horizontal SVG has navy text; invert to light + color-preserving hue flip */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .footer-logo {
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .footer-logo {
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 
 .footer-tagline {
@@ -1704,11 +1704,11 @@ details[open] summary {
 }
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .meron-page-loading__mark {
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .meron-page-loading__mark {
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 
 /* ============================================================
@@ -1737,13 +1737,13 @@ details[id^="activity-card-"]::after,
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) details[id^="activity-card-"]::after,
     :root:not([data-theme="light"]) #modal-content::after {
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
         opacity: 0.22;
     }
 }
 :root[data-theme="dark"] details[id^="activity-card-"]::after,
 :root[data-theme="dark"] #modal-content::after {
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
     opacity: 0.22;
 }
 
@@ -1773,12 +1773,12 @@ details[id^="activity-card-"]::after,
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .meron-loading ._dash-loading::before,
     :root:not([data-theme="light"]) .meron-loading ._dash-loading-callback::before {
-        filter: invert(1) hue-rotate(180deg);
+        filter: none;
     }
 }
 :root[data-theme="dark"] .meron-loading ._dash-loading::before,
 :root[data-theme="dark"] .meron-loading ._dash-loading-callback::before {
-    filter: invert(1) hue-rotate(180deg);
+    filter: none;
 }
 /* Hide Dash's built-in dots/spinner circles when inside .meron-loading */
 .meron-loading .dash-spinner,
