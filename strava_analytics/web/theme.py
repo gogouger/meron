@@ -29,12 +29,15 @@ def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
 ACCENT = "#1a8a77"
 ACCENT_HOVER = "#16786a"
 
-# Data viz accents — blue + warm gold
-ACCENT_SLATE = "#4e6e8e"    # muted steel-blue (secondary, data viz)
-ACCENT_AMBER = "#d4a84b"    # warm gold (tertiary, data viz only)
+# Data viz palette — "sea-green + earth" (legible on cream)
+ACCENT_SLATE = "#5f8aa8"    # dusty blue (secondary)
+ACCENT_AMBER = "#d4a83f"    # goldenrod (tertiary)
+TERRACOTTA = "#cc7a4d"      # warm clay
+PLUM = "#9a6f95"            # muted plum
+SAGE = "#7ba05f"            # soft sage green
 
-# Semantic high-intensity / warning — warm terracotta (family-toned)
-ACCENT_RED = "#b5532f"
+# Semantic high-intensity / warning — deep rust
+ACCENT_RED = "#a9573f"
 
 # Pre-computed gradient variants (60% / 40% opacity as solid-looking colors)
 ACCENT_60 = _hex_to_rgba(ACCENT, 0.6)
@@ -64,24 +67,24 @@ FONT_MONO = "'IBM Plex Mono', monospace"
 # Data viz color mappings — all derived from the base colors
 # ---------------------------------------------------------------------------
 
-SERIES_COLORS = [ACCENT, ACCENT_SLATE, ACCENT_AMBER, SLATE_60, AMBER_60]
+SERIES_COLORS = [ACCENT, TERRACOTTA, ACCENT_AMBER, ACCENT_SLATE, PLUM, SAGE]
 
 LIFT_COLORS = {
-    "bench": ACCENT,            # red — primary lift
-    "squat": ACCENT_SLATE,      # blue
-    "deadlift": ACCENT_AMBER,   # gold
-    "ohp": SLATE_60,            # light blue
+    "bench": ACCENT,            # sea-green
+    "squat": ACCENT_SLATE,      # dusty blue
+    "deadlift": TERRACOTTA,     # clay
+    "ohp": PLUM,                # plum
 }
 
 RUN_TYPE_COLORS = {
-    "race": ACCENT,             # red
-    "long": ACCENT_SLATE,       # blue
-    "moderate": ACCENT_AMBER,   # gold
-    "easy": SLATE_60,           # light blue
+    "race": TERRACOTTA,         # clay
+    "long": ACCENT_SLATE,       # dusty blue
+    "moderate": ACCENT_AMBER,   # goldenrod
+    "easy": SAGE,               # sage
 }
 
 FATIGUE_COLORS = {
-    "Fresh": ACCENT_SLATE,
+    "Fresh": SAGE,
     "Normal": TEXT_MUTED,
     "Fatigued": ACCENT_AMBER,
     "Heavy Load": ACCENT_RED,
@@ -91,7 +94,7 @@ PHASE_COLORS = {
     "build1": ACCENT_SLATE,
     "build2": ACCENT,
     "taper": ACCENT_AMBER,
-    "race": ACCENT_RED,
+    "race": TERRACOTTA,
 }
 
 WORKOUT_TYPE_COLORS = {
@@ -99,26 +102,27 @@ WORKOUT_TYPE_COLORS = {
     "run": ACCENT_SLATE,
     "rest": TEXT_MUTED,
     "obstacle": ACCENT_AMBER,
-    "mobility": SLATE_60,
+    "mobility": SAGE,
 }
 
+# HR zones — cool -> warm intensity ramp
 HR_ZONE_COLORS = {
-    1: SLATE_60,        # Recovery
-    2: ACCENT_SLATE,    # Easy
-    3: ACCENT_AMBER,    # Moderate
-    4: ACCENT,          # Threshold
-    5: ACCENT_RED,      # Max
+    1: SAGE,            # Recovery
+    2: ACCENT,          # Easy (sea-green)
+    3: ACCENT_AMBER,    # Moderate (goldenrod)
+    4: TERRACOTTA,      # Threshold (clay)
+    5: ACCENT_RED,      # Max (rust)
 }
 HR_ZONE_LABELS = ["Z1 Recovery", "Z2 Easy", "Z3 Moderate", "Z4 Threshold", "Z5 Max"]
 
 ACTIVITY_TYPE_COLORS = {
     "Run": ACCENT,
-    "Weight Training": ACCENT_AMBER,
-    "Walk": SLATE_60,
-    "Hike": SLATE_60,
+    "Weight Training": TERRACOTTA,
+    "Walk": SAGE,
+    "Hike": SAGE,
     "Ride": ACCENT_SLATE,
     "Swim": ACCENT_SLATE,
-    "Yoga": AMBER_60,
+    "Yoga": PLUM,
 }
 
 GRIDLINE = "#dfdfd2"

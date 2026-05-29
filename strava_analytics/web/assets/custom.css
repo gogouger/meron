@@ -23,25 +23,8 @@
     --font-mono: 'IBM Plex Mono', monospace;
 }
 
-/* Dark vars — MERON navy palette, applied by OS preference OR JS toggle */
-@media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-        --bg: #0e1411;
-        --bg-card: #141b17;
-        --text-primary: #e9efe8;
-        --text-secondary: #7e8a80;
-        --text-muted: #5e6b63;
-        --border: #313a33;
-        --gridline: #222b26;
-        --surface: #141b17;
-        --elevated: #1b231e;
-        --input: #1b231e;
-        --foreground: #e9efe8;
-        --muted: #7e8a80;
-        --subtle: #5e6b63;
-        --border-light: #313a33; --accent: #1a8a77; --accent-hover: #16786a;
-    }
-}
+/* Light is the default (matches the ggouger.com family). Dark is opt-in only
+   via the Settings toggle (:root[data-theme="dark"] below) — no OS auto-dark. */
 
 /* Force dark via JS toggle (overrides light OS preference) */
 :root[data-theme="dark"] {

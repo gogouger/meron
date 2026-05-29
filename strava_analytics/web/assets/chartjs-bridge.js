@@ -42,8 +42,8 @@
     }
 
     function _buildRunCard(m) {
-        var typeColors = {"race":"#FF3330","long":"#0D6EFD","moderate":"#d4a84b","easy":"#0D6EFD"};
-        var tc = typeColors[m.type] || "#a8a29e";
+        var typeColors = {"race":"#cc7a4d","long":"#5f8aa8","moderate":"#d4a83f","easy":"#7ba05f"};
+        var tc = typeColors[m.type] || "#7e8a83";
         var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.type, tc) + '</div>';
         h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">';
         h += _hoverStat("Distance", m.dist);
@@ -56,7 +56,7 @@
     }
 
     function _buildLiftCard(m) {
-        var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.lift, m.liftColor || "#a8a29e") + '</div>';
+        var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.lift, m.liftColor || "#7e8a83") + '</div>';
         h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">';
         if (m.weight) h += _hoverStat("Weight", m.weight);
         if (m.scheme) h += _hoverStat("Scheme", m.scheme);
@@ -183,9 +183,9 @@
             if (cfg.options.interaction.intersect === undefined) cfg.options.interaction.intersect = true;
         }
 
-        var gridColor = cssVar("--gridline") || "#f5f5f4";
-        var tickColor = cssVar("--text-muted") || "#a8a29e";
-        var borderColor = cssVar("--border-light") || "#d6d3d1";
+        var gridColor = cssVar("--gridline") || "#dfdfd2";
+        var tickColor = cssVar("--text-muted") || "#7e8a83";
+        var borderColor = cssVar("--border-light") || "#cdd0c3";
         var fontMono = cssVar("--font-mono") || "'IBM Plex Mono', monospace";
 
         if (cfg.options.scales) {
@@ -218,7 +218,7 @@
 
         if (!cfg.options.plugins.legend) cfg.options.plugins.legend = {};
         if (!cfg.options.plugins.legend.labels) cfg.options.plugins.legend.labels = {};
-        cfg.options.plugins.legend.labels.color = cssVar("--text-secondary") || "#57534e";
+        cfg.options.plugins.legend.labels.color = cssVar("--text-secondary") || "#384039";
         cfg.options.plugins.legend.labels.font = { family: cssVar("--font-sans") || "Inter", size: 11 };
         // Hide datasets with labels starting with _ from the legend
         cfg.options.plugins.legend.labels.filter = function (item) {
@@ -226,7 +226,7 @@
         };
 
         if (cfg.options.plugins.title && cfg.options.plugins.title.display) {
-            cfg.options.plugins.title.color = cssVar("--text-secondary") || "#57534e";
+            cfg.options.plugins.title.color = cssVar("--text-secondary") || "#384039";
             cfg.options.plugins.title.font = { family: cssVar("--font-sans") || "Inter", size: 15, weight: "500" };
         }
 
@@ -343,7 +343,7 @@
                         ctx.save();
                         ctx.beginPath();
                         ctx.setLineDash([6, 4]);
-                        ctx.strokeStyle = cssVar("--text-muted") || "#a8a29e";
+                        ctx.strokeStyle = cssVar("--text-muted") || "#7e8a83";
                         ctx.lineWidth = 1.5;
                         ctx.moveTo(x, yTop);
                         ctx.lineTo(x, yBottom);
@@ -351,7 +351,7 @@
                         // Race flag emoji at top
                         ctx.setLineDash([]);
                         ctx.font = "12px Inter, sans-serif";
-                        ctx.fillStyle = cssVar("--text-secondary") || "#57534e";
+                        ctx.fillStyle = cssVar("--text-secondary") || "#384039";
                         ctx.textAlign = "center";
                         ctx.fillText("\uD83C\uDFC1", x, yTop - 4);
                         ctx.restore();

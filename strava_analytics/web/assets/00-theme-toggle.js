@@ -24,7 +24,7 @@
     // One-time migration of the legacy "strava-theme" key to "meron-theme".
     var saved = localStorage.getItem("meron-theme")
              || localStorage.getItem("strava-theme")
-             || "system";
+             || "light";
     if (localStorage.getItem("strava-theme") && !localStorage.getItem("meron-theme")) {
         localStorage.setItem("meron-theme", saved);
         localStorage.removeItem("strava-theme");

@@ -18,7 +18,7 @@ from strava_analytics.web.components.layout import (
     hero_section, page_section, footer,
 )
 from strava_analytics.web.theme import (
-    ACCENT, ACCENT_SLATE, ACCENT_AMBER, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
+    ACCENT, ACCENT_SLATE, ACCENT_AMBER, HR_ZONE_COLORS, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED,
     BG_CARD, BG_SURFACE, BORDER, FONT_MONO,
 )
 
@@ -45,7 +45,7 @@ def _hr_zones_section() -> html.Div:
     max_hr = cfg.get("max_hr", 200)
     zone_pct = cfg.get("hr_zones_pct", [60, 70, 80, 90])
     zone_names = ["Recovery", "Easy", "Moderate", "Threshold", "Max"]
-    zone_colors = [ACCENT_SLATE, ACCENT_SLATE, ACCENT_AMBER, ACCENT, ACCENT]
+    zone_colors = [HR_ZONE_COLORS[z] for z in (1, 2, 3, 4, 5)]
     zone_opacities = [0.4, 0.7, 0.7, 0.7, 1.0]
 
     # Hidden stores for the zone percentages (updated by JS drag)
