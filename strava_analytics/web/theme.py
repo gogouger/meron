@@ -36,8 +36,8 @@ TERRACOTTA = "#cc7a4d"      # warm clay
 PLUM = "#9a6f95"            # muted plum
 SAGE = "#7ba05f"            # soft sage green
 
-# Semantic high-intensity / warning — deep rust
-ACCENT_RED = "#a9573f"
+# Semantic high-intensity / warning — crisp brick red (legible on cream)
+ACCENT_RED = "#c1543a"
 
 # Pre-computed gradient variants (60% / 40% opacity as solid-looking colors)
 ACCENT_60 = _hex_to_rgba(ACCENT, 0.6)

@@ -555,9 +555,9 @@ def fatigue_chart(df: pd.DataFrame, chart_id: str = "fatigue") -> html.Div:
     tsb_data = [round(v, 1) if pd.notna(v) else None for v in has["freshness"]]
 
     datasets = [
-        _trend_ds(ctl_data, ACCENT_SLATE, "Fitness (CTL)", borderWidth=2),
-        _trend_ds(atl_data, ACCENT_RED, "Fatigue (ATL)", borderWidth=2),
-        _trend_ds(tsb_data, ACCENT_AMBER, "Form (TSB)", borderWidth=2,
+        _trend_ds(ctl_data, ACCENT, "Fitness (CTL)", borderWidth=2.5),
+        _trend_ds(atl_data, ACCENT_RED, "Fatigue (ATL)", borderWidth=2.5),
+        _trend_ds(tsb_data, ACCENT_AMBER, "Form (TSB)", borderWidth=2.5,
                   fill="origin", backgroundColor=_hex_to_rgba(ACCENT_AMBER, 0.1)),
     ]
 
@@ -600,7 +600,7 @@ def lift_progression_chart(df: pd.DataFrame, chart_id: str = "lift-prog",
         pts = [{"x": _ts(r["date"]), "y": round(float(r[col]), 1)} for _, r in subset.iterrows()]
         date_strings[len(datasets)] = subset["date_str"].tolist()
         datasets.append(_scatter_ds(pts, color, lift.title(),
-                                    borderWidth=2, pointRadius=_PT_LINE,
+                                    borderWidth=2.5, pointRadius=_PT_LINE,
                                     pointHoverRadius=_PT_LINE_H, backgroundColor=color,
                                     showLine=True, tension=0.2, fill=False))
 
@@ -1096,9 +1096,9 @@ def fitness_freshness_chart(fitness_df: pd.DataFrame,
         ctl_pts = [{"x": _ts(r["date"]), "y": round(r["ctl"], 1)} for _, r in hist.iterrows()]
         atl_pts = [{"x": _ts(r["date"]), "y": round(r["atl"], 1)} for _, r in hist.iterrows()]
         tsb_pts = [{"x": _ts(r["date"]), "y": round(r["tsb"], 1)} for _, r in hist.iterrows()]
-        datasets.append(_trend_ds(ctl_pts, ACCENT_SLATE, "Fitness (CTL)", borderWidth=2))
-        datasets.append(_trend_ds(atl_pts, ACCENT, "Fatigue (ATL)", borderWidth=2))
-        datasets.append(_trend_ds(tsb_pts, ACCENT_AMBER, "Form (TSB)", borderWidth=1.5,
+        datasets.append(_trend_ds(ctl_pts, ACCENT, "Fitness (CTL)", borderWidth=2.5))
+        datasets.append(_trend_ds(atl_pts, ACCENT_RED, "Fatigue (ATL)", borderWidth=2.5))
+        datasets.append(_trend_ds(tsb_pts, ACCENT_AMBER, "Form (TSB)", borderWidth=2,
                                   fill=True, backgroundColor=_hex_to_rgba(ACCENT_AMBER, 0.15)))
 
     # Projected (dashed)
@@ -1106,9 +1106,9 @@ def fitness_freshness_chart(fitness_df: pd.DataFrame,
         pctl = [{"x": _ts(r["date"]), "y": round(r["ctl"], 1)} for _, r in proj.iterrows()]
         patl = [{"x": _ts(r["date"]), "y": round(r["atl"], 1)} for _, r in proj.iterrows()]
         ptsb = [{"x": _ts(r["date"]), "y": round(r["tsb"], 1)} for _, r in proj.iterrows()]
-        datasets.append(_dashed_ds(pctl, ACCENT_SLATE, "Projected CTL"))
-        datasets.append(_dashed_ds(patl, ACCENT, "Projected ATL"))
-        datasets.append(_dashed_ds(ptsb, ACCENT_AMBER, "Projected TSB", borderWidth=1.5))
+        datasets.append(_dashed_ds(pctl, ACCENT, "Projected CTL"))
+        datasets.append(_dashed_ds(patl, ACCENT_RED, "Projected ATL"))
+        datasets.append(_dashed_ds(ptsb, ACCENT_AMBER, "Projected TSB", borderWidth=2))
 
     race_markers = [{"date": _ts(d), "label": ""} for d in race_dates] if race_dates else []
 
