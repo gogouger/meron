@@ -247,9 +247,24 @@ def create_app() -> dash.Dash:
                 d.get("distance_mi"), errors="coerce"
             ).fillna(0)
             runs = d[d["type"] == "Run"] if "type" in d.columns else d
+            lifts = (d[d["type"] == "Weight Training"]
+                     if "type" in d.columns else d.iloc[0:0])
             now = pd.Timestamp.now()
             wk = (runs.set_index("date")["_mi"].resample("W").sum()
                   if not runs.empty else pd.Series(dtype=float))
+            end_prs = data.get_end_prs() or {}
+
+            def _pr(k):
+                try:
+                    return int(end_prs.get(k) or 0)
+                except Exception:
+                    return 0
+
+            lift_maxes = {
+                "bench": _pr("bench_1rm"),
+                "squat": _pr("squat_1rm"),
+                "deadlift": _pr("deadlift_1rm"),
+            }
             resp = jsonify({
                 "ok": True,
                 "activities": int(len(d)),
@@ -267,6 +282,10 @@ def create_app() -> dash.Dash:
                 "weekly_miles": [round(float(x), 1)
                                  for x in wk.tail(16).tolist()],
                 "since": int(d["date"].min().year),
+                "lift_sessions": int(len(lifts)),
+                "lift_maxes": lift_maxes,
+                "big3_total": (lift_maxes["bench"] + lift_maxes["squat"]
+                               + lift_maxes["deadlift"]),
             })
             resp.headers["Cache-Control"] = "public, max-age=300"
             return resp
