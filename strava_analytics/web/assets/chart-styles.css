@@ -60,13 +60,6 @@
     overflow: hidden;
 }
 
-/* Dark mode tile inversion */
-@media (prefers-color-scheme: dark) {
-    .leaflet-map-box .leaflet-tile {
-        filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
-    }
-}
-
 /* --- Plan calendar (CSS grid, no Chart.js) --------------------------- */
 .plan-calendar {
     display: grid;
