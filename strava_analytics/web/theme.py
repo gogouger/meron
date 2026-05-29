@@ -5,7 +5,7 @@ Data viz tertiary: warm gold (functional, not brand).
 
   background: #f8f9fc (cool blue-white)
   foreground: #0A1B33 (dark navy)
-  accent:     #FF3330 (MERON red — primary vivid color)
+  accent:     #1a8a77 (sea-green — unified with the ggouger.com family)
   blue:       #0D6EFD (MERON blue)
   gold:       #d4a84b (warm data viz tertiary)
 """
@@ -25,9 +25,9 @@ def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
 # MERON brand colors
 # ---------------------------------------------------------------------------
 
-# Primary accent — MERON red
-ACCENT = "#FF3330"
-ACCENT_HOVER = "#E62D2A"
+# Primary accent — sea-green (unified with the ggouger.com family)
+ACCENT = "#1a8a77"
+ACCENT_HOVER = "#16786a"
 
 # Data viz accents — blue + warm gold
 ACCENT_SLATE = "#0D6EFD"    # MERON blue (secondary)

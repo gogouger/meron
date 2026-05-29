@@ -379,7 +379,7 @@ def activity_card_body(
                     html.Div(id={"type": ctr_type, "index": route_key}),
                     type="default",
                     className="meron-loading",
-                    color="#FF3330",
+                    color="#1a8a77",
                 ))
             elif route_mode == "eager" and act_type in ("Run", "Walk", "Hike", "Ride"):
                 from strava_analytics.web.components.routes import build_route_charts

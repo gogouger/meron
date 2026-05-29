@@ -10,8 +10,8 @@
     --text-muted: #94A3B8;
     --border: #E5E7EB;
     --gridline: #f0f2f5;
-    --accent: #FF3330;
-    --accent-hover: #E62D2A;
+    --accent: #0e7d6c;
+    --accent-hover: #0b6657;
     --surface: #ffffff;
     --elevated: #f0f2f5;
     --input: #f0f2f5;
@@ -39,7 +39,7 @@
         --foreground: #FFFFFF;
         --muted: #94A3B8;
         --subtle: #64748B;
-        --border-light: #1E3A5F;
+        --border-light: #1E3A5F; --accent: #1a8a77; --accent-hover: #16786a;
     }
 }
 
@@ -58,7 +58,7 @@
     --foreground: #FFFFFF;
     --muted: #94A3B8;
     --subtle: #64748B;
-    --border-light: #1E3A5F;
+    --border-light: #1E3A5F; --accent: #1a8a77; --accent-hover: #16786a;
 }
 
 body {
@@ -930,8 +930,8 @@ main {
 }
 /* Focus outline — use muted accent instead of default purple */
 .dash-datepicker:focus-within {
-    outline-color: #E62D2A !important;
-    border-color: #E62D2A !important;
+    outline-color: #16786a !important;
+    border-color: #16786a !important;
 }
 .dash-datepicker svg {
     fill: var(--subtle) !important;
@@ -985,7 +985,7 @@ main {
 }
 /* Selected day — solid muted-red circle */
 .dash-datepicker-calendar-date-inside.dash-datepicker-calendar-date-selected {
-    background: #E62D2A !important;
+    background: #16786a !important;
     color: white !important;
     font-weight: 600;
 }
@@ -1230,7 +1230,7 @@ details[open] summary {
    ============================================================ */
 
 *:focus-visible {
-    outline: 2px solid var(--accent, #FF3330);
+    outline: 2px solid var(--accent, #1a8a77);
     outline-offset: 2px;
 }
 
@@ -1250,7 +1250,7 @@ details[open] summary {
     padding: 10px 20px;
     border-radius: 24px;
     border: none;
-    background: var(--accent, #FF3330);
+    background: var(--accent, #1a8a77);
     color: #fff !important;
     font-size: 13px;
     font-weight: 600;
@@ -1473,7 +1473,7 @@ details[open] summary {
         border-color: #1E3A5F !important;
     }
     .CalendarDay__selected {
-        background: #FF3330 !important;
+        background: #1a8a77 !important;
         color: #fff !important;
     }
     .CalendarMonth_caption {
@@ -1507,7 +1507,7 @@ details[open] summary {
     }
     .DateInput_fang { display: none !important; }
     .DateInput_input__focused {
-        border-bottom-color: #FF3330 !important;
+        border-bottom-color: #1a8a77 !important;
         background: #1E3A5F !important;
     }
     .DayPickerKeyboardShortcuts_buttonReset { display: none !important; }
@@ -1572,7 +1572,7 @@ details[open] summary {
 :root[data-theme="dark"] .DateRangePickerInput,
 :root[data-theme="dark"] input { background-color: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
 :root[data-theme="dark"] .CalendarDay__default { background: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
-:root[data-theme="dark"] .CalendarDay__selected { background: #FF3330 !important; color: #fff !important; }
+:root[data-theme="dark"] .CalendarDay__selected { background: #1a8a77 !important; color: #fff !important; }
 :root[data-theme="dark"] .CalendarDay__selected_span,
 :root[data-theme="dark"] .CalendarDay__selected_span:hover { background: rgba(255, 51, 48, 0.25) !important; color: #FFFFFF !important; border-color: rgba(255, 51, 48, 0.35) !important; }
 :root[data-theme="dark"] .CalendarDay__hovered_span,
@@ -1580,7 +1580,7 @@ details[open] summary {
 :root[data-theme="dark"] .CalendarDay__blocked_out_of_range,
 :root[data-theme="dark"] .CalendarDay__blocked_out_of_range:hover { background: #0A1B33 !important; color: #475569 !important; border-color: #1E3A5F !important; }
 :root[data-theme="dark"] .DateInput_fang { display: none !important; }
-:root[data-theme="dark"] .DateInput_input__focused { border-bottom-color: #FF3330 !important; background: #1E3A5F !important; }
+:root[data-theme="dark"] .DateInput_input__focused { border-bottom-color: #1a8a77 !important; background: #1E3A5F !important; }
 :root[data-theme="dark"] .DayPickerKeyboardShortcuts_buttonReset { display: none !important; }
 :root[data-theme="dark"] .DayPicker__withBorder { background: #0F2547 !important; border-color: #1E3A5F !important; }
 :root[data-theme="dark"] .DayPickerNavigation_button { background: #0F2547 !important; border-color: #1E3A5F !important; }
@@ -1594,7 +1594,7 @@ details[open] summary {
 :root[data-theme="dark"] .dash-datepicker-calendar-wrapper,
 :root[data-theme="dark"] .dash-datepicker-controls { background: #0F2547 !important; color: #FFFFFF !important; border-color: #1E3A5F !important; }
 :root[data-theme="dark"] .dash-datepicker-calendar-date-inside { color: #FFFFFF !important; }
-:root[data-theme="dark"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #FF3330 !important; color: #fff !important; }
+:root[data-theme="dark"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #1a8a77 !important; color: #fff !important; }
 :root[data-theme="dark"] .dash-datepicker-content .dash-dropdown { background: #0F2547 !important; color: #FFFFFF !important; }
 :root[data-theme="dark"] button { color: #FFFFFF !important; }
 :root[data-theme="dark"] #hover-card { background-color: #0F2547 !important; border-color: #1E3A5F !important; color: #FFFFFF !important; }
@@ -1647,7 +1647,7 @@ details[open] summary {
 :root[data-theme="light"] .dash-datepicker-calendar-wrapper,
 :root[data-theme="light"] .dash-datepicker-controls { background: #ffffff !important; color: #0A1B33 !important; border-color: #E5E7EB !important; }
 :root[data-theme="light"] .dash-datepicker-calendar-date-inside { color: #0A1B33 !important; }
-:root[data-theme="light"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #FF3330 !important; color: #fff !important; }
+:root[data-theme="light"] .dash-datepicker-calendar-date-selected .dash-datepicker-calendar-date-inside { background: #1a8a77 !important; color: #fff !important; }
 :root[data-theme="light"] .dash-datepicker-content .dash-input-element { background: #ffffff !important; color: #0A1B33 !important; }
 :root[data-theme="light"] .dash-datepicker-content .dash-input-stepper { background: #f0f2f5 !important; color: #0A1B33 !important; }
 /* Dropdowns */
@@ -1821,7 +1821,7 @@ details[id^="activity-card-"]::after,
         font-size: 10pt;
         font-weight: 700;
         letter-spacing: 0.3em;
-        color: #FF3330;
+        color: #1a8a77;
         padding: 8pt 0;
         border-bottom: 1pt solid #ccc;
         margin-bottom: 16pt;
@@ -1882,6 +1882,6 @@ details[id^="activity-card-"]::after,
 }
 
 .range-pill-active {
-    background: var(--accent, #FF3330) !important;
+    background: var(--accent, #1a8a77) !important;
     color: #fff !important;
 }

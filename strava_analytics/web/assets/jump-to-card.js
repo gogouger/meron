@@ -32,7 +32,7 @@
         setTimeout(function () {
             card.scrollIntoView({behavior: "smooth", block: "center"});
             card.style.transition = "box-shadow 0.3s";
-            card.style.boxShadow = "0 0 0 3px #FF3330";
+            card.style.boxShadow = "0 0 0 3px #1a8a77";
             setTimeout(function () { card.style.boxShadow = ""; }, 2500);
         }, 200);
 

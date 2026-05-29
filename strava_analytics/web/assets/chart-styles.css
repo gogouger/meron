@@ -247,8 +247,8 @@ body.sidebar-open {
 }
 
 .race-tab-btn.race-tab-active {
-    color: var(--accent, #FF3330);
-    border-bottom-color: var(--accent, #FF3330);
+    color: var(--accent, #1a8a77);
+    border-bottom-color: var(--accent, #1a8a77);
 }
 
 /* --- Settings theme option cards ------------------------------------- */

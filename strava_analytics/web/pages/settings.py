@@ -539,7 +539,7 @@ clientside_callback(
             var cards = document.querySelectorAll(".theme-option-card");
             cards.forEach(function(c) { c.style.borderColor = ""; });
             var active = document.getElementById("theme-" + saved);
-            if (active) active.style.borderColor = "#FF3330";
+            if (active) active.style.borderColor = "#1a8a77";
         }, 200);
         return saved;
     }
@@ -565,7 +565,7 @@ clientside_callback(
         var cards = document.querySelectorAll(".theme-option-card");
         cards.forEach(function(c) { c.style.borderColor = ""; });
         var active = document.getElementById("theme-" + theme);
-        if (active) active.style.borderColor = "#FF3330";
+        if (active) active.style.borderColor = "#1a8a77";
 
         return theme;
     }
