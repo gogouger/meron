@@ -217,6 +217,17 @@ def create_app() -> dash.Dash:
         return send_from_directory(str(_assets_dir), "favicon.ico",
                                     mimetype="image/x-icon")
 
+    # Keep crawlers / AI bots out of the whole app
+    @app.server.route("/robots.txt")
+    def _robots_txt():
+        return ("User-agent: *\nDisallow: /\n", 200,
+                {"Content-Type": "text/plain"})
+
+    @app.server.after_request
+    def _no_index(resp):
+        resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        return resp
+
     # Dynamic page title based on current URL
     clientside_callback(
         """
