@@ -3,22 +3,22 @@
    ============================================================ */
 
 :root {
-    --bg: #f8f9fc;
-    --bg-card: #ffffff;
-    --text-primary: #0A1B33;
-    --text-secondary: #475569;
-    --text-muted: #94A3B8;
-    --border: #E5E7EB;
-    --gridline: #f0f2f5;
+    --bg: #F4F3EB;
+    --bg-card: #fbfaf4;
+    --text-primary: #1a1d1a;
+    --text-secondary: #384039;
+    --text-muted: #7e8a83;
+    --border: #cdd0c3;
+    --gridline: #dfdfd2;
     --accent: #0e7d6c;
     --accent-hover: #0b6657;
-    --surface: #ffffff;
-    --elevated: #f0f2f5;
-    --input: #f0f2f5;
-    --foreground: #0A1B33;
-    --muted: #475569;
-    --subtle: #94A3B8;
-    --border-light: #CBD5E1;
+    --surface: #fbfaf4;
+    --elevated: #ece9dc;
+    --input: #ece9dc;
+    --foreground: #1a1d1a;
+    --muted: #384039;
+    --subtle: #7e8a83;
+    --border-light: #cdd0c3;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
 }
@@ -26,39 +26,39 @@
 /* Dark vars — MERON navy palette, applied by OS preference OR JS toggle */
 @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-        --bg: #0A1B33;
-        --bg-card: #0F2547;
-        --text-primary: #FFFFFF;
-        --text-secondary: #94A3B8;
-        --text-muted: #64748B;
-        --border: #1E3A5F;
-        --gridline: #1E3A5F;
-        --surface: #0F2547;
-        --elevated: #1E3A5F;
-        --input: #1E3A5F;
-        --foreground: #FFFFFF;
-        --muted: #94A3B8;
-        --subtle: #64748B;
-        --border-light: #1E3A5F; --accent: #1a8a77; --accent-hover: #16786a;
+        --bg: #0e1411;
+        --bg-card: #141b17;
+        --text-primary: #e9efe8;
+        --text-secondary: #7e8a80;
+        --text-muted: #5e6b63;
+        --border: #313a33;
+        --gridline: #222b26;
+        --surface: #141b17;
+        --elevated: #1b231e;
+        --input: #1b231e;
+        --foreground: #e9efe8;
+        --muted: #7e8a80;
+        --subtle: #5e6b63;
+        --border-light: #313a33; --accent: #1a8a77; --accent-hover: #16786a;
     }
 }
 
 /* Force dark via JS toggle (overrides light OS preference) */
 :root[data-theme="dark"] {
-    --bg: #0A1B33;
-    --bg-card: #0F2547;
-    --text-primary: #FFFFFF;
-    --text-secondary: #94A3B8;
-    --text-muted: #64748B;
-    --border: #1E3A5F;
-    --gridline: #1E3A5F;
-    --surface: #0F2547;
-    --elevated: #1E3A5F;
-    --input: #1E3A5F;
-    --foreground: #FFFFFF;
-    --muted: #94A3B8;
-    --subtle: #64748B;
-    --border-light: #1E3A5F; --accent: #1a8a77; --accent-hover: #16786a;
+    --bg: #0e1411;
+    --bg-card: #141b17;
+    --text-primary: #e9efe8;
+    --text-secondary: #7e8a80;
+    --text-muted: #5e6b63;
+    --border: #313a33;
+    --gridline: #222b26;
+    --surface: #141b17;
+    --elevated: #1b231e;
+    --input: #1b231e;
+    --foreground: #e9efe8;
+    --muted: #7e8a80;
+    --subtle: #5e6b63;
+    --border-light: #313a33; --accent: #1a8a77; --accent-hover: #16786a;
 }
 
 body {

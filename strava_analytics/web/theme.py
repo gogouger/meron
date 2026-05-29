@@ -30,11 +30,11 @@ ACCENT = "#1a8a77"
 ACCENT_HOVER = "#16786a"
 
 # Data viz accents — blue + warm gold
-ACCENT_SLATE = "#0D6EFD"    # MERON blue (secondary)
+ACCENT_SLATE = "#4e6e8e"    # muted steel-blue (secondary, data viz)
 ACCENT_AMBER = "#d4a84b"    # warm gold (tertiary, data viz only)
 
-# Semantic danger/warning — distinct from brand red
-ACCENT_RED = "#dc2626"
+# Semantic high-intensity / warning — warm terracotta (family-toned)
+ACCENT_RED = "#b5532f"
 
 # Pre-computed gradient variants (60% / 40% opacity as solid-looking colors)
 ACCENT_60 = _hex_to_rgba(ACCENT, 0.6)
@@ -43,18 +43,18 @@ SLATE_40 = _hex_to_rgba(ACCENT_SLATE, 0.4)
 AMBER_60 = _hex_to_rgba(ACCENT_AMBER, 0.6)
 
 # Backgrounds (light theme — cool tones)
-BG_LIGHT = "#f8f9fc"       # page background
-BG_CARD = "#ffffff"         # card / chart background
-BG_SURFACE = "#f0f2f5"     # slightly tinted surface
-BG_INPUT = "#f0f2f5"
+BG_LIGHT = "#F4F3EB"       # page background (cream — family)
+BG_CARD = "#fbfaf4"         # card / chart background (paper)
+BG_SURFACE = "#ece9dc"     # slightly tinted surface
+BG_INPUT = "#ece9dc"
 
 # Text
-TEXT_PRIMARY = "#0A1B33"    # MERON dark navy
-TEXT_SECONDARY = "#475569"  # cool slate gray
-TEXT_MUTED = "#94A3B8"      # light cool slate
+TEXT_PRIMARY = "#1a1d1a"    # ink (family)
+TEXT_SECONDARY = "#384039"  # muted green-gray
+TEXT_MUTED = "#7e8a83"      # soft sage gray
 
 # Border
-BORDER = "#E5E7EB"          # cool light border
+BORDER = "#cdd0c3"          # warm hairline
 
 # Fonts
 FONT_SANS = "Inter, -apple-system, sans-serif"
@@ -121,22 +121,22 @@ ACTIVITY_TYPE_COLORS = {
     "Yoga": AMBER_60,
 }
 
-GRIDLINE = "#f0f2f5"
-AXIS_COLOR = "#CBD5E1"
+GRIDLINE = "#dfdfd2"
+AXIS_COLOR = "#cdd0c3"
 
 # ---------------------------------------------------------------------------
 # Dark mode overrides — MERON navy palette
 # ---------------------------------------------------------------------------
 
 DARK_COLORS = {
-    "bg": "#0A1B33",
-    "bg_card": "#0F2547",
-    "bg_light": "#0F2547",
-    "text_primary": "#FFFFFF",
-    "text_secondary": "#94A3B8",
-    "text_muted": "#64748B",
-    "border": "#1E3A5F",
-    "gridline": "#1E3A5F",
+    "bg": "#0e1411",
+    "bg_card": "#141b17",
+    "bg_light": "#141b17",
+    "text_primary": "#e9efe8",
+    "text_secondary": "#7e8a80",
+    "text_muted": "#5e6b63",
+    "border": "#313a33",
+    "gridline": "#222b26",
 }
 
 # ---------------------------------------------------------------------------
