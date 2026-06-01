@@ -151,18 +151,24 @@ def create_app() -> dash.Dash:
                     className="nav-toggle",
                     **{"aria-label": "Toggle navigation"},
                 ),
-                # Nav links
+                # Nav links \u2014 Overview is always visible. The .protected links
+                # are hidden by CSS when <body data-auth="anon"> (set by
+                # 00-auth-nav.js after polling /__authstate or /api/auth/me).
                 html.Div([
                     dcc.Link("Overview", href="/", className="meron-nav-link"),
-                    dcc.Link("Running", href="/running", className="meron-nav-link"),
-                    dcc.Link("Lifting", href="/lifting", className="meron-nav-link"),
-                    dcc.Link("Activities", href="/activities", className="meron-nav-link"),
-                    dcc.Link("Plan", href="/plan", className="meron-nav-link"),
+                    dcc.Link("Running", href="/running",
+                             className="meron-nav-link protected"),
+                    dcc.Link("Lifting", href="/lifting",
+                             className="meron-nav-link protected"),
+                    dcc.Link("Activities", href="/activities",
+                             className="meron-nav-link protected"),
+                    dcc.Link("Plan", href="/plan",
+                             className="meron-nav-link protected"),
                     # Gear is hidden by default; 00-auth-nav.js reveals it
-                    # once /api/auth/me returns 200.
+                    # once auth state confirms a logged-in user.
                     dcc.Link("\u2699", href="/settings",
                              id="nav-settings-gear",
-                             className="meron-nav-link",
+                             className="meron-nav-link protected",
                              style={"fontSize": "18px", "opacity": "0.6",
                                     "display": "none"},
                              title="Settings"),

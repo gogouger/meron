@@ -589,10 +589,16 @@ def layout(**_kwargs):
                 f"Since {start_date:%B %Y}."
             ),
             cta_buttons=[
+                # Logged-in CTAs \u2014 00-auth-nav.js swaps these for a "Log in"
+                # prompt when <body data-auth="anon">.
                 dcc.Link("Start Running \u2192", href="/running",
-                         className="btn-accent"),
+                         className="btn-accent auth-only"),
                 dcc.Link("View Plan", href="/plan",
-                         className="btn-ghost"),
+                         className="btn-ghost auth-only"),
+                # Anon prompt \u2014 visible only when not logged in.
+                html.A("Log in to view \u2192", href="/login",
+                       id="overview-cta-login",
+                       className="btn-accent anon-only"),
             ],
         ),
 
@@ -665,12 +671,18 @@ def layout(**_kwargs):
                       "marginTop": "12px"}),
         ]),
 
-        # CTA
-        cta_section(
+        # CTA \u2014 wrapped so 00-auth-nav.js can swap the link target for anons.
+        # The .auth-only / .anon-only versions toggle by body[data-auth] class.
+        html.Div(cta_section(
             "Ready to dig deeper?",
             "Your running, lifting, and race data \u2014 broken down.",
             "Explore Running \u2192", "/running",
-        ),
+        ), className="auth-only"),
+        html.Div(cta_section(
+            "Ready to dig deeper?",
+            "Sign in to see runs, lifts, plan, and race fitness.",
+            "Log in \u2192", "/login",
+        ), className="anon-only"),
 
         # Footer
         footer(),

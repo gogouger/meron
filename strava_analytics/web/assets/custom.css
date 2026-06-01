@@ -2043,3 +2043,24 @@ details[id^="activity-card-"]::after,
     /* --- Settings: theme option cards should stack, not squeeze --- */
     .theme-option-card { min-width: 0; }
 }
+
+/* ============================================================
+   Auth-gated UI (set by 00-auth-nav.js via body[data-auth=...])
+   ------------------------------------------------------------
+   Anonymous visitors see only Overview + a "log in" prompt. The
+   .protected nav links and .auth-only CTAs vanish entirely.
+   Logged-in users get the inverse — .anon-only is hidden.
+   Default to anonymous so there's no flash of protected nav
+   before the JS runs and confirms a session.
+   ============================================================ */
+body:not([data-auth="user"]) .meron-nav-link.protected,
+body[data-auth="anon"] .meron-nav-link.protected {
+    display: none !important;
+}
+body:not([data-auth="user"]) .auth-only,
+body[data-auth="anon"] .auth-only {
+    display: none !important;
+}
+body[data-auth="user"] .anon-only {
+    display: none !important;
+}
