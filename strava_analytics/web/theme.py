@@ -36,8 +36,19 @@ TERRACOTTA = "#cc7a4d"      # warm clay
 PLUM = "#9a6f95"            # muted plum
 SAGE = "#7ba05f"            # soft sage green
 
-# Semantic high-intensity / warning — crisp brick red (legible on cream)
-ACCENT_RED = "#c1543a"
+# Pop / danger — coral red, true complement to sea-green (legible on cream).
+# Reserved for high-attention uses: HR zone 5 (max), ATL fatigue,
+# HR-over-time line, "Heavy Load" badge, danger CTAs. Avoid for arbitrary
+# multi-series colors — the SERIES_COLORS sequence intentionally skips it.
+ACCENT_RED = "#c84d4a"
+ACCENT_POP = ACCENT_RED  # role-based alias — use this in new code
+
+# Role-based semantic palette. Use these in new UI code instead of
+# reaching for raw hues — keeps state colors consistent and legible.
+SUCCESS = SAGE            # "Fresh" / "Read" / OK states
+WARNING = ACCENT_AMBER    # "Fatigued" / cautionary callouts
+DANGER = ACCENT_POP       # "Heavy Load" / errors / dangerous CTAs
+INFO = ACCENT_SLATE       # neutral informational / secondary lines
 
 # Pre-computed gradient variants (60% / 40% opacity as solid-looking colors)
 ACCENT_60 = _hex_to_rgba(ACCENT, 0.6)

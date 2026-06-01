@@ -12,6 +12,16 @@
     --gridline: #dfdfd2;
     --accent: #0e7d6c;
     --accent-hover: #0b6657;
+    /* Role-based palette. Use these in new UI code instead of raw hues.
+       Same hexes as the chart palette so a button and a chart line read
+       as the same color when they signal the same thing. */
+    --pop: #c84d4a;          /* coral, true complement to sea-green */
+    --pop-hover: #b03e3b;
+    --success: #7ba05f;      /* sage */
+    --warning: #d4a83f;      /* goldenrod */
+    --danger: #c84d4a;       /* same as --pop */
+    --info: #5f8aa8;         /* dusty blue */
+    --focus-ring: rgba(14, 125, 108, 0.45);  /* sea-green @ 45% */
     --surface: #fbfaf4;
     --elevated: #ece9dc;
     --input: #ece9dc;
@@ -42,6 +52,14 @@
     --muted: #7e8a80;
     --subtle: #5e6b63;
     --border-light: #313a33; --accent: #1a8a77; --accent-hover: #16786a;
+    /* Role-based palette — lighter variants for dark background. */
+    --pop: #d66660;
+    --pop-hover: #c84d4a;
+    --success: #7ba05f;
+    --warning: #d4a83f;
+    --danger: #d66660;
+    --info: #5f8aa8;
+    --focus-ring: rgba(26, 138, 119, 0.5);
 }
 
 body {
