@@ -1868,3 +1868,160 @@ details[id^="activity-card-"]::after,
     background: var(--accent, #1a8a77) !important;
     color: #fff !important;
 }
+
+/* ============================================================
+   Mobile UX polish (≤ 575.98px)
+   - Prevents horizontal scroll from a few oversized inline-styled
+     elements (race-prediction table, fixed grid columns, plan
+     calendar week footers).
+   - Shrinks chart canvases, navbar padding, hero typography.
+   - Raises tap-target sizes for nav + filter pills + summary toggles.
+   - All rules are gated behind the breakpoint so desktop is untouched.
+   ============================================================ */
+
+@media (max-width: 575.98px) {
+    /* Hard guard against horizontal scroll at the document root */
+    html, body { overflow-x: hidden; }
+
+    /* --- Section padding: less side padding, less vertical air --- */
+    .section-inner,
+    .hero-inner,
+    .nav-container,
+    .cta-inner,
+    .statement-inner,
+    .footer-inner {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+    .page-section { padding: 36px 0; }
+    .hero-section { padding: 56px 0 28px; }
+    .statement-section { padding: 48px 0; }
+    .cta-section { padding: 48px 0; }
+    .site-footer { padding: 40px 0 24px; }
+
+    /* --- Hero typography scales down to fit narrow viewports --- */
+    .hero-headline { font-size: clamp(1.6rem, 7vw, 2rem); }
+    .hero-subtext { font-size: 0.95rem; }
+
+    /* --- Navbar: tighten padding/gap and ensure brand can shrink --- */
+    .nav-inner { min-width: 0; }
+    .brand-link { min-width: 0; flex-shrink: 1; }
+    .brand-text {
+        font-size: 14px;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .brand-icon { height: 28px; }
+    .nav-toggle {
+        padding: 10px;            /* ≥44px hit target with svg 22+padding */
+        min-width: 44px;
+        min-height: 44px;
+    }
+    .nav-links {
+        /* Mobile nav panel: full-width, larger tap targets */
+        padding: 20px 24px !important;
+    }
+    .nav-links .meron-nav-link {
+        font-size: 15px;
+        padding: 10px 0;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    /* --- Universal "grid items must be allowed to shrink" fix --- */
+    /* Inline `grid-template-columns: repeat(N, 1fr)` on metric blocks
+       produces overflowing cells because the default `min-width: auto`
+       on grid items expands to their intrinsic content width.
+       Resetting to 0 lets `1fr` actually do its job. */
+    [style*="grid-template-columns"] > *,
+    [style*="gridTemplateColumns"] > * {
+        min-width: 0;
+    }
+
+    /* Hard cap: any inline 4-column grid becomes 2-column on mobile,
+       any 5/6-column grid becomes 2-column, 3-column stays 3 but
+       still respects min-width: 0 above. */
+    div[style*="repeat(4, 1fr)"],
+    div[style*="repeat(5, 1fr)"],
+    div[style*="repeat(6, 1fr)"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* --- Chart heights: shorter on mobile so charts don't dominate.
+       Inline `style="height: 400px"` is set by _chart_wrap; override
+       with !important. Set on the wrapper too in case the inline
+       style ever moves up. --- */
+    .cjs-canvas-box { height: 280px !important; }
+    .cjs-chart-wrap .cjs-canvas-box { height: 280px !important; }
+
+    /* Leaflet maps: shorter too */
+    .leaflet-map-box { height: 200px !important; }
+
+    /* --- Race prediction table: shrink padding so 5 cols fit --- */
+    .table th { padding: 8px 6px !important; font-size: 9px !important; }
+    .table td { padding: 8px 6px !important; font-size: 12px; }
+    /* Hide the "Method" column on mobile — it's the lowest-signal column
+       (5K=Critical Speed, 10K=Critical Speed, etc. mostly identical) */
+    .table th:nth-child(4),
+    .table td:nth-child(4) { display: none; }
+
+    /* --- Stat / metric cards: tighter padding so values fit --- */
+    .stat-card .card-body { padding: 14px 16px !important; }
+    .stat-value { font-size: 1.1rem !important; }
+    .numbered-card { padding: 20px 16px; }
+    .numbered-card__value { font-size: 1.4rem; }
+
+    /* --- Filter rows: stack instead of wrap-fight --- */
+    .range-pill-bar { width: 100%; }
+    .range-pill {
+        flex: 1;
+        padding: 10px 8px;        /* ≥44px tap target */
+        min-height: 44px;
+        font-size: 12px;
+    }
+
+    /* --- Plan calendar: allow the inline grid (repeat(7, 1fr) +
+       gridColumn: 1 / -1 weekly footers) to live inside a horizontally
+       swipeable scroll container. We target the month-view wrappers
+       inside the enhanced calendar. The page-section is the outer
+       container; we make its content area scroll-x and force the
+       calendar grid to honor a minimum 600px so cells stay tappable. */
+    .plan-calendar { overflow-x: auto; }
+
+    /* The enhanced calendar lives inside #plan-calendar-container with
+       multiple month divs. Wrap each in horizontal scroll. */
+    #plan-calendar-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    #plan-calendar-container > div { min-width: 560px; }
+
+    /* --- Activity cards: bigger tap targets on summary chevrons --- */
+    details summary {
+        padding: 10px 0;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+    details { padding: 12px 14px; }
+    /* Activity-card MERON corner mark — keep it from overlapping the
+       summary text on cramped viewports. */
+    details[id^="activity-card-"]::after { top: 10px; right: 10px; }
+
+    /* --- Modal: already 100vw at ≤600px; ensure padding shrinks --- */
+    #modal-content { padding: 16px !important; }
+
+    /* --- Footer grid already collapses at 640px; just reduce gaps --- */
+    .footer-grid { gap: 24px; }
+
+    /* --- Race tab bar: allow scroll if 4 tabs don't fit --- */
+    .race-tabs-bar { overflow-x: auto; flex-wrap: nowrap !important; }
+    .race-tab-btn {
+        white-space: nowrap;
+        padding: 10px 14px;
+        min-height: 44px;
+    }
+
+    /* --- Settings: theme option cards should stack, not squeeze --- */
+    .theme-option-card { min-width: 0; }
+}
