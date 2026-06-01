@@ -17,10 +17,10 @@
        as the same color when they signal the same thing. */
     --pop: #c84d4a;          /* coral, true complement to sea-green */
     --pop-hover: #b03e3b;
-    --success: #7ba05f;      /* sage */
-    --warning: #d4a83f;      /* goldenrod */
+    --success: #7a8f50;      /* olive (was sage) — warmer + further from sea-green */
+    --warning: #a4853a;      /* faded gold (was goldenrod) */
     --danger: #c84d4a;       /* same as --pop */
-    --info: #5f8aa8;         /* dusty blue */
+    --info: #445e72;         /* ink blue (was dusty blue) */
     --focus-ring: rgba(14, 125, 108, 0.45);  /* sea-green @ 45% */
     --surface: #fbfaf4;
     --elevated: #ece9dc;
@@ -55,10 +55,10 @@
     /* Role-based palette — lighter variants for dark background. */
     --pop: #d66660;
     --pop-hover: #c84d4a;
-    --success: #7ba05f;
-    --warning: #d4a83f;
+    --success: #95a76b;      /* olive, slightly lighter for dark bg */
+    --warning: #c4a455;      /* faded gold, slightly lighter for dark bg */
     --danger: #d66660;
-    --info: #5f8aa8;
+    --info: #5e7a8e;         /* ink blue, slightly lighter for dark bg */
     --focus-ring: rgba(26, 138, 119, 0.5);
 }
 

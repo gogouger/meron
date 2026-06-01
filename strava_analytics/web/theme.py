@@ -29,12 +29,13 @@ def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
 ACCENT = "#1a8a77"
 ACCENT_HOVER = "#16786a"
 
-# Data viz palette — "sea-green + earth" (legible on cream)
-ACCENT_SLATE = "#5f8aa8"    # dusty blue (secondary)
-ACCENT_AMBER = "#d4a83f"    # goldenrod (tertiary)
-TERRACOTTA = "#cc7a4d"      # warm clay
-PLUM = "#9a6f95"            # muted plum
-SAGE = "#7ba05f"            # soft sage green
+# Data viz palette — "vintage field guide" (heavier desaturation so
+# nothing competes with sea-green on cream; antique-print harmony)
+ACCENT_SLATE = "#445e72"    # ink blue — deeper, greyer (was dusty #5f8aa8)
+ACCENT_AMBER = "#a4853a"    # faded gold — muddier (was #d4a83f)
+TERRACOTTA = "#b56a47"      # rust — slightly darker (was #cc7a4d)
+PLUM = "#876475"            # mauve — dustier (was #9a6f95)
+SAGE = "#7a8f50"            # olive — warmer/yellower (was #7ba05f)
 
 # Pop / danger — coral red, true complement to sea-green (legible on cream).
 # Reserved for high-attention uses: HR zone 5 (max), ATL fatigue,

@@ -42,7 +42,7 @@
     }
 
     function _buildRunCard(m) {
-        var typeColors = {"race":"#cc7a4d","long":"#5f8aa8","moderate":"#d4a83f","easy":"#7ba05f"};
+        var typeColors = {"race":"#b56a47","long":"#445e72","moderate":"#a4853a","easy":"#7a8f50"};
         var tc = typeColors[m.type] || "#7e8a83";
         var h = '<div style="font-weight:600;font-size:13px;color:var(--text-primary)">' + m.name + _hoverBadge(m.type, tc) + '</div>';
         h += '<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">';
