@@ -1,17 +1,17 @@
 # Meron
 
-Self-hosted personal training dashboard. Brings together Strava activity history, FIT files, and strength-training logs into one place — without handing your data to a third party.
+Self-hosted **hybrid training dashboard** for athletes who run *and* lift. Brings endurance work (rides, runs, FIT files) and strength training into one view, so you can see how the two halves of your program are actually talking to each other — without splitting your data across an endurance silo (Strava) and a lifting silo (Hevy, Strong) and a sleep silo and a nutrition silo.
 
 Live public preview at <https://meron.gordongouger.com> (Overview tab; deeper tabs are gated by SSO).
 
 ## What it does
 
+- **Hybrid load curves** — CTL / ATL / TSB across both run/ride volume AND lifting volume, so you can see when strength work is taxing your aerobic recovery (and vice versa)
 - **Routes on a map** — every ride and run plotted with elevation, heart rate, and pace overlays
-- **Training trends** — CTL / ATL / TSB load curves, weekly volume, time-in-zone, distance histograms over time
+- **Lift PR progression** — bench / squat / deadlift one-rep-max estimates pulled from FIT strength workouts, charted next to your weekly endurance volume
 - **Race predictions** — VDOT / Riegel-style time estimates from your recent races and tempo runs
-- **Strength progression** — bench / squat / deadlift one-rep-max estimates pulled from FIT strength workouts
 - **Heatmaps** — aggregate location heatmaps for runs, rides, and walks
-- **Chat widget** — a small LLM-backed assistant that answers questions over your own ride and run data (read-only, opt-in)
+- **Chat widget** — a small LLM-backed assistant that answers questions across your own training data (read-only, opt-in) — "what was my deadlift PR the week before my last marathon?" kind of stuff
 
 The Overview tab is intentionally public-safe (counts, weekly sums, anonymized aggregates) so the project page on the main site can pull a live summary card without exposing the raw activity stream.
 
