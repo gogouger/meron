@@ -32,7 +32,9 @@ FROM python:3.12-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     MERON_DB_PATH=/data/meron.db \
-    PORT=8050
+    PORT=8050 \
+    MALLOC_ARENA_MAX=2 \
+    MALLOC_TRIM_THRESHOLD_=100000
 
 # Non-root user. UID/GID 1000 is conventional and keeps bind-mounted
 # volumes owned by the host user on most Linux setups.
@@ -54,4 +56,4 @@ EXPOSE 8050
 # Run migrations on boot (idempotent), then start gunicorn. The WSGI
 # module calls data.init(None) during import so the Dash layout can
 # render on the first request.
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 60 --access-logfile - strava_analytics.web.wsgi:app"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 4 --timeout 60 --max-requests 1000 --max-requests-jitter 100 --access-logfile - strava_analytics.web.wsgi:app"]

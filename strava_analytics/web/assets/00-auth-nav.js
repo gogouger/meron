@@ -101,7 +101,7 @@
             '<div class="meron-login-card" role="dialog" aria-modal="true" aria-label="Log in">' +
                 '<button class="meron-login-x" type="button" aria-label="Close">×</button>' +
                 '<div class="meron-login-title">Sign in</div>' +
-                '<p class="meron-login-sub">One login for the site, Meron &amp; Books.</p>' +
+                '<p class="meron-login-sub">One login for the site, Meron &amp; Athenaeum.</p>' +
                 '<form class="meron-login-form" novalidate>' +
                     '<div class="meron-login-field"><label for="mlm-user">Username</label>' +
                         '<input id="mlm-user" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" required></div>' +
@@ -222,7 +222,8 @@
         fetch("/__authlogout", {
             method: "POST",
             credentials: "include",
-            headers: { "Accept": "application/json" },
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: "{}",
         })
         .catch(function () { /* ignore — fallback below covers it */ })
         .finally(function () {
