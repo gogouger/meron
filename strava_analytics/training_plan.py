@@ -170,7 +170,7 @@ def _build1_week(week_num: int, start: date, current_1rms: dict,
 
 def _build2_week(week_num: int, start: date, current_1rms: dict,
                   target_miles: float) -> TrainingWeek:
-    """Build 2: race-specific + Spartan obstacle prep."""
+    """Build 2: peak volume + intensity (intervals, long, lifts)."""
     tw = TrainingWeek(
         week_num=week_num, phase="build2",
         phase_label="Build 2 — Peak Volume + Intensity",

@@ -1336,13 +1336,10 @@ def enhanced_plan_calendar(plan_rows: list[dict],
 
                     # Build a short, scannable label
                     title = row["title"]
-                    # Extract the key info: workout name + distance/weight
                     if wtype == "run":
                         # "Easy Run — 2.0 mi" → "Easy 2.0mi"
-                        # "RACE: Boulder Bolder 10K" → "RACE 10K"
-                        if title.startswith("RACE:"):
-                            short = title.replace("RACE: ", "")
-                        elif " — " in title:
+                        # "5K Time Trial" stays as-is
+                        if " — " in title:
                             parts = title.split(" — ")
                             name_part = parts[0].replace(" Run", "")
                             dist_part = parts[1].replace(" mi", "mi") if len(parts) > 1 else ""
@@ -1350,12 +1347,15 @@ def enhanced_plan_calendar(plan_rows: list[dict],
                         else:
                             short = title
                     elif wtype == "lift":
-                        # "Upper Body" / "Lower Body + Carries" / "Full Body + Obstacle Prep"
+                        # "Upper Body" / "Lower Body + Carries" / "Full Body — Peak Strength"
                         short = title.replace(" Body", "").replace("Maintenance ", "Maint. ")
                         if "(Light)" in short:
                             short = short.replace(" (Light)", " Lt")
+                        if " — " in short:
+                            short = short.split(" — ")[0]
                     elif wtype in ("rest", "mobility"):
-                        short = title.split(" +")[0]  # "Rest + Spartan Prep" → "Rest"
+                        # Truncate "Mobility + Reset" → "Mobility"
+                        short = title.split(" +")[0]
                     else:
                         short = title
 

@@ -86,12 +86,48 @@ def _get_current_1rms(df: pd.DataFrame) -> dict:
 
 
 def _get_current_weekly_miles(df: pd.DataFrame) -> float:
+    """Return a fitness-representative weekly mileage baseline.
+
+    Naive last-4-week average reads the trough during post-race / travel /
+    illness weeks — the plan then ramps the user from "8 mi/wk" to peak as
+    if they were starting fresh. Use the larger of:
+      - the last-4-week average (responsive)
+      - the median weekly miles across the last 12 weeks (stable)
+    so the baseline self-heals through recovery and never under-prescribes.
+    """
     runs = df[df["type"] == "Run"]
     if runs.empty:
         return 15.0
     now = runs["date"].max()
     last_4w = runs[runs["date"] >= now - pd.Timedelta(weeks=4)]
-    return last_4w["distance_mi"].sum() / 4
+    recent_avg = float(last_4w["distance_mi"].sum()) / 4.0
+
+    last_12w = runs[runs["date"] >= now - pd.Timedelta(weeks=12)].copy()
+    if last_12w.empty:
+        return max(recent_avg, 15.0)
+    last_12w["_week"] = last_12w["date"].dt.to_period("W")
+    weekly = last_12w.groupby("_week")["distance_mi"].sum()
+    median_12w = float(weekly.median()) if not weekly.empty else 0.0
+
+    return max(recent_avg, median_12w)
+
+
+def _get_target_peak_miles(df: pd.DataFrame, baseline: float) -> float:
+    """Pick a realistic 8-week peak target.
+
+    The old hardcoded 27 mi/wk was tuned for a specific spring-2026 race
+    block. Roll it forward: take whatever's higher between the user's
+    historical peak (top 4-week rolling stretch ever) and a 30% ramp on
+    today's baseline, capped at 1.6× baseline to keep the build sane.
+    """
+    runs = df[df["type"] == "Run"]
+    if runs.empty:
+        return max(baseline * 1.3, 20.0)
+    rs = runs.set_index("date")["distance_mi"].sort_index()
+    # 4-week rolling sum (sample at day granularity to catch any 28-day window)
+    rolling = rs.rolling("28D").sum()
+    peak_4w = float(rolling.max()) / 4.0 if not rolling.empty else baseline
+    return max(min(peak_4w, baseline * 1.6), baseline * 1.3)
 
 
 def _generate_ics(plan_rows: list[dict]) -> str:
@@ -157,7 +193,7 @@ def layout(**_kwargs):
 
     current_1rms = _get_current_1rms(df)
     current_miles = _get_current_weekly_miles(df)
-    target_peak = 27.0
+    target_peak = _get_target_peak_miles(df, current_miles)
 
     fitness = get_current_fitness(df)
 
@@ -674,7 +710,7 @@ def _science_section():
             html.Summary("Periodization"),
             html.Ul([
                 html.Li("Issurin (2010): Block periodization with phase-specific focus."),
-                html.Li("Back-to-back race strategy: 10K as sharpener, 5-day recovery before Spartan."),
+                html.Li("Rolling 8-week cycle: build → deload → build → peak → taper → time trial → reset."),
             ], style={"fontSize": "0.8rem", "color": TEXT_SECONDARY}),
         ]),
     ], style={"fontSize": "0.9rem", "marginBottom": "24px"})
