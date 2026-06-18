@@ -207,7 +207,7 @@ def parse_activity_for_row(row, max_points: int = 300) -> "ActivityStream":
             )
     fn = row.get("filename") if hasattr(row, "get") else None
     if isinstance(fn, str) and fn:
-        from . import data as _data
+        from .web import data as _data
         path = resolve_activity_path(_data.get_export_dir(), fn)
         if path is not None:
             return parse_activity(path, max_points)
@@ -224,7 +224,7 @@ def parse_hr_stream_for_row(row) -> list[tuple]:
             return streams_to_hr_points(streams, _row_start_time(row))
     fn = row.get("filename") if hasattr(row, "get") else None
     if isinstance(fn, str) and fn:
-        from . import data as _data
+        from .web import data as _data
         path = resolve_activity_path(_data.get_export_dir(), fn)
         if path is not None:
             return parse_hr_stream(path)
@@ -241,7 +241,7 @@ def parse_distance_stream_for_row(row) -> list[tuple]:
             return streams_to_distance_points(streams, _row_start_time(row))
     fn = row.get("filename") if hasattr(row, "get") else None
     if isinstance(fn, str) and fn:
-        from . import data as _data
+        from .web import data as _data
         path = resolve_activity_path(_data.get_export_dir(), fn)
         if path is not None:
             return parse_distance_stream(path)
