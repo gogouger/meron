@@ -183,13 +183,46 @@ def build_route_charts(
     if cache_key and cache_key in _route_cache:
         return _route_cache[cache_key]
 
-    from strava_analytics.routes import parse_activity, resolve_activity_path
+    from strava_analytics.routes import (
+        parse_activity, parse_activity_for_row, resolve_activity_path,
+    )
 
     export_dir = data.get_export_dir()
+
+    # Find the row backing this activity in the enriched df so we can pull
+    # streams_blob (the API-sync alternative to a FIT file). Match on
+    # filename first (CSV-import rows), then activity_id (API rows — which
+    # was set to source_id in the repository layer).
+    row = None
+    if df is not None and not df.empty:
+        if filename:
+            mask = df.get("filename") == filename if "filename" in df.columns else None
+            if mask is not None and mask.any():
+                row = df[mask].iloc[0]
+        if row is None and source_id:
+            try:
+                sid_int = int(source_id)
+                mask = df.get("activity_id") == sid_int if "activity_id" in df.columns else None
+                if mask is not None and mask.any():
+                    row = df[mask].iloc[0]
+            except (TypeError, ValueError):
+                pass
+
     fit_path = resolve_activity_path(export_dir, filename) if filename else None
 
-    if fit_path is None:
-        # No FIT — try the cached polyline from route_index.
+    # Pull the streams: prefer streams_blob on the row, then the FIT file.
+    stream = None
+    if row is not None:
+        stream = parse_activity_for_row(row)
+        if not stream.coords and not stream.heart_rate and not stream.distance_m:
+            stream = None
+    if stream is None and fit_path is not None:
+        stream = parse_activity(fit_path)
+
+    if stream is None or (
+        not stream.coords and not stream.distance_m and not stream.heart_rate
+    ):
+        # Last resort: cached polyline + the "import to see splits" note.
         fps = _load_route_fingerprints()
         fp = fps.get(filename) if filename else None
         if (not fp or not fp.get("points")) and source_id:
@@ -199,13 +232,11 @@ def build_route_charts(
             if cache_key:
                 _route_cache[cache_key] = result
             return result
-        # Nothing to render.
         empty = html.Div()
         if cache_key:
             _route_cache[cache_key] = empty
         return empty
 
-    stream = parse_activity(fit_path)
     children = []
 
     if stream.coords:

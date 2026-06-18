@@ -384,7 +384,12 @@ def activity_card_body(
             elif route_mode == "eager" and act_type in ("Run", "Walk", "Hike", "Ride"):
                 from strava_analytics.web.components.routes import build_route_charts
                 from strava_analytics.web import data as _data
-                route_el = build_route_charts(filename, df=_data.get_df())
+                # Pass activity_id as source_id so build_route_charts can
+                # look up streams_blob on the row even for API-sync activities
+                # with no .fit.gz on disk.
+                act_id = row.get("activity_id")
+                sid_str = str(int(act_id)) if act_id and not pd.isna(act_id) else None
+                route_el = build_route_charts(filename, df=_data.get_df(), source_id=sid_str)
                 if route_el:
                     detail.append(html.Div(route_el, style={
                         "marginTop": "16px", "borderTop": f"1px solid {BORDER}",
