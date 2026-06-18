@@ -619,8 +619,8 @@ def layout(**_kwargs):
                 ),
                 numbered_card(
                     3, "Racing",
-                    f"VDOT {vdot:.1f}. Next up: Boulder Bolder 10K (May 25) "
-                    "and Spartan Beast (May 31).",
+                    f"VDOT {vdot:.1f}. Rolling 8-week build cycle: peak fitness "
+                    "around the perpetual time-trial week.",
                     link_text="Learn more", link_href="/running",
                 ),
             ]),

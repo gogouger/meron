@@ -173,7 +173,7 @@ def _build2_week(week_num: int, start: date, current_1rms: dict,
     """Build 2: race-specific + Spartan obstacle prep."""
     tw = TrainingWeek(
         week_num=week_num, phase="build2",
-        phase_label="Build 2 — Race Prep + Obstacles",
+        phase_label="Build 2 — Peak Volume + Intensity",
         start_date=start, target_miles=target_miles,
         lift_sessions=2, run_sessions=5,
     )
@@ -189,29 +189,28 @@ def _build2_week(week_num: int, start: date, current_1rms: dict,
     tw.workouts = [
         Workout(start, "run", f"Easy Run — {short} mi",
                 [f"{short} mi easy"], "easy", 25),
-        Workout(start + timedelta(1), "lift", "Full Body + Obstacle Prep",
+        Workout(start + timedelta(1), "lift", "Full Body — Peak Strength",
                 [f"Squat {squat['sets']}x{squat['reps']} @{squat['working_weight']}lb",
                  f"Bench Press {bench['sets']}x{bench['reps']} @{bench['working_weight']}lb",
                  "Weighted Pull-ups 4x5",
-                 "Burpees 2x30",
-                 "Box Jumps 4x5",
-                 "Farmer Carry 3x200ft @90lb"],
+                 "Farmer Carry 3x200ft @90lb",
+                 "Core: Plank 3x60s + Ab Wheel 3x8"],
                 "hard", 65),
         Workout(start + timedelta(2), "run", f"Intervals — {intervals} mi",
                 ["1 mi warmup",
-                 "4x800m at 10K goal pace, 400m jog recovery",
+                 "4x800m hard, 400m jog recovery",
                  "1 mi cooldown"], "hard", 40),
         Workout(start + timedelta(3), "run", f"Easy Run — {short} mi",
                 [f"{short} mi recovery"], "easy", 25),
         Workout(start + timedelta(4), "run", f"Moderate Run — {moderate} mi",
-                [f"{moderate} mi moderate with race-effort surges"], "moderate", 40),
+                [f"{moderate} mi moderate with surges"], "moderate", 40),
         Workout(start + timedelta(5), "run", f"Long Run — {long_run} mi",
                 [f"{long_run} mi easy-moderate, practice fueling"], "moderate", 75),
-        Workout(start + timedelta(5), "lift", "Obstacle Skills (after long run PM or next AM)",
-                ["Dead hang 3x max (target 90s+)",
-                 "Sandbag carry 80lb x 200m x 3",
-                 "Broad jumps 3x5",
-                 "Medicine ball throw 3x5"],
+        Workout(start + timedelta(5), "lift", "Posterior Chain + Grip",
+                ["Romanian Deadlift 3x6",
+                 "Dead Hang 3x max (target 90s+)",
+                 "DB Row 3x8",
+                 "Sandbag carry 80lb x 200m x 3"],
                 "moderate", 40),
         Workout(start + timedelta(6), "rest", "Full Rest",
                 ["Complete rest"], "easy", 0),
@@ -261,45 +260,44 @@ def _taper_week(week_num: int, start: date, current_1rms: dict,
     return tw
 
 
-def _race_week(week_num: int, start: date) -> TrainingWeek:
-    """Race week: Boulder Bolder Monday, Spartan Beast Saturday."""
+def _test_week(week_num: int, start: date) -> TrainingWeek:
+    """Test week — perpetual peak. One quality time trial, then recovery.
+
+    Replaces the old race-specific week. Without a race on the calendar
+    the user still benefits from a hard effort that anchors the next
+    cycle's pace targets: a 5K time trial gives a fresh VDOT/CS data
+    point and the chart picks it up like any other run.
+    """
     tw = TrainingWeek(
-        week_num=week_num, phase="race",
-        phase_label="Race Week",
-        start_date=start, target_miles=0,
-        lift_sessions=0, run_sessions=2,
+        week_num=week_num, phase="test",
+        phase_label="Test Week — Time Trial + Recovery",
+        start_date=start, target_miles=8,
+        lift_sessions=0, run_sessions=3,
     )
 
     tw.workouts = [
-        Workout(start, "run", "RACE: Boulder Bolder 10K",
-                ["Boulder Bolder 10K — Boulder, CO",
-                 "Warmup: 10 min easy jog + strides",
-                 "Strategy: even splits, don't go out too fast",
-                 "Post-race: walk, stretch, refuel immediately"],
-                "race", 60,
-                "Memorial Day — enjoy the atmosphere!"),
-        Workout(start + timedelta(1), "rest", "Recovery",
-                ["Light 20-min walk only", "Foam roll", "Epsom salt bath",
+        Workout(start, "run", "Shakeout — 2 mi",
+                ["2 mi easy + 4x100m strides",
+                 "Loosen up the day before the trial"], "easy", 20),
+        Workout(start + timedelta(1), "rest", "Rest",
+                ["Sleep, hydrate, light meals"], "easy", 0),
+        Workout(start + timedelta(2), "run", "5K Time Trial",
+                ["1 mi warmup",
+                 "5K all-out (3.1 mi) — measure!",
+                 "1 mi cooldown",
+                 "Log the result; it sets next cycle's pace targets"],
+                "hard", 45),
+        Workout(start + timedelta(3), "rest", "Recovery",
+                ["Light 20-min walk", "Foam roll",
                  "Protein + carbs focus"], "easy", 20),
-        Workout(start + timedelta(2), "run", "Easy Shakeout — 2 mi",
-                ["2 mi VERY easy", "Shake out legs"], "easy", 20),
-        Workout(start + timedelta(3), "rest", "Rest + Spartan Prep",
-                ["Complete rest", "Carb load", "Prep gear: trail shoes, gloves"],
-                "easy", 0),
-        Workout(start + timedelta(4), "mobility", "Mobility + Visualization",
-                ["10 min light stretching",
-                 "Mental rehearsal: obstacle strategy",
-                 "Carb loading continues", "Early bedtime"], "easy", 15),
-        Workout(start + timedelta(5), "run", "RACE: Spartan Beast",
-                ["Spartan Beast — Fort Carson, Colorado Springs",
-                 "13.1 mi + 30 obstacles",
-                 "Run steady between obstacles, conserve grip",
-                 "Burpee budget: plan for 2-3 failed obstacles max",
-                 "Carry gels, use water stations"],
-                "race", 210,
-                "A-race. Leave it all out there."),
-        Workout(start + timedelta(6), "rest", "Recovery",
-                ["Complete rest. You earned it."], "easy", 0),
+        Workout(start + timedelta(4), "run", "Easy — 2 mi",
+                ["2 mi VERY easy"], "easy", 20),
+        Workout(start + timedelta(5), "mobility", "Mobility + Reset",
+                ["20 min stretching + foam roll",
+                 "Plan next 8-week block off the time-trial result"],
+                "easy", 20),
+        Workout(start + timedelta(6), "rest", "Rest",
+                ["Full rest before the next block"], "easy", 0),
     ]
     return tw
 
@@ -395,8 +393,12 @@ def generate_training_plan(
 
     Args:
         start_date: First day of the plan.
-        race1_date: First race date (Boulder Bolder 10K).
-        race2_date: Second race date (Spartan Beast).
+        race1_date: Legacy parameter — used to anchor a peak race week.
+            Now unused inside this function (test week derives its date
+            from start_date + 7 weeks). Kept in the signature so callers
+            don't break. Will be removed in a future cleanup.
+        race2_date: Legacy parameter — see race1_date. Originally the
+            second race; now ignored.
         current_1rms: Current estimated 1RM for each lift.
         current_weekly_miles: Current weekly running volume.
         target_peak_miles: Peak weekly mileage target.
@@ -420,7 +422,7 @@ def generate_training_plan(
         ("build2", round(peak, 1),           0.80,     2,         4,        "build2"),   # Wk 5: peak
         ("taper",  round(peak * 0.70, 1),    0.75,     2,         3,        "taper"),    # Wk 6
         ("taper",  round(peak * 0.45, 1),    0.70,     1,         3,        "taper"),    # Wk 7
-        ("race",   8.0,                      0.60,     0,         0,        "race"),     # Wk 8
+        ("test",   8.0,                      0.60,     0,         0,        "test"),     # Wk 8
     ]
 
     weeks = []
@@ -448,7 +450,7 @@ def generate_training_plan(
             tw = _taper_week(week_num, week_start, current_1rms, miles, i - 4)
             tw.phase = phase
         else:
-            tw = _race_week(week_num, week_start)
+            tw = _test_week(week_num, week_start)
 
         tw.target_miles = miles
         weeks.append(tw)

@@ -216,9 +216,9 @@ def layout(**_kwargs):
             label="TRAINING PLAN",
             headline="Your plan. Your projection.",
             subtext=(
-                f"Boulder Bolder 10K (May 25) + Spartan Beast (May 31). "
-                f"{current_miles:.0f} mi/wk \u2192 {target_peak:.0f} mi/wk peak. "
-                f"Deload week 3. Taper weeks 6-7."
+                f"Rolling 8-week build \u2192 {target_peak:.0f} mi/wk peak, "
+                f"closing with a 5K time trial on {win.plan_end.strftime('%b %d')}. "
+                f"Deload week 3. Taper weeks 6\u20137."
             ),
         ),
 
@@ -401,7 +401,7 @@ def _now_vs_raceday_table(
             "textTransform": "uppercase", "letterSpacing": "0.08em",
             "color": TEXT_MUTED, "textAlign": "right",
         }),
-        html.Span("Race Day", style={
+        html.Span("Peak (+8w)", style={
             "flex": "2", "fontSize": "10px", "fontWeight": "600",
             "textTransform": "uppercase", "letterSpacing": "0.08em",
             "color": ACCENT, "textAlign": "right",

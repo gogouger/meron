@@ -149,10 +149,12 @@ def get_projected_fitness(df: pd.DataFrame,
             stress = 5
         stress_by_date[d] = stress_by_date.get(d, 0) + stress
 
-    # Project forward from today. Always run through the rolling 90-day
-    # horizon so the chart line extends past the end of the templated plan
-    # (the plan only spans 8 weeks; the projection should fill the rest of
-    # the window using stress_by_date when present, zero — rest — otherwise).
+    # Project forward from today. Run through the rolling 90-day horizon
+    # so the chart extends past the end of the templated plan (8 weeks).
+    # Days past plan_end aren't "rest" — Gordon's on a perpetual training
+    # cycle and a new 8-week block kicks off as soon as the current one
+    # ends. Carry the last two weeks' average stress forward as a
+    # maintenance assumption so CTL doesn't decay to zero on the chart.
     from .plan_dates import HORIZON_DAYS
     ctl = current_ctl
     atl = current_atl
@@ -161,9 +163,23 @@ def get_projected_fitness(df: pd.DataFrame,
     last_plan_date = max(stress_by_date.keys()) if stress_by_date else today
     projection_end = max(last_plan_date, today + timedelta(days=HORIZON_DAYS))
 
+    maintenance_stress = 0.0
+    if stress_by_date:
+        tail_start = last_plan_date - timedelta(days=13)
+        tail = [
+            v for k, v in stress_by_date.items() if k >= tail_start
+        ]
+        if tail:
+            maintenance_stress = sum(tail) / len(tail)
+
     d = today + timedelta(days=1)
     while d <= projection_end:
-        daily_stress = stress_by_date.get(d, 0)
+        if d in stress_by_date:
+            daily_stress = stress_by_date[d]
+        elif d > last_plan_date:
+            daily_stress = maintenance_stress
+        else:
+            daily_stress = 0
         ctl = ctl + (daily_stress - ctl) / tau_ctl
         atl = atl + (daily_stress - atl) / tau_atl
         tsb = ctl - atl
