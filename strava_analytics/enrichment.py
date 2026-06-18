@@ -397,14 +397,19 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
     Results are cached to disk; only new activities are parsed on subsequent runs.
     Cache is invalidated when max_hr or zone boundaries change.
     """
-    from .routes import parse_hr_stream
+    from .routes import parse_hr_stream_for_row
 
     boundaries = [max_hr * p / 100 for p in zone_pct]
 
     for col in [f"zone_{z}_s" for z in range(1, 6)]:
         df[col] = np.nan
 
-    if export_dir is None or "filename" not in df.columns:
+    # API-synced rows have no `filename` but do carry `streams_blob`; we
+    # only need ONE of those to compute zones. If neither column is on the
+    # DataFrame we genuinely have nothing.
+    if export_dir is None or not (
+        "filename" in df.columns or "streams_blob" in df.columns
+    ):
         return df
 
     from pathlib import Path
@@ -422,23 +427,26 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
     cache_hits = 0
 
     for idx, row in df.iterrows():
-        fn = row.get("filename")
-        if not isinstance(fn, str) or not fn.strip():
-            continue
+        fn = row.get("filename") if "filename" in df.columns else None
+        # Cache key prefers filename (stable across syncs); falls back to
+        # the DB-level row id when only streams_blob is available.
+        if isinstance(fn, str) and fn.strip():
+            cache_key = fn
+        else:
+            row_id = row.get("_id") if hasattr(row, "get") else None
+            if row_id is None:
+                continue
+            cache_key = f"_id:{row_id}"
 
         # Use cached result if available
-        if fn in cache:
-            cached = cache[fn]
+        if cache_key in cache:
+            cached = cache[cache_key]
             for z in range(1, 6):
                 df.at[idx, f"zone_{z}_s"] = cached[f"zone_{z}_s"]
             cache_hits += 1
             continue
 
-        from .routes import resolve_activity_path
-        fit_path = resolve_activity_path(export_dir, fn)
-        if fit_path is None:
-            continue
-        points = parse_hr_stream(fit_path)
+        points = parse_hr_stream_for_row(row)
         if len(points) < 2:
             continue
 
@@ -461,7 +469,7 @@ def _compute_zone_times(df: pd.DataFrame, export_dir, max_hr: int, zone_pct: lis
                 zone_secs[4] += dt
 
         entry = {f"zone_{z}_s": zone_secs[z - 1] for z in range(1, 6)}
-        cache[fn] = entry
+        cache[cache_key] = entry
         for z in range(1, 6):
             df.at[idx, f"zone_{z}_s"] = entry[f"zone_{z}_s"]
         processed += 1

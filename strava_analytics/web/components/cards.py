@@ -437,18 +437,18 @@ def activity_card_body(
                 if zc:
                     detail.append(zc)
 
-            filename = row.get("filename", "")
-            if filename and not pd.isna(filename) and str(filename).endswith(".fit.gz"):
-                from strava_analytics.routes import parse_hr_stream
-                from strava_analytics.web import data as _data
-                hr_pts = parse_hr_stream(_data.get_export_dir() / str(filename))
-                if len(hr_pts) > 10:
-                    _card_uid += 1
-                    est_max_hr = row.get("estimated_max_hr", 200) or 200
-                    hc = activity_hr_timeline_chart(hr_pts, chart_id=f"card-hr-{_card_uid}",
-                                                    max_hr=int(est_max_hr))
-                    if hc:
-                        detail.append(hc)
+            # HR timeline — either from the API-synced streams blob or the
+            # .fit.gz sidecar. parse_hr_stream_for_row picks whichever is
+            # available without changing the call site.
+            from strava_analytics.routes import parse_hr_stream_for_row
+            hr_pts = parse_hr_stream_for_row(row)
+            if len(hr_pts) > 10:
+                _card_uid += 1
+                est_max_hr = row.get("estimated_max_hr", 200) or 200
+                hc = activity_hr_timeline_chart(hr_pts, chart_id=f"card-hr-{_card_uid}",
+                                                max_hr=int(est_max_hr))
+                if hc:
+                    detail.append(hc)
 
             # Pullup stats
             pullup_sets = row.get("pullup_sets", None)

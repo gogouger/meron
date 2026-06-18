@@ -118,9 +118,23 @@ def bootstrap_admin_from_env() -> None:
         logger.info("Admin user %r seeded/refreshed from env", admin_user)
 
 
+def migration_004_streams_blob(engine) -> None:
+    """Add activities.streams_blob — gzip+base64 of Strava stream data per row."""
+    Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        existing_cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(activities)"))
+        }
+        if "streams_blob" not in existing_cols:
+            conn.execute(text(
+                "ALTER TABLE activities ADD COLUMN streams_blob TEXT"
+            ))
+
+
 _MIGRATIONS = [
     (1, migration_001_initial),
     (3, migration_003_auth),
+    (4, migration_004_streams_blob),
 ]
 
 

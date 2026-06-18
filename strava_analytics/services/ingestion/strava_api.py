@@ -267,6 +267,27 @@ def sync_incremental(
                     if len(decoded) >= 3:
                         polylines_new[source_id] = decoded
 
+                # Per-second streams. CSV-import rows already have a .fit.gz
+                # on disk; API-only rows need this blob to power HR zones,
+                # best-effort splits, the per-card HR chart, etc. Skip if
+                # the row already has one (lets backfill be idempotent).
+                if not row.streams_blob:
+                    try:
+                        from ...streams import (
+                            fetch_streams_from_strava, serialize_streams,
+                        )
+                        streams = fetch_streams_from_strava(
+                            client, int(source_id)
+                        )
+                        if streams:
+                            row.streams_blob = serialize_streams(streams)
+                    except Exception:
+                        # Don't let a stream-fetch glitch (rate limit, GPS-less
+                        # activity, etc.) abort the activity upsert.
+                        logger.debug(
+                            "stream fetch skipped for %s", source_id, exc_info=True
+                        )
+
                 if inserted:
                     report.inserted += 1
                 else:

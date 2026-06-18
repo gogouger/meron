@@ -144,6 +144,110 @@ def parse_activity(fit_gz_path: str | Path, max_points: int = 300) -> ActivitySt
     return stream
 
 
+# ---------------------------------------------------------------------------
+# Dual-source helpers: prefer a streams_blob (Strava-API rows) over a FIT
+# file (CSV-export rows). Used by the consumers in enrichment / fitness /
+# cards so they don't have to special-case the source. Each helper accepts
+# either a dict-like row (DataFrame .iloc) or a mapping with `filename` and
+# `streams_blob` keys, plus optional `start_time` / `date`.
+# ---------------------------------------------------------------------------
+
+
+def _row_blob(row) -> str | None:
+    try:
+        v = row.get("streams_blob") if hasattr(row, "get") else None
+    except Exception:
+        v = None
+    if v is None:
+        return None
+    # pandas serializes NaN for absent strings — guard against that.
+    try:
+        import pandas as pd
+        if isinstance(v, float) and pd.isna(v):
+            return None
+    except Exception:
+        pass
+    return v if isinstance(v, str) and v else None
+
+
+def _row_start_time(row):
+    """Pull a tz-naive (local) datetime out of a DataFrame row.
+
+    Repository emits the activity start under ``date``; raw ORM rows
+    expose ``start_time``. Accept either.
+    """
+    for key in ("date", "start_time"):
+        try:
+            v = row.get(key) if hasattr(row, "get") else None
+        except Exception:
+            continue
+        if v is None:
+            continue
+        try:
+            import pandas as pd
+            ts = pd.to_datetime(v)
+            return ts.to_pydatetime() if hasattr(ts, "to_pydatetime") else ts
+        except Exception:
+            continue
+    return None
+
+
+def parse_activity_for_row(row, max_points: int = 300) -> "ActivityStream":
+    """Return an ActivityStream from either streams_blob or the FIT sidecar.
+
+    Order: streams_blob → resolve_activity_path(filename) → empty.
+    """
+    blob = _row_blob(row)
+    if blob:
+        from .streams import deserialize_streams, streams_to_activity_stream
+        streams = deserialize_streams(blob)
+        if streams:
+            return streams_to_activity_stream(
+                streams, _row_start_time(row), max_points
+            )
+    fn = row.get("filename") if hasattr(row, "get") else None
+    if isinstance(fn, str) and fn:
+        from . import data as _data
+        path = resolve_activity_path(_data.get_export_dir(), fn)
+        if path is not None:
+            return parse_activity(path, max_points)
+    return ActivityStream()
+
+
+def parse_hr_stream_for_row(row) -> list[tuple]:
+    """Return [(ts, hr), ...] from either streams_blob or the FIT sidecar."""
+    blob = _row_blob(row)
+    if blob:
+        from .streams import deserialize_streams, streams_to_hr_points
+        streams = deserialize_streams(blob)
+        if streams:
+            return streams_to_hr_points(streams, _row_start_time(row))
+    fn = row.get("filename") if hasattr(row, "get") else None
+    if isinstance(fn, str) and fn:
+        from . import data as _data
+        path = resolve_activity_path(_data.get_export_dir(), fn)
+        if path is not None:
+            return parse_hr_stream(path)
+    return []
+
+
+def parse_distance_stream_for_row(row) -> list[tuple]:
+    """Return [(ts, distance_m), ...] from either streams_blob or the FIT sidecar."""
+    blob = _row_blob(row)
+    if blob:
+        from .streams import deserialize_streams, streams_to_distance_points
+        streams = deserialize_streams(blob)
+        if streams:
+            return streams_to_distance_points(streams, _row_start_time(row))
+    fn = row.get("filename") if hasattr(row, "get") else None
+    if isinstance(fn, str) and fn:
+        from . import data as _data
+        path = resolve_activity_path(_data.get_export_dir(), fn)
+        if path is not None:
+            return parse_distance_stream(path)
+    return []
+
+
 def parse_hr_stream(fit_gz_path: str | Path) -> list[tuple]:
     """Extract HR + timestamp stream at full resolution from a FIT.gz file.
 

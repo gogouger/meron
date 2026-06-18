@@ -271,7 +271,7 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
     """
     import json
     from pathlib import Path
-    from .routes import parse_distance_stream, resolve_activity_path
+    from .routes import parse_distance_stream_for_row
 
     if export_dir is None:
         return pd.DataFrame()
@@ -301,28 +301,32 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
     all_efforts = []
     for idx, row in runs.iterrows():
         fn = row.get("filename", "")
-        if not isinstance(fn, str) or not fn.strip():
-            continue
-        # Only parse FIT.gz files (skip GPX, TCX, etc.)
-        if not fn.lower().endswith(".fit.gz"):
+        has_blob = isinstance(row.get("streams_blob"), str) and row.get("streams_blob")
+        # Cache key prefers filename (stable across syncs / pinned to the
+        # .fit.gz on disk). API-only rows fall back to the DB id.
+        if isinstance(fn, str) and fn.strip() and fn.lower().endswith(".fit.gz"):
+            cache_key = fn
+        elif has_blob:
+            row_id = row.get("_id")
+            if row_id is None:
+                continue
+            cache_key = f"_id:{row_id}"
+        else:
+            # No FIT.gz on disk and no streams blob — nothing to compute.
             continue
 
         # Check cache
-        if fn in cache:
-            for eff in cache[fn]:
+        if cache_key in cache:
+            for eff in cache[cache_key]:
                 eff["date"] = row["date"]
                 eff["name"] = row.get("name", "")
                 eff["activity_idx"] = idx
                 all_efforts.append(eff)
             continue
 
-        fit_path = resolve_activity_path(export_dir, fn)
-        if fit_path is None:
-            cache[fn] = []
-            continue
-        points = parse_distance_stream(fit_path)
+        points = parse_distance_stream_for_row(row)
         if len(points) < 10:
-            cache[fn] = []
+            cache[cache_key] = []
             continue
 
         timestamps = [p[0] for p in points]
@@ -339,9 +343,9 @@ def compute_best_efforts(df: pd.DataFrame, export_dir) -> pd.DataFrame:
                        "pace_min_mi": round(pace, 2)}
                 file_efforts.append(eff)
 
-        cache[fn] = [{"distance_label": e["distance_label"],
-                       "time_s": e["time_s"], "pace_min_mi": e["pace_min_mi"]}
-                      for e in file_efforts]
+        cache[cache_key] = [{"distance_label": e["distance_label"],
+                              "time_s": e["time_s"], "pace_min_mi": e["pace_min_mi"]}
+                             for e in file_efforts]
 
         for eff in file_efforts:
             eff["date"] = row["date"]

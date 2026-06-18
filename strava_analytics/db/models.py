@@ -118,6 +118,14 @@ class Activity(Base):
     manual_overrides: Mapped[dict | None] = mapped_column(JSON)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
+    # Per-second activity streams pulled from the Strava API (heartrate,
+    # distance, latlng, etc.). gzip+base64 of a Strava streams dict, see
+    # streams.py. Only populated for source='strava' rows synced via the API
+    # — CSV-import rows still get their telemetry from the .fit.gz files on
+    # disk under DATA_DIR/fit/. Both code paths converge through routes.py
+    # helpers that prefer the blob and fall back to file parsing.
+    streams_blob: Mapped[str | None] = mapped_column(Text)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, onupdate=_utcnow
@@ -190,4 +198,5 @@ RAW_ACTIVITY_COLUMNS = [
     "weather_condition", "weather_temp_c",
     "total_steps", "training_load", "intensity",
     "competition", "strava_with_kid",
+    "streams_blob",  # gzip+base64 streams from the Strava API path
 ]

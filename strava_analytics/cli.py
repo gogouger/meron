@@ -48,6 +48,80 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     print(f"Ingest report: {report}")
 
 
+def cmd_backfill_streams(args: argparse.Namespace) -> None:
+    """Fetch per-second streams from the Strava API for every API-synced
+    activity whose ``streams_blob`` is still NULL.
+
+    Limited by ``--limit`` (default 200) per run so we don't burn through the
+    daily Strava quota in one shot. Re-runnable; idempotent.
+    """
+    import time
+    from sqlalchemy import select
+    from .db.models import Activity
+    from .auth.strava_oauth import refresh_if_needed
+    from .services.enrichment_service import invalidate_cache
+    from .streams import fetch_streams_from_strava, serialize_streams
+
+    factory = _db_init()
+    user_id = current_user_id()
+    limit = max(1, int(getattr(args, "limit", 200) or 200))
+    sleep_s = float(getattr(args, "sleep", 1.0) or 1.0)
+
+    with factory() as auth_session:
+        try:
+            token = refresh_if_needed(user_id=user_id, session=auth_session)
+        except Exception as e:
+            print(f"Token refresh failed: {e}")
+            return
+    from stravalib import Client
+    client = Client(access_token=token)
+
+    with factory() as session:
+        rows = session.scalars(
+            select(Activity)
+            .where(
+                Activity.user_id == user_id,
+                Activity.source == "strava",
+                Activity.deleted_at.is_(None),
+                Activity.streams_blob.is_(None),
+            )
+            .order_by(Activity.start_time.desc())
+            .limit(limit)
+        ).all()
+        print(f"Backfilling streams for {len(rows)} activities...")
+
+        filled = skipped = errored = 0
+        for i, row in enumerate(rows, 1):
+            sid = row.source_id
+            if not sid:
+                skipped += 1
+                continue
+            try:
+                streams = fetch_streams_from_strava(client, int(sid))
+            except Exception as e:
+                print(f"  ! {sid}: {e}")
+                errored += 1
+                time.sleep(sleep_s)
+                continue
+            if not streams:
+                print(f"  - {sid} {row.name[:40] if row.name else ''} (no streams)")
+                skipped += 1
+                time.sleep(sleep_s)
+                continue
+            row.streams_blob = serialize_streams(streams)
+            session.flush()
+            filled += 1
+            print(f"  + {sid} {row.name[:40] if row.name else ''}")
+            if i % 20 == 0:
+                session.commit()
+            time.sleep(sleep_s)
+        session.commit()
+        if filled > 0:
+            invalidate_cache(user_id)
+
+    print(f"\nDone: filled {filled}, skipped {skipped}, errors {errored}")
+
+
 def cmd_backfill_lifts(args: argparse.Namespace) -> None:
     """Walk the static lifting program forward from ``--anchor`` and
     write a description onto every bare Weight Training activity."""
@@ -350,6 +424,20 @@ def main() -> None:
              "Defaults to lifting_program.PROGRAM_ANCHOR_DATE.",
     )
 
+    # backfill-streams — pull per-second Strava streams onto rows missing them
+    p_streams = sub.add_parser(
+        "backfill-streams",
+        help="Fetch per-second streams from Strava for API-synced activities lacking them",
+    )
+    p_streams.add_argument(
+        "--limit", type=int, default=200,
+        help="Max activities to process this run (default 200).",
+    )
+    p_streams.add_argument(
+        "--sleep", type=float, default=1.0,
+        help="Seconds between API calls (default 1.0).",
+    )
+
     args = parser.parse_args()
 
     # DB-only commands short-circuit before needing an export_dir
@@ -364,6 +452,9 @@ def main() -> None:
         return
     if args.command == "backfill-lifts":
         cmd_backfill_lifts(args)
+        return
+    if args.command == "backfill-streams":
+        cmd_backfill_streams(args)
         return
 
     # Data commands need a source. Prefer `export_dir` if provided, else
