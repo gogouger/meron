@@ -20,6 +20,7 @@ from strava_analytics.web.theme import (
 from strava_analytics.predictions import extract_1rm_progression
 from strava_analytics.lifting_program import BASELINE, END_PRS
 from strava_analytics.strength_model import fit_all_lifts, project_1rm, compute_interference
+from strava_analytics.web.plan_dates import rolling_window
 
 dash.register_page(__name__, path="/lifting", name="Lifting")
 
@@ -63,8 +64,9 @@ def _strength_projections_section(df: pd.DataFrame) -> html.Div:
             color=color_map.get(lift, ACCENT),
         ))
 
-    from datetime import date, timedelta
-    horizon = date.today() + timedelta(weeks=weeks_ahead)
+    # Share the projection horizon with the /plan page so all 8-week
+    # anchors slide in lockstep — single source of truth in plan_dates.
+    horizon = rolling_window().plan_end
     interference_note = html.P(
         f"Interference factor: {interference:.2f} "
         f"(~{weekly_run_miles:.0f} mi/week running). "
@@ -142,8 +144,8 @@ def layout(**_kwargs):
             label="STRENGTH",
             headline="Heavy things don't lift themselves.",
             subtext=(
-                f"{len(lifts)} sessions. {baseline.get('weight_lbs', 175)} lbs. "
-                f"Program: Jan 9 \u2014 Apr 3, 2026."
+                f"{len(lifts)} sessions. Body {baseline.get('weight_lbs', 175)} lbs. "
+                f"Rolling 8-week build \u2192 peak \u2192 time trial."
             ),
         ),
 
