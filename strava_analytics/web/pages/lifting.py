@@ -63,10 +63,13 @@ def _strength_projections_section(df: pd.DataFrame) -> html.Div:
             color=color_map.get(lift, ACCENT),
         ))
 
+    from datetime import date, timedelta
+    horizon = date.today() + timedelta(weeks=weeks_ahead)
     interference_note = html.P(
         f"Interference factor: {interference:.2f} "
         f"(~{weekly_run_miles:.0f} mi/week running). "
-        f"Projecting {weeks_ahead} weeks ahead.",
+        f"Projecting through {horizon.strftime('%b %d, %Y')} "
+        f"(+{weeks_ahead} weeks).",
         style={"color": TEXT_MUTED, "fontSize": "12px", "marginTop": "16px"},
     )
 

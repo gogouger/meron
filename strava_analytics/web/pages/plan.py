@@ -40,10 +40,10 @@ from strava_analytics.web.plan_data import (
 
 dash.register_page(__name__, path="/plan", name="Training Plan")
 
-# Plan constants
-_START_DATE = date(2026, 4, 6)
-_RACE1_DATE = date(2026, 5, 25)
-_RACE2_DATE = date(2026, 5, 31)
+# Date anchors moved to web.plan_dates.rolling_window() so every chart
+# slides forward each day instead of pinning to a calendar race that's
+# now in the past.
+from strava_analytics.web.plan_dates import rolling_window
 
 
 def _get_current_1rms(df: pd.DataFrame) -> dict:
@@ -161,10 +161,12 @@ def layout(**_kwargs):
 
     fitness = get_current_fitness(df)
 
+    win = rolling_window()
+
     plan = generate_training_plan(
-        start_date=_START_DATE,
-        race1_date=_RACE1_DATE,
-        race2_date=_RACE2_DATE,
+        start_date=win.start,
+        race1_date=win.plan_end,
+        race2_date=win.horizon,
         current_1rms=current_1rms,
         current_weekly_miles=current_miles,
         target_peak_miles=target_peak,
@@ -177,7 +179,10 @@ def layout(**_kwargs):
     projected = get_projected_fitness(df, plan)
     mileage = get_mileage_progression(df, plan)
     strength_trends = get_1rm_trends(df)
-    race_readiness = get_race_readiness(df, plan, [_RACE1_DATE, _RACE2_DATE])
+    # Readiness at the perpetual "peak" target (+8w) and at the rolling
+    # 90-day projection horizon. Labels show the date so it's clear what
+    # the numbers point at.
+    race_readiness = get_race_readiness(df, plan, [win.plan_end, win.horizon])
     compliance_data = get_compliance(df, flat)
     best_efforts_df = data.get_best_efforts()
     plan_projections = get_plan_projections(df, plan, current_1rms, best_efforts_df)
@@ -221,7 +226,7 @@ def layout(**_kwargs):
         dcc.Store(id="ics-store", data=ics_content),
 
         # ── NOW vs RACE DAY (compact table) ──
-        page_section("NOW \u2192 RACE DAY", [
+        page_section("NOW \u2192 PEAK", [
             _now_vs_raceday_table(
                 current_miles, target_peak, cs_5k_s, cs_10k_s,
                 proj_5k, proj_10k, current_1rms, str_proj,
@@ -234,9 +239,9 @@ def layout(**_kwargs):
             mileage_progression_chart(mileage),
         ], alt_bg=True),
 
-        # ── RACE PROJECTION (tabbed: 5K / 10K / Half / Marathon) ──
-        page_section("RACE PROJECTION", [
-            html.P("Estimated race times based on current fitness + plan improvements.",
+        # ── RACE TIME PROJECTION (tabbed: 5K / 10K / Half / Marathon) ──
+        page_section("RACE TIMES", [
+            html.P("Estimated race times based on current fitness + 8-week plan improvements.",
                    style={"color": TEXT_SECONDARY, "fontSize": "13px", "marginBottom": "12px"}),
             charts.race_predictions_chart(
                 runs, chart_id="plan-race-pred",
@@ -260,8 +265,8 @@ def layout(**_kwargs):
             html.P("No lifting data.", style={"color": TEXT_MUTED}),
         ]),
 
-        # ── RACE READINESS ──
-        page_section("RACE READINESS", [
+        # ── PROJECTED READINESS at the peak + horizon dates ──
+        page_section("PROJECTED READINESS", [
             html.Div(
                 [_readiness_badge(r) for r in race_readiness] if race_readiness else [
                     html.P("Insufficient data.", style={"color": TEXT_MUTED})
@@ -291,7 +296,7 @@ def layout(**_kwargs):
 
         # ── FITNESS & FRESHNESS (last — supplementary detail) ──
         page_section("FITNESS & FRESHNESS", [
-            fitness_freshness_chart(projected, race_dates=[_RACE1_DATE, _RACE2_DATE]),
+            fitness_freshness_chart(projected, horizon_date=win.horizon),
         ], alt_bg=True),
 
         # Science

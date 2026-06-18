@@ -122,11 +122,15 @@ def get_projected_fitness(df: pd.DataFrame,
     if df.empty or "chronic_load_28d" not in df.columns:
         return pd.DataFrame()
 
-    # Get current CTL/ATL as starting point
+    # Get current CTL/ATL as starting point. Anchor "today" on the calendar
+    # so projections roll forward each day even when no new activity has
+    # synced; fall through to the last-activity date only if it's somehow
+    # ahead of the calendar (manual future-dated entry).
     latest = df.sort_values("date").iloc[-1]
     current_ctl = float(latest.get("chronic_load_28d", 0) or 0)
     current_atl = float(latest.get("acute_load_7d", 0) or 0)
-    today = latest["date"].date() if hasattr(latest["date"], "date") else latest["date"]
+    latest_d = latest["date"].date() if hasattr(latest["date"], "date") else latest["date"]
+    today = max(date.today(), latest_d)
 
     # Build historical series (last 60 days)
     historical = get_fitness_timeseries(df, days=60)
@@ -145,13 +149,17 @@ def get_projected_fitness(df: pd.DataFrame,
             stress = 5
         stress_by_date[d] = stress_by_date.get(d, 0) + stress
 
-    # Project forward from today
+    # Project forward from today. Always run through the rolling 90-day
+    # horizon so the chart line extends past the end of the templated plan
+    # (the plan only spans 8 weeks; the projection should fill the rest of
+    # the window using stress_by_date when present, zero — rest — otherwise).
+    from .plan_dates import HORIZON_DAYS
     ctl = current_ctl
     atl = current_atl
     projected_rows = []
 
     last_plan_date = max(stress_by_date.keys()) if stress_by_date else today
-    projection_end = last_plan_date + timedelta(days=3)
+    projection_end = max(last_plan_date, today + timedelta(days=HORIZON_DAYS))
 
     d = today + timedelta(days=1)
     while d <= projection_end:

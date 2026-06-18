@@ -24,22 +24,19 @@ from strava_analytics.training_plan import (
     plan_to_flat_list,
 )
 from strava_analytics.web import data
+from strava_analytics.web.plan_dates import rolling_window
 
 
 bp = Blueprint("api_plan", __name__, url_prefix="/api")
 
 
-# Canonical race dates live in web/pages/plan.py today. We re-declare them
-# here so the API doesn't pull in Dash; when plan configurability lands,
-# these become stored per-user in the DB.
-_START_DATE = date(2026, 4, 6)
-_RACE1_DATE = date(2026, 5, 25)
-_RACE2_DATE = date(2026, 5, 31)
-
-
 @bp.route("/plan")
 def plan():
-    """Return the flat list of workouts for the mobile plan tab."""
+    """Return the flat list of workouts for the mobile plan tab.
+
+    The plan starts today and runs forward 8 weeks (the perpetual peak
+    target) plus a 90-day projection horizon for the fitness chart.
+    """
     df = data.get_df()
     from strava_analytics.web.api_data import get_current_1rms
     current_1rms = get_current_1rms(df)
@@ -53,19 +50,17 @@ def plan():
     else:
         weekly_miles = 20.0
 
+    win = rolling_window()
     weeks = generate_training_plan(
-        start_date=_START_DATE,
-        race1_date=_RACE1_DATE,
-        race2_date=_RACE2_DATE,
+        start_date=win.start,
+        race1_date=win.plan_end,
+        race2_date=win.horizon,
         current_1rms=current_1rms or None,
         current_weekly_miles=weekly_miles,
     )
     return jsonify({
-        "start_date": _START_DATE.isoformat(),
-        "races": [
-            {"name": "Boulder Bolder 10K", "date": _RACE1_DATE.isoformat()},
-            {"name": "Spartan Beast", "date": _RACE2_DATE.isoformat()},
-        ],
+        "start_date": win.start.isoformat(),
+        "horizon": win.horizon.isoformat(),
         "workouts": plan_to_flat_list(weeks),
     })
 

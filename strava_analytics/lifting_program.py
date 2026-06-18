@@ -10,9 +10,15 @@ from __future__ import annotations
 import re
 
 
-# Default anchor used by the backfill — the date the program started in
-# real life. Align activities on/after this date to program lift days in
-# order.
+# Default anchor used by the backfill CLI (`meron-cli backfill-lifts`) — the
+# date the program started in real life. Used to label historical Weight
+# Training activities with their program-day name.
+#
+# LEGACY: prediction charts must NOT read this constant. Strength projections
+# live in `web/pages/lifting.py` and project N weeks forward from `date.today()`
+# — they don't care which day of a 36-day cycle "today" is. Importing this
+# constant from chart code re-pins the projection horizon to Jan 2026 and
+# defeats the rolling-window work in `web/plan_dates.py`.
 PROGRAM_ANCHOR_DATE = "2026-01-09"
 
 # Baseline PRs at program start (Jan 2026)

@@ -1077,9 +1077,16 @@ def year_monthly_chart(summary: dict, chart_id: str = "year-monthly") -> html.Di
 # ── plan page charts ─────────────────────────────────────────────────
 
 def fitness_freshness_chart(fitness_df: pd.DataFrame,
-                             race_dates: list | None = None,
+                             horizon_date=None,
                              chart_id: str = "fitness-freshness") -> html.Div:
-    """CTL/ATL/TSB line chart with optional race date vertical markers."""
+    """CTL/ATL/TSB line chart with an optional dashed vertical at the
+    rolling projection horizon (e.g. today + 90 days).
+
+    Previously took ``race_dates`` so the chart could mark specific race
+    days; rolling-window projections don't have race days, just a horizon.
+    The JS reads the same ``meta.raceMarkers`` channel — we just emit a
+    single entry now.
+    """
     if fitness_df.empty:
         return _empty_chart("No fitness data available")
 
@@ -1110,13 +1117,16 @@ def fitness_freshness_chart(fitness_df: pd.DataFrame,
         datasets.append(_dashed_ds(patl, ACCENT_RED, "Projected ATL"))
         datasets.append(_dashed_ds(ptsb, ACCENT_AMBER, "Projected TSB", borderWidth=2))
 
-    race_markers = [{"date": _ts(d), "label": ""} for d in race_dates] if race_dates else []
+    markers = (
+        [{"date": _ts(horizon_date), "label": "horizon"}]
+        if horizon_date is not None else []
+    )
 
     cfg = _build_cfg(
         "scatter", datasets, "Fitness / Freshness",
         _time_x(fitness_df["date"]),
         _val_y(None, "Load / Form"),
-        meta={"raceMarkers": race_markers},
+        meta={"raceMarkers": markers},
     )
     return _chart_wrap(chart_id, cfg, height=350)
 
